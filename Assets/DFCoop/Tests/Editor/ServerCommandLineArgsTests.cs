@@ -12,6 +12,8 @@ namespace DFCoop.Tests
             var def = ServerCommandLineArgs.Default;
 
             Assert.IsFalse(def.IsDedicatedServer);
+            Assert.IsFalse(def.IsClient);
+            Assert.AreEqual("127.0.0.1", def.Address);
             Assert.AreEqual(7777, def.Port);
             Assert.AreEqual(30, def.TickRate);
             Assert.AreEqual(16, def.MaxConnections);
@@ -51,6 +53,30 @@ namespace DFCoop.Tests
         {
             var result = ServerCommandLineArgs.Parse(new string[0], true);
             Assert.IsTrue(result.IsDedicatedServer);
+            Assert.IsFalse(result.IsClient);
+        }
+
+        [Test]
+        public void Parse_ClientFlag_EnablesClientAndOverridesBatchServerDefault()
+        {
+            string[] args = new string[] { "-client" };
+            var result = ServerCommandLineArgs.Parse(args, true);
+
+            Assert.IsTrue(result.IsClient);
+            Assert.IsFalse(result.IsDedicatedServer);
+            Assert.AreEqual("127.0.0.1", result.Address);
+        }
+
+        [Test]
+        public void Parse_ClientAddress_ParsedCorrectly()
+        {
+            string[] args = new string[] { "-client", "-address", "192.168.1.10", "-port", "8888" };
+            var result = ServerCommandLineArgs.Parse(args, true);
+
+            Assert.IsTrue(result.IsClient);
+            Assert.IsFalse(result.IsDedicatedServer);
+            Assert.AreEqual("192.168.1.10", result.Address);
+            Assert.AreEqual(8888, result.Port);
         }
 
         [Test]

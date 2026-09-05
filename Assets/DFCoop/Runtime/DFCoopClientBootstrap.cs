@@ -1,0 +1,49 @@
+using System;
+using UnityEngine;
+
+namespace DFCoop.Runtime
+{
+    public class DFCoopClientBootstrap : MonoBehaviour
+    {
+        public static bool IsClient { get; private set; }
+        public static string ServerAddress { get; private set; } = "127.0.0.1";
+        public static int ServerPort { get; private set; } = 7777;
+        public static int ClientTickRate { get; private set; } = 30;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void EarlyInitialize()
+        {
+            var config = ServerCommandLineArgs.Parse(Environment.GetCommandLineArgs(), Application.isBatchMode);
+
+            if (!config.IsClient)
+                return;
+
+            IsClient = true;
+            ServerAddress = config.Address;
+            ServerPort = config.Port;
+            ClientTickRate = config.TickRate;
+
+            Application.targetFrameRate = ClientTickRate;
+            QualitySettings.vSyncCount = 0;
+            Application.runInBackground = true;
+            AudioListener.pause = true;
+            AudioListener.volume = 0f;
+
+            GameObject bootstrapGo = new GameObject("DFCoop_ClientBootstrap");
+            DontDestroyOnLoad(bootstrapGo);
+            bootstrapGo.AddComponent<DFCoopClientBootstrap>();
+
+            Debug.Log($"[DFCoop Client] Bootstrapped: Address={ServerAddress}, Port={ServerPort}, TickRate={ClientTickRate}");
+        }
+
+        private void Start()
+        {
+            DFCoopNetworkClient.Start(ServerAddress, (ushort)ServerPort, ClientTickRate);
+        }
+
+        private void OnApplicationQuitting()
+        {
+            DFCoopNetworkClient.Stop();
+        }
+    }
+}

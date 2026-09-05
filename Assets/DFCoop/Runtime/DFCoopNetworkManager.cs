@@ -17,6 +17,18 @@ namespace DFCoop.Runtime
             base.OnStopServer();
         }
 
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+            Debug.Log($"[DFCoop Net] Client starting: address={DFCoopNetworkClient.Address}, port={DFCoopNetworkClient.Port}.");
+        }
+
+        public override void OnStopClient()
+        {
+            Debug.Log("[DFCoop Net] Client stopped.");
+            base.OnStopClient();
+        }
+
         public override void OnServerConnect(NetworkConnectionToClient conn)
         {
             base.OnServerConnect(conn);
@@ -27,6 +39,18 @@ namespace DFCoop.Runtime
         {
             Debug.Log($"[DFCoop Net] Client disconnected: connectionId={conn.connectionId}, address={conn.address}.");
             base.OnServerDisconnect(conn);
+        }
+
+        public override void OnClientConnect()
+        {
+            base.OnClientConnect();
+            Debug.Log($"[DFCoop Net] Connected to server: address={networkAddress}, port={DFCoopNetworkClient.Port}.");
+        }
+
+        public override void OnClientDisconnect()
+        {
+            Debug.Log($"[DFCoop Net] Disconnected from server: address={networkAddress}, port={DFCoopNetworkClient.Port}.");
+            base.OnClientDisconnect();
         }
     }
 }

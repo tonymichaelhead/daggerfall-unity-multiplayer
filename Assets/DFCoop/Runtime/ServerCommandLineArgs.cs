@@ -10,6 +10,8 @@ namespace DFCoop.Runtime
     public struct ServerCommandLineArgs
     {
         public bool IsDedicatedServer;
+        public bool IsClient;
+        public string Address;
         public int Port;
         public int TickRate;
         public int MaxConnections;
@@ -19,6 +21,8 @@ namespace DFCoop.Runtime
         public static ServerCommandLineArgs Default => new ServerCommandLineArgs
         {
             IsDedicatedServer = false,
+            IsClient = false,
+            Address = "127.0.0.1",
             Port = 7777,
             TickRate = 30,
             MaxConnections = 16,
@@ -30,11 +34,13 @@ namespace DFCoop.Runtime
         {
             var result = Default;
 
-            if (isBatchMode)
-                result.IsDedicatedServer = true;
-
             if (args == null || args.Length == 0)
+            {
+                if (isBatchMode)
+                    result.IsDedicatedServer = true;
+
                 return result;
+            }
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -46,6 +52,17 @@ namespace DFCoop.Runtime
                 if (arg == "-server" || arg == "-dedicated" || arg == "--server" || arg == "--dedicated")
                 {
                     result.IsDedicatedServer = true;
+                    result.IsClient = false;
+                }
+                else if (arg == "-client" || arg == "--client" || arg == "-connect" || arg == "--connect")
+                {
+                    result.IsClient = true;
+                    result.IsDedicatedServer = false;
+                }
+                else if ((arg == "-address" || arg == "--address" || arg == "-host" || arg == "--host") && i + 1 < args.Length)
+                {
+                    if (!string.IsNullOrEmpty(args[i + 1]))
+                        result.Address = args[i + 1];
                 }
                 else if ((arg == "-port" || arg == "--port") && i + 1 < args.Length)
                 {
@@ -72,6 +89,9 @@ namespace DFCoop.Runtime
                         result.HeartbeatInterval = Mathf.Max(1.0f, interval);
                 }
             }
+
+            if (isBatchMode && !result.IsDedicatedServer && !result.IsClient)
+                result.IsDedicatedServer = true;
 
             return result;
         }
