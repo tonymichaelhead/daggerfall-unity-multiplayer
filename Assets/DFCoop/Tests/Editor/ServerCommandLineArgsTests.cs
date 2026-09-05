@@ -190,5 +190,26 @@ namespace DFCoop.Tests
                 Object.DestroyImmediate(go);
             }
         }
+
+        [Test]
+        public void PlayerSessionState_Initialize_SetsServerOwnedWorldCoordinates()
+        {
+            GameObject go = new GameObject("DFCoop_PlayerSessionStateTest");
+
+            try
+            {
+                var sessionState = go.AddComponent<DFCoopPlayerSessionState>();
+                sessionState.Initialize(7, 123456, 42.5f, 654321);
+
+                Assert.AreEqual(7, sessionState.ConnectionId);
+                Assert.AreEqual(123456, sessionState.WorldX);
+                Assert.AreEqual(42.5f, sessionState.WorldY);
+                Assert.AreEqual(654321, sessionState.WorldZ);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
     }
 }

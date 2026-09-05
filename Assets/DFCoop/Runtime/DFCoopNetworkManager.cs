@@ -37,6 +37,7 @@ namespace DFCoop.Runtime
 
         public override void OnServerDisconnect(NetworkConnectionToClient conn)
         {
+            DFCoopNetworkServer.DestroyPlayerSessionState(conn);
             Debug.Log($"[DFCoop Net] Client disconnected: connectionId={conn.connectionId}, address={conn.address}.");
             base.OnServerDisconnect(conn);
         }
@@ -54,6 +55,8 @@ namespace DFCoop.Runtime
                 int observerCount = DFCoopNetworkServer.TimeState.netIdentity.observers.Count;
                 Debug.Log($"[DFCoop Time] Server marked time state visible to ready client: connectionId={conn.connectionId}, observers={observerCount}.");
             }
+
+            DFCoopNetworkServer.CreatePlayerSessionState(conn);
         }
 
         public override void OnClientConnect()

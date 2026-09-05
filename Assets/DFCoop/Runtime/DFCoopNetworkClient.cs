@@ -54,6 +54,7 @@ namespace DFCoop.Runtime
             Manager.sendRate = tickRate;
 
             DFCoopTimeState.RegisterClientSpawnHandler();
+            DFCoopPlayerSessionState.RegisterClientSpawnHandler();
 
             Object.DontDestroyOnLoad(networkGo);
             networkGo.SetActive(true);
