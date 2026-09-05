@@ -1,3 +1,7 @@
+using DaggerfallConnect;
+using DaggerfallConnect.Arena2;
+using DaggerfallConnect.Utility;
+using DaggerfallWorkshop;
 using kcp2k;
 using Mirror;
 using System.Collections.Generic;
@@ -98,15 +102,44 @@ namespace DFCoop.Runtime
 
             sessionGo.AddComponent<NetworkIdentity>();
             var sessionState = sessionGo.AddComponent<DFCoopPlayerSessionState>();
-            sessionState.Initialize(conn.connectionId, 0, 0f, 0);
+            int worldX;
+            int worldZ;
+            GetInitialSpawnCoordinates(out worldX, out worldZ);
+            sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
             Object.DontDestroyOnLoad(sessionGo);
             sessionGo.SetActive(true);
 
             NetworkServer.Spawn(sessionGo, DFCoopPlayerSessionState.AssetId);
             playerSessionStates.Add(conn.connectionId, sessionState);
 
-            Debug.Log($"[DFCoop Session] Server created player session state: connectionId={conn.connectionId}, world=0/0/0.");
+            Debug.Log($"[DFCoop Session] Server created player session state: connectionId={conn.connectionId}, world={worldX}/0/{worldZ}.");
             return sessionState;
+        }
+
+        private static void GetInitialSpawnCoordinates(out int worldX, out int worldZ)
+        {
+            worldX = 0;
+            worldZ = 0;
+
+            if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.ContentReader == null || DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
+            {
+                Debug.LogWarning("[DFCoop Session] Daggerfall City spawn data is unavailable; using world origin.");
+                return;
+            }
+
+            DFLocation location = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetLocation("Daggerfall", "Daggerfall");
+            if (!location.Loaded)
+            {
+                Debug.LogWarning("[DFCoop Session] Daggerfall City was not found in MAPS.BSA; using world origin.");
+                return;
+            }
+
+            DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
+            DFPosition worldPosition = MapsFile.MapPixelToWorldCoord(mapPixel.X, mapPixel.Y);
+            worldX = worldPosition.X;
+            worldZ = worldPosition.Y;
+
+            Debug.Log($"[DFCoop Session] Resolved Daggerfall City spawn: mapPixel={mapPixel.X}/{mapPixel.Y}, world={worldX}/{worldZ}.");
         }
 
         public static void DestroyPlayerSessionState(NetworkConnectionToClient conn)
