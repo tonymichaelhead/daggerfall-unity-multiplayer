@@ -23,6 +23,7 @@ namespace DFCoop.Runtime
         public static bool IsDedicatedServer { get; private set; }
         public static int ServerPort { get; private set; } = 7777;
         public static int ServerTickRate { get; private set; } = 30;
+        public static int MaxConnections { get; private set; } = 16;
         public static string Arena2OverridePath { get; private set; } = null;
         public static float HeartbeatInterval { get; private set; } = 5.0f;
 
@@ -57,6 +58,7 @@ namespace DFCoop.Runtime
             IsDedicatedServer = true;
             ServerPort = config.Port;
             ServerTickRate = config.TickRate;
+            MaxConnections = config.MaxConnections;
             Arena2OverridePath = config.Arena2Path;
             HeartbeatInterval = config.HeartbeatInterval;
 
@@ -156,7 +158,7 @@ namespace DFCoop.Runtime
             DontDestroyOnLoad(bootstrapGo);
             Instance = bootstrapGo.AddComponent<DedicatedServerBootstrap>();
 
-            Debug.Log($"[DFCoop] Dedicated Server Bootstrapped: TickRate={ServerTickRate}, Port={ServerPort}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}'");
+            Debug.Log($"[DFCoop] Dedicated Server Bootstrapped: TickRate={ServerTickRate}, Port={ServerPort}, MaxConnections={MaxConnections}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}'");
         }
 
         private void Awake()
@@ -239,6 +241,8 @@ namespace DFCoop.Runtime
                 GameManager.Instance.PauseGame(false);
             }
 
+            DFCoopNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections);
+
             Debug.Log("[DFCoop] Headless World Initialized (NoWorld=true, Unpaused). Starting heartbeat...");
 
             if (heartbeatCoroutine != null)
@@ -291,6 +295,7 @@ namespace DFCoop.Runtime
 
         private void OnApplicationQuitting()
         {
+            DFCoopNetworkServer.Stop();
             Debug.Log("[DFCoop] Dedicated Server shutting down.");
         }
     }

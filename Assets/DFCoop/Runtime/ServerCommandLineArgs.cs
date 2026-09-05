@@ -12,6 +12,7 @@ namespace DFCoop.Runtime
         public bool IsDedicatedServer;
         public int Port;
         public int TickRate;
+        public int MaxConnections;
         public string Arena2Path;
         public float HeartbeatInterval;
 
@@ -20,6 +21,7 @@ namespace DFCoop.Runtime
             IsDedicatedServer = false,
             Port = 7777,
             TickRate = 30,
+            MaxConnections = 16,
             Arena2Path = null,
             HeartbeatInterval = 5.0f
         };
@@ -54,6 +56,11 @@ namespace DFCoop.Runtime
                 {
                     if (int.TryParse(args[i + 1], out int tickrate))
                         result.TickRate = Mathf.Clamp(tickrate, 10, 120);
+                }
+                else if ((arg == "-maxconnections" || arg == "--maxconnections" || arg == "-maxplayers" || arg == "--maxplayers") && i + 1 < args.Length)
+                {
+                    if (int.TryParse(args[i + 1], out int maxConnections))
+                        result.MaxConnections = Mathf.Clamp(maxConnections, 1, 128);
                 }
                 else if ((arg == "-arena2" || arg == "--arena2") && i + 1 < args.Length)
                 {

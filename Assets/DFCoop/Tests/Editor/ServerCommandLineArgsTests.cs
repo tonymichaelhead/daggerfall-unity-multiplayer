@@ -14,6 +14,7 @@ namespace DFCoop.Tests
             Assert.IsFalse(def.IsDedicatedServer);
             Assert.AreEqual(7777, def.Port);
             Assert.AreEqual(30, def.TickRate);
+            Assert.AreEqual(16, def.MaxConnections);
             Assert.IsNull(def.Arena2Path);
             Assert.AreEqual(5.0f, def.HeartbeatInterval);
         }
@@ -27,6 +28,22 @@ namespace DFCoop.Tests
 
             result = ServerCommandLineArgs.Parse(new string[0], false);
             Assert.IsFalse(result.IsDedicatedServer);
+        }
+
+        [Test]
+        public void Parse_MaxConnectionsClamping_Works()
+        {
+            string[] args = new string[] { "-server", "-maxconnections", "0" };
+            var result = ServerCommandLineArgs.Parse(args, false);
+            Assert.AreEqual(1, result.MaxConnections);
+
+            args = new string[] { "-server", "--maxplayers", "256" };
+            result = ServerCommandLineArgs.Parse(args, false);
+            Assert.AreEqual(128, result.MaxConnections);
+
+            args = new string[] { "-server", "-maxconnections", "32" };
+            result = ServerCommandLineArgs.Parse(args, false);
+            Assert.AreEqual(32, result.MaxConnections);
         }
 
         [Test]
