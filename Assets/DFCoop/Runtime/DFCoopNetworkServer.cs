@@ -8,6 +8,7 @@ namespace DFCoop.Runtime
     {
         public static DFCoopNetworkManager Manager { get; private set; }
         public static KcpTransport Transport { get; private set; }
+        public static DFCoopTimeState TimeState { get; private set; }
         public static ushort Port { get; private set; }
 
         public static bool IsListening
@@ -57,8 +58,27 @@ namespace DFCoop.Runtime
 
             Mirror.Transport.active = Transport;
             Manager.StartServer();
+            SpawnTimeState();
 
             Debug.Log($"[DFCoop Net] Dedicated listener requested: transport=KCP, port={port}, tickRate={tickRate}, maxConnections={maxConnections}.");
+        }
+
+        private static void SpawnTimeState()
+        {
+            if (TimeState != null)
+                return;
+
+            GameObject timeGo = new GameObject("DFCoop_TimeState");
+            timeGo.SetActive(false);
+
+            timeGo.AddComponent<NetworkIdentity>();
+            TimeState = timeGo.AddComponent<DFCoopTimeState>();
+            Object.DontDestroyOnLoad(timeGo);
+            timeGo.SetActive(true);
+
+            NetworkServer.Spawn(timeGo, DFCoopTimeState.AssetId);
+
+            Debug.Log("[DFCoop Time] Server spawned authoritative time state.");
         }
 
         public static void Stop()
@@ -68,6 +88,7 @@ namespace DFCoop.Runtime
 
             Manager = null;
             Transport = null;
+            TimeState = null;
             Port = 0;
         }
     }

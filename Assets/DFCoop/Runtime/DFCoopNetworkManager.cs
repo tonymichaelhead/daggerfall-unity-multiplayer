@@ -41,6 +41,21 @@ namespace DFCoop.Runtime
             base.OnServerDisconnect(conn);
         }
 
+        public override void OnServerReady(NetworkConnectionToClient conn)
+        {
+            base.OnServerReady(conn);
+
+            if (DFCoopNetworkServer.TimeState != null && DFCoopNetworkServer.TimeState.netIdentity != null)
+            {
+                conn.Send(new ObjectSpawnStartedMessage());
+                NetworkServer.RebuildObservers(DFCoopNetworkServer.TimeState.netIdentity, true);
+                conn.Send(new ObjectSpawnFinishedMessage());
+
+                int observerCount = DFCoopNetworkServer.TimeState.netIdentity.observers.Count;
+                Debug.Log($"[DFCoop Time] Server marked time state visible to ready client: connectionId={conn.connectionId}, observers={observerCount}.");
+            }
+        }
+
         public override void OnClientConnect()
         {
             base.OnClientConnect();

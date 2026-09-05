@@ -1,5 +1,8 @@
 using NUnit.Framework;
+using DaggerfallWorkshop;
+using DaggerfallWorkshop.Utility;
 using DFCoop.Runtime;
+using UnityEngine;
 
 namespace DFCoop.Tests
 {
@@ -136,6 +139,56 @@ namespace DFCoop.Tests
             var result = ServerCommandLineArgs.Parse(args, false);
 
             Assert.AreEqual(@"C:\Games\Daggerfall\ARENA2", result.Arena2Path);
+        }
+
+        [Test]
+        public void TimeSnapshot_FromWorldTime_UsesClassicMinutesAndTimeScale()
+        {
+            GameObject go = new GameObject("DFCoop_TimeSnapshotTest");
+
+            try
+            {
+                var worldTime = go.AddComponent<WorldTime>();
+                worldTime.DaggerfallDateTime = new DaggerfallDateTime();
+                worldTime.DaggerfallDateTime.FromClassicDaggerfallTime(523530);
+                worldTime.TimeScale = 8f;
+
+                var snapshot = DFCoopTimeSnapshot.FromWorldTime(worldTime);
+
+                Assert.AreEqual(523530, snapshot.ClassicMinutes);
+                Assert.AreEqual(8f, snapshot.TimeScale);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void TimeSnapshot_ApplyToWorldTime_SetsClassicMinutesAndTimeScale()
+        {
+            GameObject go = new GameObject("DFCoop_TimeSnapshotApplyTest");
+
+            try
+            {
+                var worldTime = go.AddComponent<WorldTime>();
+                worldTime.DaggerfallDateTime = new DaggerfallDateTime();
+
+                var snapshot = new DFCoopTimeSnapshot
+                {
+                    ClassicMinutes = 600000,
+                    TimeScale = 4f
+                };
+
+                snapshot.ApplyToWorldTime(worldTime);
+
+                Assert.AreEqual(600000, worldTime.DaggerfallDateTime.ToClassicDaggerfallTime());
+                Assert.AreEqual(4f, worldTime.TimeScale);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
         }
     }
 }

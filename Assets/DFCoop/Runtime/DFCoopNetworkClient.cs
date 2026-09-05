@@ -53,6 +53,8 @@ namespace DFCoop.Runtime
             Manager.autoCreatePlayer = false;
             Manager.sendRate = tickRate;
 
+            DFCoopTimeState.RegisterClientSpawnHandler();
+
             Object.DontDestroyOnLoad(networkGo);
             networkGo.SetActive(true);
 
