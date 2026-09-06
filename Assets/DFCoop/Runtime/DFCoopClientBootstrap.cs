@@ -22,6 +22,7 @@ namespace DFCoop.Runtime
             ServerAddress = config.Address;
             ServerPort = config.Port;
             ClientTickRate = config.TickRate;
+            DFCoopLogRouter.Initialize(DFCoopLogRole.Client);
 
             Application.targetFrameRate = ClientTickRate;
             QualitySettings.vSyncCount = 0;
@@ -33,7 +34,7 @@ namespace DFCoop.Runtime
             DontDestroyOnLoad(bootstrapGo);
             bootstrapGo.AddComponent<DFCoopClientBootstrap>();
 
-            Debug.Log($"[DFCoop Client] Bootstrapped: Address={ServerAddress}, Port={ServerPort}, TickRate={ClientTickRate}");
+            Debug.Log($"[DFCoop Client] Bootstrapped: Address={ServerAddress}, Port={ServerPort}, TickRate={ClientTickRate}, LogFile='{DFCoopLogRouter.LogFilePath}'");
         }
 
         private void Start()
@@ -44,6 +45,7 @@ namespace DFCoop.Runtime
         private void OnApplicationQuitting()
         {
             DFCoopNetworkClient.Stop();
+            DFCoopLogRouter.Shutdown();
         }
     }
 }

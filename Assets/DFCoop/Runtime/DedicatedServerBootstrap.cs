@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.IO;
-using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using DaggerfallWorkshop;
@@ -30,23 +29,6 @@ namespace DFCoop.Runtime
         private bool gameSceneInitialized = false;
         private Coroutine heartbeatCoroutine;
 
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool AttachConsole(uint dwProcessId);
-        private const uint ATTACH_PARENT_PROCESS = 0xFFFFFFFF;
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetStdHandle(int nStdHandle);
-        private const int STD_OUTPUT_HANDLE = -11;
-        private const int STD_ERROR_HANDLE = -12;
-
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern bool WriteConsole(IntPtr hConsoleOutput, string lpBuffer, uint nNumberOfCharsToWrite, out uint lpNumberOfCharsWritten, IntPtr lpReserved);
-
-        private static IntPtr stdOutHandle = IntPtr.Zero;
-        private static IntPtr stdErrHandle = IntPtr.Zero;
-#endif
-
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EarlyInitialize()
         {
@@ -61,63 +43,7 @@ namespace DFCoop.Runtime
             MaxConnections = config.MaxConnections;
             Arena2OverridePath = config.Arena2Path;
             HeartbeatInterval = config.HeartbeatInterval;
-
-#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            try
-            {
-                AttachConsole(ATTACH_PARENT_PROCESS);
-                stdOutHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-                stdErrHandle = GetStdHandle(STD_ERROR_HANDLE);
-            }
-            catch
-            {
-                // Fallback to default IO if console attach is unavailable
-            }
-#endif
-
-            // Route Unity Debug.Log directly to attached Windows console in real time
-            Application.logMessageReceived += (condition, stackTrace, type) =>
-            {
-                string prefix = string.Empty;
-                if (type == LogType.Error || type == LogType.Exception)
-                    prefix = $"[{type}] ";
-                else if (type == LogType.Warning)
-                    prefix = "[Warning] ";
-
-                string message = $"{prefix}{condition}\n";
-                if ((type == LogType.Error || type == LogType.Exception) && !string.IsNullOrEmpty(stackTrace))
-                    message += $"{stackTrace}\n";
-
-#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-                if (stdOutHandle != IntPtr.Zero && stdOutHandle != new IntPtr(-1))
-                {
-                    IntPtr targetHandle = (type == LogType.Error || type == LogType.Exception) ? stdErrHandle : stdOutHandle;
-                    if (targetHandle == IntPtr.Zero)
-                        targetHandle = stdOutHandle;
-
-                    if (WriteConsole(targetHandle, message, (uint)message.Length, out uint written, IntPtr.Zero))
-                        return;
-                }
-#endif
-                // Fallback standard console writers
-                try
-                {
-                    if (type == LogType.Error || type == LogType.Exception)
-                    {
-                        System.Console.Error.Write(message);
-                        System.Console.Error.Flush();
-                    }
-                    else
-                    {
-                        System.Console.Out.Write(message);
-                        System.Console.Out.Flush();
-                    }
-                }
-                catch
-                {
-                    // Ignore stream write errors
-                }
-            };
+            DFCoopLogRouter.Initialize(DFCoopLogRole.Server);
 
             // Configure headless execution settings
             Application.targetFrameRate = ServerTickRate;
@@ -158,7 +84,7 @@ namespace DFCoop.Runtime
             DontDestroyOnLoad(bootstrapGo);
             Instance = bootstrapGo.AddComponent<DedicatedServerBootstrap>();
 
-            Debug.Log($"[DFCoop] Dedicated Server Bootstrapped: TickRate={ServerTickRate}, Port={ServerPort}, MaxConnections={MaxConnections}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}'");
+            Debug.Log($"[DFCoop] Dedicated Server Bootstrapped: TickRate={ServerTickRate}, Port={ServerPort}, MaxConnections={MaxConnections}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}', LogFile='{DFCoopLogRouter.LogFilePath}'");
         }
 
         private void Awake()
@@ -297,6 +223,7 @@ namespace DFCoop.Runtime
         {
             DFCoopNetworkServer.Stop();
             Debug.Log("[DFCoop] Dedicated Server shutting down.");
+            DFCoopLogRouter.Shutdown();
         }
     }
 }
