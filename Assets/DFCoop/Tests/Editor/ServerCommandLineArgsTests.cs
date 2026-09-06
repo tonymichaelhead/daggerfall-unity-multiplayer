@@ -205,6 +205,11 @@ namespace DFCoop.Tests
                 Assert.AreEqual(123456, sessionState.WorldX);
                 Assert.AreEqual(42.5f, sessionState.WorldY);
                 Assert.AreEqual(654321, sessionState.WorldZ);
+                Assert.IsFalse(sessionState.SpawnConfirmed);
+
+                sessionState.ConfirmSpawn();
+
+                Assert.IsTrue(sessionState.SpawnConfirmed);
             }
             finally
             {

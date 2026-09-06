@@ -55,6 +55,9 @@ namespace DFCoop.Runtime
 
             DFCoopTimeState.RegisterClientSpawnHandler();
             DFCoopPlayerSessionState.RegisterClientSpawnHandler();
+            DFCoopSpawnAssignmentController.RegisterClientHandler();
+            DFCoopPositionReporter.EnsureInstance();
+            DFCoopRemotePlayerPresentationController.EnsureInstance();
 
             Object.DontDestroyOnLoad(networkGo);
             networkGo.SetActive(true);
@@ -70,6 +73,9 @@ namespace DFCoop.Runtime
             if (Manager != null && Manager.isNetworkActive)
                 Manager.StopClient();
 
+            DFCoopSpawnAssignmentController.Reset();
+            DFCoopPositionReporter.Reset();
+            DFCoopRemotePlayerPresentationController.Reset();
             Manager = null;
             Transport = null;
             Address = "127.0.0.1";

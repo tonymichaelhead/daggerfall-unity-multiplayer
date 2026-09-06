@@ -19,6 +19,9 @@ namespace DFCoop.Runtime
         [SyncVar]
         int worldZ;
 
+        [SyncVar]
+        bool spawnConfirmed;
+
         public int ConnectionId
         {
             get { return connectionId; }
@@ -39,12 +42,29 @@ namespace DFCoop.Runtime
             get { return worldZ; }
         }
 
+        public bool SpawnConfirmed
+        {
+            get { return spawnConfirmed; }
+        }
+
         public void Initialize(int ownerConnectionId, int initialWorldX, float initialWorldY, int initialWorldZ)
         {
             connectionId = ownerConnectionId;
             worldX = initialWorldX;
             worldY = initialWorldY;
             worldZ = initialWorldZ;
+        }
+
+        public void ConfirmSpawn()
+        {
+            spawnConfirmed = true;
+        }
+
+        public void SetPosition(int newWorldX, float newWorldY, int newWorldZ)
+        {
+            worldX = newWorldX;
+            worldY = newWorldY;
+            worldZ = newWorldZ;
         }
 
         public static void RegisterClientSpawnHandler()

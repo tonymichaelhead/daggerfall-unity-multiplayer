@@ -46,17 +46,32 @@ namespace DFCoop.Runtime
         {
             base.OnServerReady(conn);
 
+            conn.Send(new ObjectSpawnStartedMessage());
+
             if (DFCoopNetworkServer.TimeState != null && DFCoopNetworkServer.TimeState.netIdentity != null)
             {
-                conn.Send(new ObjectSpawnStartedMessage());
                 NetworkServer.RebuildObservers(DFCoopNetworkServer.TimeState.netIdentity, true);
-                conn.Send(new ObjectSpawnFinishedMessage());
 
                 int observerCount = DFCoopNetworkServer.TimeState.netIdentity.observers.Count;
                 Debug.Log($"[DFCoop Time] Server marked time state visible to ready client: connectionId={conn.connectionId}, observers={observerCount}.");
             }
 
-            DFCoopNetworkServer.CreatePlayerSessionState(conn);
+            DFCoopNetworkServer.MakeSessionStatesVisibleTo(conn);
+            conn.Send(new ObjectSpawnFinishedMessage());
+
+            DFCoopPlayerSessionState sessionState = DFCoopNetworkServer.CreatePlayerSessionState(conn);
+            if (sessionState != null)
+            {
+                var mapPixel = DaggerfallConnect.Arena2.MapsFile.WorldCoordToMapPixel(sessionState.WorldX, sessionState.WorldZ);
+                conn.Send(new DFCoopSpawnAssignment
+                {
+                    ConnectionId = conn.connectionId,
+                    MapPixelX = mapPixel.X,
+                    MapPixelY = mapPixel.Y
+                });
+
+                Debug.Log($"[DFCoop Session] Server sent spawn assignment: connectionId={conn.connectionId}, mapPixel={mapPixel.X}/{mapPixel.Y}.");
+            }
         }
 
         public override void OnClientConnect()
