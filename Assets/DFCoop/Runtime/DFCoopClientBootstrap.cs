@@ -24,11 +24,7 @@ namespace DFCoop.Runtime
             ClientTickRate = config.TickRate;
             DFCoopLogRouter.Initialize(DFCoopLogRole.Client);
 
-            Application.targetFrameRate = ClientTickRate;
-            QualitySettings.vSyncCount = 0;
-            Application.runInBackground = true;
-            AudioListener.pause = true;
-            AudioListener.volume = 0f;
+            ApplyClientRuntimeSettings(ClientTickRate);
 
             GameObject bootstrapGo = new GameObject("DFCoop_ClientBootstrap");
             DontDestroyOnLoad(bootstrapGo);
@@ -40,6 +36,13 @@ namespace DFCoop.Runtime
         private void Start()
         {
             DFCoopNetworkClient.Start(ServerAddress, (ushort)ServerPort, ClientTickRate);
+        }
+
+        public static void ApplyClientRuntimeSettings(int tickRate)
+        {
+            Application.targetFrameRate = tickRate;
+            QualitySettings.vSyncCount = 0;
+            Application.runInBackground = true;
         }
 
         private void OnApplicationQuitting()

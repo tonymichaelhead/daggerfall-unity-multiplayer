@@ -83,6 +83,38 @@ namespace DFCoop.Tests
         }
 
         [Test]
+        public void ClientRuntimeSettings_DoNotMuteAudio()
+        {
+            bool previousPause = AudioListener.pause;
+            float previousVolume = AudioListener.volume;
+            int previousTargetFrameRate = Application.targetFrameRate;
+            int previousVSyncCount = QualitySettings.vSyncCount;
+            bool previousRunInBackground = Application.runInBackground;
+
+            try
+            {
+                AudioListener.pause = false;
+                AudioListener.volume = 0.75f;
+
+                DFCoopClientBootstrap.ApplyClientRuntimeSettings(45);
+
+                Assert.IsFalse(AudioListener.pause);
+                Assert.AreEqual(0.75f, AudioListener.volume);
+                Assert.AreEqual(45, Application.targetFrameRate);
+                Assert.AreEqual(0, QualitySettings.vSyncCount);
+                Assert.IsTrue(Application.runInBackground);
+            }
+            finally
+            {
+                AudioListener.pause = previousPause;
+                AudioListener.volume = previousVolume;
+                Application.targetFrameRate = previousTargetFrameRate;
+                QualitySettings.vSyncCount = previousVSyncCount;
+                Application.runInBackground = previousRunInBackground;
+            }
+        }
+
+        [Test]
         public void Parse_ServerFlag_EnablesDedicatedServer()
         {
             string[] args = new string[] { "-server" };
