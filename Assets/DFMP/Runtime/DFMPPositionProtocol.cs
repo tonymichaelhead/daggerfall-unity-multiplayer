@@ -1,8 +1,8 @@
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public struct DFCoopPlayerPositionReport : Mirror.NetworkMessage
+    public struct DFMPPlayerPositionReport : Mirror.NetworkMessage
     {
         public int WorldX;
         public float WorldY;
@@ -10,7 +10,7 @@ namespace DFCoop.Runtime
         public float FacingYaw;
     }
 
-    public struct DFCoopPlayerIdentityReport : Mirror.NetworkMessage
+    public struct DFMPPlayerIdentityReport : Mirror.NetworkMessage
     {
         public string DisplayName;
         public int Race;
@@ -19,9 +19,11 @@ namespace DFCoop.Runtime
         public int FaceVariant;
     }
 
-    public static class DFCoopPositionProtocol
+    public static class DFMPPositionProtocol
     {
         public const float MinimumReportInterval = 0.1f;
+        // Reports routinely arrive slightly early because of send/receive jitter, so only clear flooding is rejected.
+        public const float MinimumAcceptedReportInterval = MinimumReportInterval * 0.5f;
         public const float MaximumSpeed = 4096f;
         public const int MinimumMapPixelX = 3;
         public const int MaximumMapPixelX = 998;
@@ -83,20 +85,20 @@ namespace DFCoop.Runtime
             return normalizedYaw < 0f ? normalizedYaw + 360f : normalizedYaw;
         }
 
-        public static bool IsValidWorldPosition(DFCoopPlayerPositionReport report)
+        public static bool IsValidWorldPosition(DFMPPlayerPositionReport report)
         {
             if (float.IsNaN(report.WorldY) || float.IsInfinity(report.WorldY) || !IsValidFacingYaw(report.FacingYaw))
                 return false;
 
-            int mapPixelX = report.WorldX / DFCoopSpawnProtocol.WorldMapPixelDimension;
-            int mapPixelY = DFCoopSpawnProtocol.WorldMapHeightInPixels - 1 - (report.WorldZ / DFCoopSpawnProtocol.WorldMapPixelDimension);
+            int mapPixelX = report.WorldX / DFMPSpawnProtocol.WorldMapPixelDimension;
+            int mapPixelY = DFMPSpawnProtocol.WorldMapHeightInPixels - 1 - (report.WorldZ / DFMPSpawnProtocol.WorldMapPixelDimension);
             return mapPixelX >= MinimumMapPixelX && mapPixelX <= MaximumMapPixelX &&
                 mapPixelY >= MinimumMapPixelY && mapPixelY <= MaximumMapPixelY;
         }
 
-        public static bool IsAccepted(DFCoopPlayerSessionState sessionState, DFCoopPlayerPositionReport report, float elapsedSeconds)
+        public static bool IsAccepted(DFMPPlayerSessionState sessionState, DFMPPlayerPositionReport report, float elapsedSeconds)
         {
-            if (sessionState == null || !sessionState.SpawnConfirmed || elapsedSeconds < MinimumReportInterval || !IsValidWorldPosition(report))
+            if (sessionState == null || !sessionState.SpawnConfirmed || elapsedSeconds < MinimumAcceptedReportInterval || !IsValidWorldPosition(report))
                 return false;
 
             float maxDistance = MaximumSpeed * elapsedSeconds;

@@ -4,14 +4,14 @@ using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
-namespace DFCoop.Editor
+namespace DFMP.Editor
 {
     /// <summary>
-    /// Post-build processor for DFCoop dedicated server binaries.
+    /// Post-build processor for DFMP dedicated server binaries.
     /// Modifies the Windows PE header subsystem from Windows GUI (2) to Windows Console (3)
     /// so the executable attaches directly to PowerShell / cmd stdout and streams live logs.
     /// </summary>
-    public static class DFCoopBuildPostProcessor
+    public static class DFMPBuildPostProcessor
     {
         private const int PE_HEADER_POINTER_OFFSET = 0x3C;
         private const int PE_SIGNATURE_AND_COFF_HEADER_SIZE = 24;
@@ -50,12 +50,12 @@ namespace DFCoop.Editor
                     data[subsystemOffset + 1] = (byte)((SUBSYSTEM_WINDOWS_CUI >> 8) & 0xFF);
                     File.WriteAllBytes(pathToBuiltProject, data);
 
-                    Debug.Log($"[DFCoop] Patched Windows PE Subsystem to Console (3) for '{Path.GetFileName(pathToBuiltProject)}'");
+                    Debug.Log($"[DFMP] Patched Windows PE Subsystem to Console (3) for '{Path.GetFileName(pathToBuiltProject)}'");
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[DFCoop] Failed to patch PE Subsystem to Console: {ex.Message}");
+                Debug.LogWarning($"[DFMP] Failed to patch PE Subsystem to Console: {ex.Message}");
             }
         }
     }

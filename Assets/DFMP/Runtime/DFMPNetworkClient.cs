@@ -2,11 +2,11 @@ using kcp2k;
 using Mirror;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public static class DFCoopNetworkClient
+    public static class DFMPNetworkClient
     {
-        public static DFCoopNetworkManager Manager { get; private set; }
+        public static DFMPNetworkManager Manager { get; private set; }
         public static KcpTransport Transport { get; private set; }
         public static string Address { get; private set; } = "127.0.0.1";
         public static ushort Port { get; private set; }
@@ -20,20 +20,20 @@ namespace DFCoop.Runtime
         {
             if (NetworkClient.active)
             {
-                Debug.LogWarning("[DFCoop Net] Client already active; skipping client startup.");
+                Debug.LogWarning("[DFMP Net] Client already active; skipping client startup.");
                 return;
             }
 
             if (NetworkManager.singleton != null && NetworkManager.singleton.isNetworkActive)
             {
-                Debug.LogWarning("[DFCoop Net] Mirror already has an active NetworkManager; skipping client startup.");
+                Debug.LogWarning("[DFMP Net] Mirror already has an active NetworkManager; skipping client startup.");
                 return;
             }
 
             Address = string.IsNullOrEmpty(address) ? "127.0.0.1" : address;
             Port = port;
 
-            GameObject networkGo = new GameObject("DFCoop_NetworkClient");
+            GameObject networkGo = new GameObject("DFMP_NetworkClient");
             networkGo.SetActive(false);
 
             Transport = networkGo.AddComponent<KcpTransport>();
@@ -44,7 +44,7 @@ namespace DFCoop.Runtime
             Transport.MaximizeSocketBuffers = true;
             Transport.statisticsLog = false;
 
-            Manager = networkGo.AddComponent<DFCoopNetworkManager>();
+            Manager = networkGo.AddComponent<DFMPNetworkManager>();
             Manager.dontDestroyOnLoad = true;
             Manager.runInBackground = true;
             Manager.headlessStartMode = HeadlessStartOptions.DoNothing;
@@ -53,11 +53,11 @@ namespace DFCoop.Runtime
             Manager.autoCreatePlayer = false;
             Manager.sendRate = tickRate;
 
-            DFCoopTimeState.RegisterClientSpawnHandler();
-            DFCoopPlayerSessionState.RegisterClientSpawnHandler();
-            DFCoopSpawnAssignmentController.RegisterClientHandler();
-            DFCoopPositionReporter.EnsureInstance();
-            DFCoopRemotePlayerPresentationController.EnsureInstance();
+            DFMPTimeState.RegisterClientSpawnHandler();
+            DFMPPlayerSessionState.RegisterClientSpawnHandler();
+            DFMPSpawnAssignmentController.RegisterClientHandler();
+            DFMPPositionReporter.EnsureInstance();
+            DFMPRemotePlayerPresentationController.EnsureInstance();
 
             Object.DontDestroyOnLoad(networkGo);
             networkGo.SetActive(true);
@@ -65,7 +65,7 @@ namespace DFCoop.Runtime
             Mirror.Transport.active = Transport;
             Manager.StartClient();
 
-            Debug.Log($"[DFCoop Net] Client connection requested: transport=KCP, address={Address}, port={port}, tickRate={tickRate}.");
+            Debug.Log($"[DFMP Net] Client connection requested: transport=KCP, address={Address}, port={port}, tickRate={tickRate}.");
         }
 
         public static void Stop()
@@ -73,9 +73,9 @@ namespace DFCoop.Runtime
             if (Manager != null && Manager.isNetworkActive)
                 Manager.StopClient();
 
-            DFCoopSpawnAssignmentController.Reset();
-            DFCoopPositionReporter.Reset();
-            DFCoopRemotePlayerPresentationController.Reset();
+            DFMPSpawnAssignmentController.Reset();
+            DFMPPositionReporter.Reset();
+            DFMPRemotePlayerPresentationController.Reset();
             Manager = null;
             Transport = null;
             Address = "127.0.0.1";

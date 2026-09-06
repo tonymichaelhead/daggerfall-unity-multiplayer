@@ -3,18 +3,18 @@ using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public enum DFCoopLogRole
+    public enum DFMPLogRole
     {
         Server,
         Client
     }
 
-    public static class DFCoopLogRouter
+    public static class DFMPLogRouter
     {
         const string LogsDirectoryName = "Logs";
-        const string DFCoopDirectoryName = "DFCoop";
+        const string DFMPDirectoryName = "DFMP";
 
         static readonly object syncRoot = new object();
         static StreamWriter logWriter;
@@ -50,7 +50,7 @@ namespace DFCoop.Runtime
             get { return logFilePath; }
         }
 
-        public static void Initialize(DFCoopLogRole role)
+        public static void Initialize(DFMPLogRole role)
         {
             lock (syncRoot)
             {
@@ -60,7 +60,7 @@ namespace DFCoop.Runtime
                 string logsDirectory = GetDefaultLogDirectory();
                 logStream = OpenRoleLogFile(logsDirectory, role, out logFilePath);
                 logWriter = new StreamWriter(logStream) { AutoFlush = true };
-                WriteRawLine("=== DFCoop " + role + " log started at " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ===");
+                WriteRawLine("=== DFMP " + role + " log started at " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ===");
 
                 originalOut = Console.Out;
                 originalError = Console.Error;
@@ -95,22 +95,22 @@ namespace DFCoop.Runtime
 
         public static string GetDefaultLogDirectory()
         {
-            return Path.Combine(Directory.GetCurrentDirectory(), LogsDirectoryName, DFCoopDirectoryName);
+            return Path.Combine(Directory.GetCurrentDirectory(), LogsDirectoryName, DFMPDirectoryName);
         }
 
-        public static string GetLogFileName(DFCoopLogRole role, int index)
+        public static string GetLogFileName(DFMPLogRole role, int index)
         {
-            string prefix = role == DFCoopLogRole.Server ? "server" : "client";
+            string prefix = role == DFMPLogRole.Server ? "server" : "client";
             return index == 0 ? prefix + ".log" : prefix + index + ".log";
         }
 
-        public static string GetPreviousLogFileName(DFCoopLogRole role, int index)
+        public static string GetPreviousLogFileName(DFMPLogRole role, int index)
         {
-            string prefix = role == DFCoopLogRole.Server ? "server" : "client";
+            string prefix = role == DFMPLogRole.Server ? "server" : "client";
             return index == 0 ? prefix + "-prev.log" : prefix + index + "-prev.log";
         }
 
-        public static FileStream OpenRoleLogFile(string logsDirectory, DFCoopLogRole role, out string path)
+        public static FileStream OpenRoleLogFile(string logsDirectory, DFMPLogRole role, out string path)
         {
             if (string.IsNullOrEmpty(logsDirectory))
                 throw new ArgumentException("Log directory must not be empty.", "logsDirectory");

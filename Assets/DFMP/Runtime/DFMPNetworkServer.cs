@@ -7,18 +7,19 @@ using Mirror;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public static class DFCoopNetworkServer
+    public static class DFMPNetworkServer
     {
-        public static DFCoopNetworkManager Manager { get; private set; }
+        public static DFMPNetworkManager Manager { get; private set; }
         public static KcpTransport Transport { get; private set; }
-        public static DFCoopTimeState TimeState { get; private set; }
+        public static DFMPTimeState TimeState { get; private set; }
         public static ushort Port { get; private set; }
 
-        static readonly Dictionary<int, DFCoopPlayerSessionState> playerSessionStates = new Dictionary<int, DFCoopPlayerSessionState>();
+        static readonly Dictionary<int, DFMPPlayerSessionState> playerSessionStates = new Dictionary<int, DFMPPlayerSessionState>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
+        static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
 
         public static bool IsListening
         {
@@ -29,19 +30,19 @@ namespace DFCoop.Runtime
         {
             if (IsListening)
             {
-                Debug.LogWarning($"[DFCoop Net] Server already listening on port {Port}.");
+                Debug.LogWarning($"[DFMP Net] Server already listening on port {Port}.");
                 return;
             }
 
             if (NetworkManager.singleton != null && NetworkManager.singleton.isNetworkActive)
             {
-                Debug.LogWarning("[DFCoop Net] Mirror already has an active NetworkManager; skipping dedicated listener startup.");
+                Debug.LogWarning("[DFMP Net] Mirror already has an active NetworkManager; skipping dedicated listener startup.");
                 return;
             }
 
             Port = port;
 
-            GameObject networkGo = new GameObject("DFCoop_NetworkServer");
+            GameObject networkGo = new GameObject("DFMP_NetworkServer");
             networkGo.SetActive(false);
 
             Transport = networkGo.AddComponent<KcpTransport>();
@@ -52,7 +53,7 @@ namespace DFCoop.Runtime
             Transport.MaximizeSocketBuffers = true;
             Transport.statisticsLog = false;
 
-            Manager = networkGo.AddComponent<DFCoopNetworkManager>();
+            Manager = networkGo.AddComponent<DFMPNetworkManager>();
             Manager.dontDestroyOnLoad = true;
             Manager.runInBackground = true;
             Manager.headlessStartMode = HeadlessStartOptions.DoNothing;
@@ -67,12 +68,12 @@ namespace DFCoop.Runtime
 
             Mirror.Transport.active = Transport;
             Manager.StartServer();
-            NetworkServer.RegisterHandler<DFCoopSpawnAcknowledgement>(OnSpawnAcknowledgement);
-            NetworkServer.RegisterHandler<DFCoopPlayerPositionReport>(OnPlayerPositionReport);
-            NetworkServer.RegisterHandler<DFCoopPlayerIdentityReport>(OnPlayerIdentityReport);
+            NetworkServer.RegisterHandler<DFMPSpawnAcknowledgement>(OnSpawnAcknowledgement);
+            NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
+            NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             SpawnTimeState();
 
-            Debug.Log($"[DFCoop Net] Dedicated listener requested: transport=KCP, port={port}, tickRate={tickRate}, maxConnections={maxConnections}.");
+            Debug.Log($"[DFMP Net] Dedicated listener requested: transport=KCP, port={port}, tickRate={tickRate}, maxConnections={maxConnections}.");
         }
 
         private static void SpawnTimeState()
@@ -80,33 +81,33 @@ namespace DFCoop.Runtime
             if (TimeState != null)
                 return;
 
-            GameObject timeGo = new GameObject("DFCoop_TimeState");
+            GameObject timeGo = new GameObject("DFMP_TimeState");
             timeGo.SetActive(false);
 
             timeGo.AddComponent<NetworkIdentity>();
-            TimeState = timeGo.AddComponent<DFCoopTimeState>();
+            TimeState = timeGo.AddComponent<DFMPTimeState>();
             Object.DontDestroyOnLoad(timeGo);
             timeGo.SetActive(true);
 
-            NetworkServer.Spawn(timeGo, DFCoopTimeState.AssetId);
+            NetworkServer.Spawn(timeGo, DFMPTimeState.AssetId);
 
-            Debug.Log("[DFCoop Time] Server spawned authoritative time state.");
+            Debug.Log("[DFMP Time] Server spawned authoritative time state.");
         }
 
-        public static DFCoopPlayerSessionState CreatePlayerSessionState(NetworkConnectionToClient conn)
+        public static DFMPPlayerSessionState CreatePlayerSessionState(NetworkConnectionToClient conn)
         {
             if (conn == null)
                 return null;
 
-            DFCoopPlayerSessionState existingState;
+            DFMPPlayerSessionState existingState;
             if (playerSessionStates.TryGetValue(conn.connectionId, out existingState))
                 return existingState;
 
-            GameObject sessionGo = new GameObject("DFCoop_PlayerSessionState");
+            GameObject sessionGo = new GameObject("DFMP_PlayerSessionState");
             sessionGo.SetActive(false);
 
             sessionGo.AddComponent<NetworkIdentity>();
-            var sessionState = sessionGo.AddComponent<DFCoopPlayerSessionState>();
+            var sessionState = sessionGo.AddComponent<DFMPPlayerSessionState>();
             int worldX;
             int worldZ;
             GetInitialSpawnCoordinates(out worldX, out worldZ);
@@ -114,10 +115,10 @@ namespace DFCoop.Runtime
             Object.DontDestroyOnLoad(sessionGo);
             sessionGo.SetActive(true);
 
-            NetworkServer.Spawn(sessionGo, DFCoopPlayerSessionState.AssetId);
+            NetworkServer.Spawn(sessionGo, DFMPPlayerSessionState.AssetId);
             playerSessionStates.Add(conn.connectionId, sessionState);
 
-            Debug.Log($"[DFCoop Session] Server created player session state: connectionId={conn.connectionId}, world={worldX}/0/{worldZ}.");
+            Debug.Log($"[DFMP Session] Server created player session state: connectionId={conn.connectionId}, world={worldX}/0/{worldZ}.");
             return sessionState;
         }
 
@@ -126,7 +127,7 @@ namespace DFCoop.Runtime
             if (conn == null)
                 return;
 
-            foreach (DFCoopPlayerSessionState sessionState in playerSessionStates.Values)
+            foreach (DFMPPlayerSessionState sessionState in playerSessionStates.Values)
             {
                 if (sessionState != null && sessionState.netIdentity != null)
                     NetworkServer.RebuildObservers(sessionState.netIdentity, true);
@@ -140,77 +141,87 @@ namespace DFCoop.Runtime
 
             if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.ContentReader == null || DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
             {
-                Debug.LogWarning("[DFCoop Session] Daggerfall City spawn data is unavailable; using world origin.");
+                Debug.LogWarning("[DFMP Session] Daggerfall City spawn data is unavailable; using world origin.");
                 return;
             }
 
             DFLocation location = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetLocation("Daggerfall", "Daggerfall");
             if (!location.Loaded)
             {
-                Debug.LogWarning("[DFCoop Session] Daggerfall City was not found in MAPS.BSA; using world origin.");
+                Debug.LogWarning("[DFMP Session] Daggerfall City was not found in MAPS.BSA; using world origin.");
                 return;
             }
 
             DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
             Rect locationRect = DaggerfallLocation.GetLocationRect(location);
-            DFCoopWorldPosition spawnPosition = DFCoopSpawnProtocol.GetLocationCenter(locationRect);
+            DFMPWorldPosition spawnPosition = DFMPSpawnProtocol.GetLocationCenter(locationRect);
             worldX = spawnPosition.WorldX;
             worldZ = spawnPosition.WorldZ;
 
-            Debug.Log($"[DFCoop Session] Resolved Daggerfall City spawn: mapPixel={mapPixel.X}/{mapPixel.Y}, locationRect={locationRect.xMin}/{locationRect.yMin}/{locationRect.width}/{locationRect.height}, world={worldX}/{worldZ}.");
+            Debug.Log($"[DFMP Session] Resolved Daggerfall City spawn: mapPixel={mapPixel.X}/{mapPixel.Y}, locationRect={locationRect.xMin}/{locationRect.yMin}/{locationRect.width}/{locationRect.height}, world={worldX}/{worldZ}.");
         }
 
-        private static void OnSpawnAcknowledgement(NetworkConnectionToClient conn, DFCoopSpawnAcknowledgement acknowledgement)
+        private static void OnSpawnAcknowledgement(NetworkConnectionToClient conn, DFMPSpawnAcknowledgement acknowledgement)
         {
-            DFCoopPlayerSessionState sessionState;
+            DFMPPlayerSessionState sessionState;
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState) || sessionState == null)
             {
-                Debug.LogWarning($"[DFCoop Session] Ignored spawn acknowledgement without a session: connectionId={conn.connectionId}.");
+                Debug.LogWarning($"[DFMP Session] Ignored spawn acknowledgement without a session: connectionId={conn.connectionId}.");
                 return;
             }
 
-            if (!DFCoopSpawnProtocol.TryConfirmSpawn(sessionState, acknowledgement))
+            if (!DFMPSpawnProtocol.TryConfirmSpawn(sessionState, acknowledgement))
             {
-                Debug.LogWarning($"[DFCoop Session] Ignored mismatched spawn acknowledgement: connectionId={conn.connectionId}.");
+                Debug.LogWarning($"[DFMP Session] Ignored mismatched spawn acknowledgement: connectionId={conn.connectionId}.");
                 return;
             }
 
-            Debug.Log($"[DFCoop Session] Server confirmed spawn: connectionId={conn.connectionId}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
+            lastPositionReportTimes.Remove(conn.connectionId);
+            rejectedPositionReportConnections.Remove(conn.connectionId);
+            Debug.Log($"[DFMP Session] Server confirmed spawn: connectionId={conn.connectionId}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
         }
 
-        private static void OnPlayerPositionReport(NetworkConnectionToClient conn, DFCoopPlayerPositionReport report)
+        private static void OnPlayerPositionReport(NetworkConnectionToClient conn, DFMPPlayerPositionReport report)
         {
-            DFCoopPlayerSessionState sessionState;
+            DFMPPlayerSessionState sessionState;
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
                 return;
 
             float lastReportTime;
-            if (!lastPositionReportTimes.TryGetValue(conn.connectionId, out lastReportTime))
-                lastReportTime = Time.unscaledTime - DFCoopPositionProtocol.MinimumReportInterval;
+            float elapsedSeconds = lastPositionReportTimes.TryGetValue(conn.connectionId, out lastReportTime)
+                ? Time.unscaledTime - lastReportTime
+                : DFMPPositionProtocol.MinimumReportInterval;
 
-            float elapsedSeconds = Time.unscaledTime - lastReportTime;
-            lastPositionReportTimes[conn.connectionId] = Time.unscaledTime;
-            if (!DFCoopPositionProtocol.IsAccepted(sessionState, report, elapsedSeconds))
+            if (!DFMPPositionProtocol.IsAccepted(sessionState, report, elapsedSeconds))
+            {
+                // Anchor time is deliberately not advanced so the movement budget keeps growing and a
+                // legitimate teleport re-anchors instead of locking the session out forever.
+                if (sessionState != null && sessionState.SpawnConfirmed && rejectedPositionReportConnections.Add(conn.connectionId))
+                    Debug.LogWarning($"[DFMP Session] Server rejected player position report: connectionId={conn.connectionId}, session={sessionState.WorldX}/{sessionState.WorldZ}, report={report.WorldX}/{report.WorldZ}, elapsed={elapsedSeconds:F2}s.");
+
                 return;
+            }
 
+            lastPositionReportTimes[conn.connectionId] = Time.unscaledTime;
+            rejectedPositionReportConnections.Remove(conn.connectionId);
             sessionState.SetPosition(report.WorldX, report.WorldY, report.WorldZ);
-            sessionState.SetFacingYaw(DFCoopPositionProtocol.NormalizeFacingYaw(report.FacingYaw));
+            sessionState.SetFacingYaw(DFMPPositionProtocol.NormalizeFacingYaw(report.FacingYaw));
             if (activePositionReportConnections.Add(conn.connectionId))
-                Debug.Log($"[DFCoop Session] Server accepted player position reports: connectionId={conn.connectionId}.");
+                Debug.Log($"[DFMP Session] Server accepted player position reports: connectionId={conn.connectionId}.");
         }
 
-        private static void OnPlayerIdentityReport(NetworkConnectionToClient conn, DFCoopPlayerIdentityReport report)
+        private static void OnPlayerIdentityReport(NetworkConnectionToClient conn, DFMPPlayerIdentityReport report)
         {
-            DFCoopPlayerSessionState sessionState;
+            DFMPPlayerSessionState sessionState;
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState) || sessionState == null || !sessionState.SpawnConfirmed)
                 return;
 
-            sessionState.SetDisplayName(DFCoopPositionProtocol.SanitizeDisplayName(report.DisplayName));
+            sessionState.SetDisplayName(DFMPPositionProtocol.SanitizeDisplayName(report.DisplayName));
             sessionState.SetAppearance(
                 report.Race,
-                DFCoopPositionProtocol.GetDisplayGender(report.Gender),
-                DFCoopPositionProtocol.GetOutfitVariant(report.OutfitVariant),
-                DFCoopPositionProtocol.GetFaceVariant(report.FaceVariant));
+                DFMPPositionProtocol.GetDisplayGender(report.Gender),
+                DFMPPositionProtocol.GetOutfitVariant(report.OutfitVariant),
+                DFMPPositionProtocol.GetFaceVariant(report.FaceVariant));
         }
 
         public static void DestroyPlayerSessionState(NetworkConnectionToClient conn)
@@ -218,13 +229,14 @@ namespace DFCoop.Runtime
             if (conn == null)
                 return;
 
-            DFCoopPlayerSessionState sessionState;
+            DFMPPlayerSessionState sessionState;
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
                 return;
 
             playerSessionStates.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
+            rejectedPositionReportConnections.Remove(conn.connectionId);
             if (sessionState != null)
                 NetworkServer.Destroy(sessionState.gameObject);
         }
@@ -240,6 +252,7 @@ namespace DFCoop.Runtime
             playerSessionStates.Clear();
             lastPositionReportTimes.Clear();
             activePositionReportConnections.Clear();
+            rejectedPositionReportConnections.Clear();
             Port = 0;
         }
     }

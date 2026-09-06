@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace DFCoop.Hooks
+namespace DFMP.Hooks
 {
     /// <summary>
     /// Central event dispatcher for lightweight, additive hooks placed into upstream DFU core scripts.

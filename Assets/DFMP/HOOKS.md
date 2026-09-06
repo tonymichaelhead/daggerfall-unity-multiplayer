@@ -15,10 +15,10 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 
 | ID | File | Method / Location | Purpose | Added Date |
 |---|---|---|---|---|
-| *(None yet — Milestone 0 aims for zero core hooks)* | | | | |
+| *(None yet - Milestone 0 aims for zero core hooks)* | | | | |
 
 ---
 
 ## Hook Interface Definitions
 
-Static hook entry points live under `Assets/DFCoop/Hooks/` (e.g. `DaggerfallHooks.cs`).
+Static hook entry points live under `Assets/DFMP/Hooks/` (e.g. `DaggerfallHooks.cs`).

@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
     /// <summary>
     /// Pure, decoupled parser and configuration container for dedicated server command-line options.

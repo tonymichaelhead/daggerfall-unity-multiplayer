@@ -1,9 +1,9 @@
 using Mirror;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public class DFCoopPlayerSessionState : NetworkBehaviour
+    public class DFMPPlayerSessionState : NetworkBehaviour
     {
         public const uint AssetId = 0xdfc002u;
 
@@ -140,15 +140,15 @@ namespace DFCoop.Runtime
 
         static GameObject SpawnClientSessionState(SpawnMessage message)
         {
-            GameObject sessionGo = new GameObject("DFCoop_PlayerSessionState");
+            GameObject sessionGo = new GameObject("DFMP_PlayerSessionState");
             sessionGo.SetActive(false);
 
             sessionGo.AddComponent<NetworkIdentity>();
-            sessionGo.AddComponent<DFCoopPlayerSessionState>();
+            sessionGo.AddComponent<DFMPPlayerSessionState>();
             Object.DontDestroyOnLoad(sessionGo);
             sessionGo.SetActive(true);
 
-            Debug.Log($"[DFCoop Session] Client spawned player session state: netId={message.netId}.");
+            Debug.Log($"[DFMP Session] Client spawned player session state: netId={message.netId}.");
             return sessionGo;
         }
 

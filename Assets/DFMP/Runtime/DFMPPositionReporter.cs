@@ -3,11 +3,11 @@ using DaggerfallWorkshop.Game;
 using Mirror;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public class DFCoopPositionReporter : MonoBehaviour
+    public class DFMPPositionReporter : MonoBehaviour
     {
-        static DFCoopPositionReporter instance;
+        static DFMPPositionReporter instance;
         float nextReportTime;
         float nextIdentityReportTime;
 
@@ -16,9 +16,9 @@ namespace DFCoop.Runtime
             if (instance != null)
                 return;
 
-            GameObject reporterGo = new GameObject("DFCoop_PositionReporter");
+            GameObject reporterGo = new GameObject("DFMP_PositionReporter");
             Object.DontDestroyOnLoad(reporterGo);
-            instance = reporterGo.AddComponent<DFCoopPositionReporter>();
+            instance = reporterGo.AddComponent<DFMPPositionReporter>();
         }
 
         public static void Reset()
@@ -44,9 +44,9 @@ namespace DFCoop.Runtime
             if (streamingWorld == null || !streamingWorld.IsReady || streamingWorld.LocalPlayerGPS == null)
                 return;
 
-            nextReportTime = Time.unscaledTime + DFCoopPositionProtocol.MinimumReportInterval;
+            nextReportTime = Time.unscaledTime + DFMPPositionProtocol.MinimumReportInterval;
             SendIdentityReport();
-            NetworkClient.Send(new DFCoopPlayerPositionReport
+            NetworkClient.Send(new DFMPPlayerPositionReport
             {
                 WorldX = streamingWorld.LocalPlayerGPS.WorldX,
                 WorldY = 0f,
@@ -62,12 +62,12 @@ namespace DFCoop.Runtime
 
             nextIdentityReportTime = Time.unscaledTime + 5f;
             var playerEntity = GameManager.Instance.PlayerEntity;
-            NetworkClient.Send(new DFCoopPlayerIdentityReport
+            NetworkClient.Send(new DFMPPlayerIdentityReport
             {
                 DisplayName = playerEntity.Name,
                 Race = (int)playerEntity.Race,
                 Gender = (int)playerEntity.Gender,
-                OutfitVariant = DFCoopPositionProtocol.GetInitialOutfitVariant(playerEntity.FaceIndex),
+                OutfitVariant = DFMPPositionProtocol.GetInitialOutfitVariant(playerEntity.FaceIndex),
                 FaceVariant = playerEntity.FaceIndex
             });
         }

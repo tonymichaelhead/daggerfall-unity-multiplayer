@@ -1,35 +1,35 @@
 using System.IO;
 using NUnit.Framework;
-using DFCoop.Runtime;
+using DFMP.Runtime;
 
-namespace DFCoop.Tests
+namespace DFMP.Tests
 {
     [TestFixture]
-    public class DFCoopLogRouterTests
+    public class DFMPLogRouterTests
     {
         [Test]
         public void GetLogFileName_UsesRoleSpecificNames()
         {
-            Assert.AreEqual("server.log", DFCoopLogRouter.GetLogFileName(DFCoopLogRole.Server, 0));
-            Assert.AreEqual("server1.log", DFCoopLogRouter.GetLogFileName(DFCoopLogRole.Server, 1));
-            Assert.AreEqual("client.log", DFCoopLogRouter.GetLogFileName(DFCoopLogRole.Client, 0));
-            Assert.AreEqual("client3.log", DFCoopLogRouter.GetLogFileName(DFCoopLogRole.Client, 3));
-            Assert.AreEqual("server-prev.log", DFCoopLogRouter.GetPreviousLogFileName(DFCoopLogRole.Server, 0));
-            Assert.AreEqual("client-prev.log", DFCoopLogRouter.GetPreviousLogFileName(DFCoopLogRole.Client, 0));
-            Assert.AreEqual("client3-prev.log", DFCoopLogRouter.GetPreviousLogFileName(DFCoopLogRole.Client, 3));
+            Assert.AreEqual("server.log", DFMPLogRouter.GetLogFileName(DFMPLogRole.Server, 0));
+            Assert.AreEqual("server1.log", DFMPLogRouter.GetLogFileName(DFMPLogRole.Server, 1));
+            Assert.AreEqual("client.log", DFMPLogRouter.GetLogFileName(DFMPLogRole.Client, 0));
+            Assert.AreEqual("client3.log", DFMPLogRouter.GetLogFileName(DFMPLogRole.Client, 3));
+            Assert.AreEqual("server-prev.log", DFMPLogRouter.GetPreviousLogFileName(DFMPLogRole.Server, 0));
+            Assert.AreEqual("client-prev.log", DFMPLogRouter.GetPreviousLogFileName(DFMPLogRole.Client, 0));
+            Assert.AreEqual("client3-prev.log", DFMPLogRouter.GetPreviousLogFileName(DFMPLogRole.Client, 3));
         }
 
         [Test]
         public void GetDefaultLogDirectory_UsesProjectLocalLogsFolder()
         {
-            string expectedSuffix = Path.Combine("Logs", "DFCoop");
-            StringAssert.EndsWith(expectedSuffix, DFCoopLogRouter.GetDefaultLogDirectory());
+            string expectedSuffix = Path.Combine("Logs", "DFMP");
+            StringAssert.EndsWith(expectedSuffix, DFMPLogRouter.GetDefaultLogDirectory());
         }
 
         [Test]
         public void OpenRoleLogFile_NumberedClientLogWhenDefaultIsInUse()
         {
-            string testDirectory = Path.Combine(Path.GetTempPath(), "DFCoopLogRouterTests", TestContext.CurrentContext.Test.ID);
+            string testDirectory = Path.Combine(Path.GetTempPath(), "DFMPLogRouterTests", TestContext.CurrentContext.Test.ID);
             Directory.CreateDirectory(testDirectory);
 
             FileStream firstClientLog = null;
@@ -38,10 +38,10 @@ namespace DFCoop.Tests
             try
             {
                 string firstPath;
-                firstClientLog = DFCoopLogRouter.OpenRoleLogFile(testDirectory, DFCoopLogRole.Client, out firstPath);
+                firstClientLog = DFMPLogRouter.OpenRoleLogFile(testDirectory, DFMPLogRole.Client, out firstPath);
 
                 string secondPath;
-                secondClientLog = DFCoopLogRouter.OpenRoleLogFile(testDirectory, DFCoopLogRole.Client, out secondPath);
+                secondClientLog = DFMPLogRouter.OpenRoleLogFile(testDirectory, DFMPLogRole.Client, out secondPath);
 
                 Assert.AreEqual(Path.Combine(testDirectory, "client.log"), firstPath);
                 Assert.AreEqual(Path.Combine(testDirectory, "client1.log"), secondPath);
@@ -62,7 +62,7 @@ namespace DFCoop.Tests
         [Test]
         public void OpenRoleLogFile_RotatesExistingLogFileToPrevious()
         {
-            string testDirectory = Path.Combine(Path.GetTempPath(), "DFCoopLogRouterTests", TestContext.CurrentContext.Test.ID);
+            string testDirectory = Path.Combine(Path.GetTempPath(), "DFMPLogRouterTests", TestContext.CurrentContext.Test.ID);
             Directory.CreateDirectory(testDirectory);
             string expectedPath = Path.Combine(testDirectory, "server.log");
             string expectedPreviousPath = Path.Combine(testDirectory, "server-prev.log");
@@ -73,7 +73,7 @@ namespace DFCoop.Tests
             try
             {
                 string actualPath;
-                serverLog = DFCoopLogRouter.OpenRoleLogFile(testDirectory, DFCoopLogRole.Server, out actualPath);
+                serverLog = DFMPLogRouter.OpenRoleLogFile(testDirectory, DFMPLogRole.Server, out actualPath);
 
                 Assert.AreEqual(expectedPath, actualPath);
                 Assert.IsTrue(File.Exists(expectedPath));

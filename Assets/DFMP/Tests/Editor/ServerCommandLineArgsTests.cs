@@ -1,10 +1,10 @@
 using NUnit.Framework;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Utility;
-using DFCoop.Runtime;
+using DFMP.Runtime;
 using UnityEngine;
 
-namespace DFCoop.Tests
+namespace DFMP.Tests
 {
     [TestFixture]
     public class ServerCommandLineArgsTests
@@ -96,7 +96,7 @@ namespace DFCoop.Tests
                 AudioListener.pause = false;
                 AudioListener.volume = 0.75f;
 
-                DFCoopClientBootstrap.ApplyClientRuntimeSettings(45);
+                DFMPClientBootstrap.ApplyClientRuntimeSettings(45);
 
                 Assert.IsFalse(AudioListener.pause);
                 Assert.AreEqual(0.75f, AudioListener.volume);
@@ -176,7 +176,7 @@ namespace DFCoop.Tests
         [Test]
         public void TimeSnapshot_FromWorldTime_UsesClassicMinutesAndTimeScale()
         {
-            GameObject go = new GameObject("DFCoop_TimeSnapshotTest");
+            GameObject go = new GameObject("DFMP_TimeSnapshotTest");
 
             try
             {
@@ -185,7 +185,7 @@ namespace DFCoop.Tests
                 worldTime.DaggerfallDateTime.FromClassicDaggerfallTime(523530);
                 worldTime.TimeScale = 8f;
 
-                var snapshot = DFCoopTimeSnapshot.FromWorldTime(worldTime);
+                var snapshot = DFMPTimeSnapshot.FromWorldTime(worldTime);
 
                 Assert.AreEqual(523530, snapshot.ClassicMinutes);
                 Assert.AreEqual(8f, snapshot.TimeScale);
@@ -199,14 +199,14 @@ namespace DFCoop.Tests
         [Test]
         public void TimeSnapshot_ApplyToWorldTime_SetsClassicMinutesAndTimeScale()
         {
-            GameObject go = new GameObject("DFCoop_TimeSnapshotApplyTest");
+            GameObject go = new GameObject("DFMP_TimeSnapshotApplyTest");
 
             try
             {
                 var worldTime = go.AddComponent<WorldTime>();
                 worldTime.DaggerfallDateTime = new DaggerfallDateTime();
 
-                var snapshot = new DFCoopTimeSnapshot
+                var snapshot = new DFMPTimeSnapshot
                 {
                     ClassicMinutes = 600000,
                     TimeScale = 4f
@@ -226,11 +226,11 @@ namespace DFCoop.Tests
         [Test]
         public void PlayerSessionState_Initialize_SetsServerOwnedWorldCoordinates()
         {
-            GameObject go = new GameObject("DFCoop_PlayerSessionStateTest");
+            GameObject go = new GameObject("DFMP_PlayerSessionStateTest");
 
             try
             {
-                var sessionState = go.AddComponent<DFCoopPlayerSessionState>();
+                var sessionState = go.AddComponent<DFMPPlayerSessionState>();
                 sessionState.Initialize(7, 123456, 42.5f, 654321);
 
                 Assert.AreEqual(7, sessionState.ConnectionId);

@@ -1,12 +1,12 @@
-# DFCoop Roadmap
+# DFMP Roadmap
 
 This roadmap tracks the multiplayer architecture and milestones implemented on top of upstream Daggerfall Unity. It is deliberately scoped around a dedicated server for roughly 8-16 players. Scaling to 100+ players is a separate design and performance problem.
 
 ## Architectural Rules
 
 - Upstream DFU files remain free of multiplayer logic.
-- Additive hooks, when needed, live in `Assets/DFCoop/Hooks/` and are documented in `HOOKS.md`.
-- Networking, authority, persistence, and server bootstrap live in `Assets/DFCoop/Runtime/`.
+- Additive hooks, when needed, live in `Assets/DFMP/Hooks/` and are documented in `HOOKS.md`.
+- Networking, authority, persistence, and server bootstrap live in `Assets/DFMP/Runtime/`.
 - Server-owned world and session state must never live on a player prefab.
 - Client reports are inputs. The server validates and writes replicated state.
 - Native Daggerfall world coordinates are authoritative. Unity scene positions are local presentation data because floating origin can rebase them.
@@ -43,7 +43,7 @@ Verification:
 
 Status: Complete.
 
-- Server-owned `DFCoopTimeState` publishes game time and time scale.
+- Server-owned `DFMPTimeState` publishes game time and time scale.
 - Ready clients observe the time state without requiring a player network object.
 - Clients apply replicated time state after spawn.
 
@@ -56,7 +56,7 @@ Verification:
 
 Status: Complete.
 
-- One server-owned `DFCoopPlayerSessionState` per ready connection.
+- One server-owned `DFMPPlayerSessionState` per ready connection.
 - Session state stores canonical Daggerfall coordinates, player identity, spawn confirmation, facing, and visual appearance metadata.
 - Server assigns Daggerfall City as an initial exterior context.
 - Client uses DFU's normal `RandomStartMarker` relocation path and acknowledges its final grounded coordinate.
@@ -148,4 +148,4 @@ Verification:
 
 ## Delivery Standard
 
-Each DFCoop behavior change should add focused automated coverage when possible. Extract deterministic protocol or coordinate rules into pure helpers for EditMode tests. Use manual headless or graphical smoke tests only at DFU and Mirror integration boundaries, and record expected log evidence in the relevant implementation or change notes.
+Each DFMP behavior change should add focused automated coverage when possible. Extract deterministic protocol or coordinate rules into pure helpers for EditMode tests. Use manual headless or graphical smoke tests only at DFU and Mirror integration boundaries, and record expected log evidence in the relevant implementation or change notes.

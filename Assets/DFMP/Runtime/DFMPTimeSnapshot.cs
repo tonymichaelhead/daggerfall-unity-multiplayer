@@ -1,18 +1,18 @@
 using DaggerfallWorkshop;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public struct DFCoopTimeSnapshot
+    public struct DFMPTimeSnapshot
     {
         public uint ClassicMinutes;
         public float TimeScale;
 
-        public static DFCoopTimeSnapshot FromWorldTime(WorldTime worldTime)
+        public static DFMPTimeSnapshot FromWorldTime(WorldTime worldTime)
         {
             if (worldTime == null)
-                return default(DFCoopTimeSnapshot);
+                return default(DFMPTimeSnapshot);
 
-            return new DFCoopTimeSnapshot
+            return new DFMPTimeSnapshot
             {
                 ClassicMinutes = worldTime.DaggerfallDateTime.ToClassicDaggerfallTime(),
                 TimeScale = worldTime.TimeScale

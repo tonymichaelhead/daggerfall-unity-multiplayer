@@ -2,9 +2,9 @@ using DaggerfallWorkshop;
 using Mirror;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public class DFCoopTimeState : NetworkBehaviour
+    public class DFMPTimeState : NetworkBehaviour
     {
         const float ServerPublishInterval = 1f;
         public const uint AssetId = 0xdfc001u;
@@ -43,7 +43,7 @@ namespace DFCoop.Runtime
         {
             base.OnStartClient();
             clientApplyPending = true;
-            Debug.Log($"[DFCoop Time] Client received time state: classicMinutes={classicMinutes}, timeScale={timeScale:F2}.");
+            Debug.Log($"[DFMP Time] Client received time state: classicMinutes={classicMinutes}, timeScale={timeScale:F2}.");
         }
 
         void Update()
@@ -69,13 +69,13 @@ namespace DFCoop.Runtime
             if (worldTime == null)
                 return;
 
-            var snapshot = DFCoopTimeSnapshot.FromWorldTime(worldTime);
+            var snapshot = DFMPTimeSnapshot.FromWorldTime(worldTime);
             bool changed = classicMinutes != snapshot.ClassicMinutes || !Mathf.Approximately(timeScale, snapshot.TimeScale);
             classicMinutes = snapshot.ClassicMinutes;
             timeScale = snapshot.TimeScale;
 
             if (force || changed)
-                Debug.Log($"[DFCoop Time] Server published time: classicMinutes={classicMinutes}, timeScale={timeScale:F2}.");
+                Debug.Log($"[DFMP Time] Server published time: classicMinutes={classicMinutes}, timeScale={timeScale:F2}.");
         }
 
         void ApplyClientTime()
@@ -84,7 +84,7 @@ namespace DFCoop.Runtime
             if (worldTime == null)
                 return;
 
-            var snapshot = new DFCoopTimeSnapshot
+            var snapshot = new DFMPTimeSnapshot
             {
                 ClassicMinutes = classicMinutes,
                 TimeScale = timeScale
@@ -93,19 +93,19 @@ namespace DFCoop.Runtime
             snapshot.ApplyToWorldTime(worldTime);
             clientApplyPending = false;
 
-            Debug.Log($"[DFCoop Time] Client applied time: classicMinutes={classicMinutes}, timeScale={timeScale:F2}.");
+            Debug.Log($"[DFMP Time] Client applied time: classicMinutes={classicMinutes}, timeScale={timeScale:F2}.");
         }
 
         void OnClassicMinutesChanged(uint oldValue, uint newValue)
         {
             clientApplyPending = true;
-            Debug.Log($"[DFCoop Time] Client time update: classicMinutes={newValue}.");
+            Debug.Log($"[DFMP Time] Client time update: classicMinutes={newValue}.");
         }
 
         void OnTimeScaleChanged(float oldValue, float newValue)
         {
             clientApplyPending = true;
-            Debug.Log($"[DFCoop Time] Client time scale update: timeScale={newValue:F2}.");
+            Debug.Log($"[DFMP Time] Client time scale update: timeScale={newValue:F2}.");
         }
 
         static WorldTime GetWorldTime()
@@ -118,15 +118,15 @@ namespace DFCoop.Runtime
 
         static GameObject SpawnClientTimeState(SpawnMessage message)
         {
-            GameObject timeGo = new GameObject("DFCoop_TimeState");
+            GameObject timeGo = new GameObject("DFMP_TimeState");
             timeGo.SetActive(false);
 
             timeGo.AddComponent<NetworkIdentity>();
-            timeGo.AddComponent<DFCoopTimeState>();
+            timeGo.AddComponent<DFMPTimeState>();
             Object.DontDestroyOnLoad(timeGo);
             timeGo.SetActive(true);
 
-            Debug.Log($"[DFCoop Time] Client spawned time state: netId={message.netId}.");
+            Debug.Log($"[DFMP Time] Client spawned time state: netId={message.netId}.");
             return timeGo;
         }
 

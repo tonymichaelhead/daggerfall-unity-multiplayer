@@ -1,22 +1,22 @@
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public struct DFCoopWorldPosition
+    public struct DFMPWorldPosition
     {
         public int WorldX;
         public float WorldY;
         public int WorldZ;
     }
 
-    public class DFCoopSpawnAssignmentState
+    public class DFMPSpawnAssignmentState
     {
-        public DFCoopSpawnAssignment Assignment { get; private set; }
+        public DFMPSpawnAssignment Assignment { get; private set; }
         public bool HasAssignment { get; private set; }
         public bool HasPendingAssignment { get; private set; }
         public bool TeleportRequested { get; private set; }
 
-        public void Receive(DFCoopSpawnAssignment assignment)
+        public void Receive(DFMPSpawnAssignment assignment)
         {
             Assignment = assignment;
             HasAssignment = true;
@@ -54,21 +54,21 @@ namespace DFCoop.Runtime
 
         public void Reset()
         {
-            Assignment = default(DFCoopSpawnAssignment);
+            Assignment = default(DFMPSpawnAssignment);
             HasAssignment = false;
             HasPendingAssignment = false;
             TeleportRequested = false;
         }
     }
 
-    public static class DFCoopSpawnProtocol
+    public static class DFMPSpawnProtocol
     {
         public const int WorldMapPixelDimension = 32768;
         public const int WorldMapHeightInPixels = 500;
 
-        public static DFCoopWorldPosition GetLocationCenter(Rect locationRect)
+        public static DFMPWorldPosition GetLocationCenter(Rect locationRect)
         {
-            return new DFCoopWorldPosition
+            return new DFMPWorldPosition
             {
                 WorldX = Mathf.RoundToInt(locationRect.center.x),
                 WorldY = 0f,
@@ -82,7 +82,7 @@ namespace DFCoop.Runtime
                 WorldMapHeightInPixels - 1 - (worldZ / WorldMapPixelDimension) == mapPixelY;
         }
 
-        public static bool TryConfirmSpawn(DFCoopPlayerSessionState sessionState, DFCoopSpawnAcknowledgement acknowledgement)
+        public static bool TryConfirmSpawn(DFMPPlayerSessionState sessionState, DFMPSpawnAcknowledgement acknowledgement)
         {
             if (sessionState == null)
                 return false;

@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public class DFCoopClientBootstrap : MonoBehaviour
+    public class DFMPClientBootstrap : MonoBehaviour
     {
         public static bool IsClient { get; private set; }
         public static string ServerAddress { get; private set; } = "127.0.0.1";
@@ -22,20 +22,20 @@ namespace DFCoop.Runtime
             ServerAddress = config.Address;
             ServerPort = config.Port;
             ClientTickRate = config.TickRate;
-            DFCoopLogRouter.Initialize(DFCoopLogRole.Client);
+            DFMPLogRouter.Initialize(DFMPLogRole.Client);
 
             ApplyClientRuntimeSettings(ClientTickRate);
 
-            GameObject bootstrapGo = new GameObject("DFCoop_ClientBootstrap");
+            GameObject bootstrapGo = new GameObject("DFMP_ClientBootstrap");
             DontDestroyOnLoad(bootstrapGo);
-            bootstrapGo.AddComponent<DFCoopClientBootstrap>();
+            bootstrapGo.AddComponent<DFMPClientBootstrap>();
 
-            Debug.Log($"[DFCoop Client] Bootstrapped: Address={ServerAddress}, Port={ServerPort}, TickRate={ClientTickRate}, LogFile='{DFCoopLogRouter.LogFilePath}'");
+            Debug.Log($"[DFMP Client] Bootstrapped: Address={ServerAddress}, Port={ServerPort}, TickRate={ClientTickRate}, LogFile='{DFMPLogRouter.LogFilePath}'");
         }
 
         private void Start()
         {
-            DFCoopNetworkClient.Start(ServerAddress, (ushort)ServerPort, ClientTickRate);
+            DFMPNetworkClient.Start(ServerAddress, (ushort)ServerPort, ClientTickRate);
         }
 
         public static void ApplyClientRuntimeSettings(int tickRate)
@@ -47,8 +47,8 @@ namespace DFCoop.Runtime
 
         private void OnApplicationQuitting()
         {
-            DFCoopNetworkClient.Stop();
-            DFCoopLogRouter.Shutdown();
+            DFMPNetworkClient.Stop();
+            DFMPLogRouter.Shutdown();
         }
     }
 }

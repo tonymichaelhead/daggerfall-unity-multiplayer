@@ -6,12 +6,12 @@ using UnityEngine.SceneManagement;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Game.Utility;
-using DFCoop.Hooks;
+using DFMP.Hooks;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
     /// <summary>
-    /// Headless Dedicated Server Bootstrap for Daggerfall Unity (DFCoop).
+    /// Headless Dedicated Server Bootstrap for Daggerfall Unity (DFMP).
     /// Initializes early in the boot sequence, parses command-line arguments,
     /// configures headless engine settings, and coordinates non-visual world initialization.
     /// </summary>
@@ -43,7 +43,7 @@ namespace DFCoop.Runtime
             MaxConnections = config.MaxConnections;
             Arena2OverridePath = config.Arena2Path;
             HeartbeatInterval = config.HeartbeatInterval;
-            DFCoopLogRouter.Initialize(DFCoopLogRole.Server);
+            DFMPLogRouter.Initialize(DFMPLogRole.Server);
 
             // Configure headless execution settings
             Application.targetFrameRate = ServerTickRate;
@@ -80,11 +80,11 @@ namespace DFCoop.Runtime
             DaggerfallUnity.Settings.ShowOptionsAtStart = false;
 
             // Spawn persistent bootstrap coordinator
-            GameObject bootstrapGo = new GameObject("DFCoop_DedicatedServerBootstrap");
+            GameObject bootstrapGo = new GameObject("DFMP_DedicatedServerBootstrap");
             DontDestroyOnLoad(bootstrapGo);
             Instance = bootstrapGo.AddComponent<DedicatedServerBootstrap>();
 
-            Debug.Log($"[DFCoop] Dedicated Server Bootstrapped: TickRate={ServerTickRate}, Port={ServerPort}, MaxConnections={MaxConnections}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}', LogFile='{DFCoopLogRouter.LogFilePath}'");
+            Debug.Log($"[DFMP] Dedicated Server Bootstrapped: TickRate={ServerTickRate}, Port={ServerPort}, MaxConnections={MaxConnections}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}', LogFile='{DFMPLogRouter.LogFilePath}'");
         }
 
         private void Awake()
@@ -119,7 +119,7 @@ namespace DFCoop.Runtime
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            Debug.Log($"[DFCoop] Scene Loaded: {scene.name} (index {scene.buildIndex})");
+            Debug.Log($"[DFMP] Scene Loaded: {scene.name} (index {scene.buildIndex})");
 
             // Startup scene (index 0)
             if (scene.buildIndex == SceneControl.StartupSceneIndex)
@@ -140,7 +140,7 @@ namespace DFCoop.Runtime
                 yield break;
 
             gameSceneInitialized = true;
-            Debug.Log("[DFCoop] Initializing Game Scene for Headless Execution...");
+            Debug.Log("[DFMP] Initializing Game Scene for Headless Execution...");
 
             // Wait until StartGameBehaviour is ready in scene
             StartGameBehaviour startGameBehaviour = null;
@@ -167,9 +167,9 @@ namespace DFCoop.Runtime
                 GameManager.Instance.PauseGame(false);
             }
 
-            DFCoopNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections);
+            DFMPNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections);
 
-            Debug.Log("[DFCoop] Headless World Initialized (NoWorld=true, Unpaused). Starting heartbeat...");
+            Debug.Log("[DFMP] Headless World Initialized (NoWorld=true, Unpaused). Starting heartbeat...");
 
             if (heartbeatCoroutine != null)
                 StopCoroutine(heartbeatCoroutine);
@@ -205,7 +205,7 @@ namespace DFCoop.Runtime
                     // Process metrics may fail on restricted platforms
                 }
 
-                Debug.Log($"[DFCoop Server Heartbeat] Uptime: {Time.realtimeSinceStartup:F1}s | Ticks: {currentFps:F1} fps | Managed Mem: {managedMemoryMb} MB | WorkingSet: {processMemoryMb} MB | Scene: {SceneManager.GetActiveScene().name}");
+                Debug.Log($"[DFMP Server Heartbeat] Uptime: {Time.realtimeSinceStartup:F1}s | Ticks: {currentFps:F1} fps | Managed Mem: {managedMemoryMb} MB | WorkingSet: {processMemoryMb} MB | Scene: {SceneManager.GetActiveScene().name}");
 
                 lastFrameCount = Time.frameCount;
                 lastRealtime = Time.realtimeSinceStartup;
@@ -214,16 +214,16 @@ namespace DFCoop.Runtime
 
         private void OnConsoleCancelKeyPress(object sender, ConsoleCancelEventArgs e)
         {
-            Debug.Log("[DFCoop] Shutdown signal received (Ctrl+C). Exiting dedicated server gracefully...");
+            Debug.Log("[DFMP] Shutdown signal received (Ctrl+C). Exiting dedicated server gracefully...");
             e.Cancel = true;
             Application.Quit();
         }
 
         private void OnApplicationQuitting()
         {
-            DFCoopNetworkServer.Stop();
-            Debug.Log("[DFCoop] Dedicated Server shutting down.");
-            DFCoopLogRouter.Shutdown();
+            DFMPNetworkServer.Stop();
+            Debug.Log("[DFMP] Dedicated Server shutting down.");
+            DFMPLogRouter.Shutdown();
         }
     }
 }

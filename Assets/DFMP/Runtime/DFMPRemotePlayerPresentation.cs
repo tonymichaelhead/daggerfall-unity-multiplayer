@@ -5,14 +5,14 @@ using DaggerfallWorkshop.Game.Entity;
 using Mirror;
 using UnityEngine;
 
-namespace DFCoop.Runtime
+namespace DFMP.Runtime
 {
-    public static class DFCoopRemotePlayerPresentation
+    public static class DFMPRemotePlayerPresentation
     {
         public const float MaximumVisibleDistance = 150f;
         public const float PositionSmoothingSpeed = 12f;
 
-        public static bool IsRemoteSession(DFCoopPlayerSessionState sessionState, int localConnectionId)
+        public static bool IsRemoteSession(DFMPPlayerSessionState sessionState, int localConnectionId)
         {
             return sessionState != null && sessionState.SpawnConfirmed && localConnectionId >= 0 && sessionState.ConnectionId != localConnectionId;
         }
@@ -57,27 +57,27 @@ namespace DFCoop.Runtime
             return directionToCamera.sqrMagnitude > 0.0001f ? Quaternion.LookRotation(directionToCamera) : Quaternion.identity;
         }
 
-        public static bool IsAppearanceChanged(int cachedRace, int cachedGender, int cachedOutfitVariant, int cachedFaceVariant, DFCoopPlayerSessionState session)
+        public static bool IsAppearanceChanged(int cachedRace, int cachedGender, int cachedOutfitVariant, int cachedFaceVariant, DFMPPlayerSessionState session)
         {
             return cachedRace != session.Race || cachedGender != session.Gender || cachedOutfitVariant != session.OutfitVariant || cachedFaceVariant != session.FaceVariant;
         }
     }
 
-    public class DFCoopRemoteAvatarAppearance : MonoBehaviour
+    public class DFMPRemoteAvatarAppearance : MonoBehaviour
     {
         int race = int.MinValue;
         int gender = int.MinValue;
         int outfitVariant = int.MinValue;
         int faceVariant = int.MinValue;
 
-        public void ApplyIfChanged(DFCoopPlayerSessionState session)
+        public void ApplyIfChanged(DFMPPlayerSessionState session)
         {
-            if (!DFCoopRemotePlayerPresentation.IsAppearanceChanged(race, gender, outfitVariant, faceVariant, session))
+            if (!DFMPRemotePlayerPresentation.IsAppearanceChanged(race, gender, outfitVariant, faceVariant, session))
                 return;
 
             var billboard = GetComponent<MobilePersonBillboard>();
-            Races displayRace = (Races)DFCoopPositionProtocol.GetDisplayRace(session.Race);
-            Genders displayGender = (Genders)DFCoopPositionProtocol.GetDisplayGender(session.Gender);
+            Races displayRace = (Races)DFMPPositionProtocol.GetDisplayRace(session.Race);
+            Genders displayGender = (Genders)DFMPPositionProtocol.GetDisplayGender(session.Gender);
             billboard.SetPerson(displayRace, displayGender, session.OutfitVariant, false, session.FaceVariant, 0);
             transform.localPosition = new Vector3(0f, billboard.GetSize().y * 0.5f, 0f);
 
@@ -88,9 +88,9 @@ namespace DFCoop.Runtime
         }
     }
 
-    public class DFCoopRemotePlayerPresentationController : MonoBehaviour
+    public class DFMPRemotePlayerPresentationController : MonoBehaviour
     {
-        static DFCoopRemotePlayerPresentationController instance;
+        static DFMPRemotePlayerPresentationController instance;
         readonly Dictionary<int, GameObject> proxies = new Dictionary<int, GameObject>();
 
         public static void EnsureInstance()
@@ -98,9 +98,9 @@ namespace DFCoop.Runtime
             if (instance != null)
                 return;
 
-            GameObject controllerGo = new GameObject("DFCoop_RemotePlayerPresentationController");
+            GameObject controllerGo = new GameObject("DFMP_RemotePlayerPresentationController");
             Object.DontDestroyOnLoad(controllerGo);
-            instance = controllerGo.AddComponent<DFCoopRemotePlayerPresentationController>();
+            instance = controllerGo.AddComponent<DFMPRemotePlayerPresentationController>();
         }
 
         public static void Reset()
@@ -134,10 +134,10 @@ namespace DFCoop.Runtime
                 return;
 
             var liveProxyIds = new HashSet<int>();
-            DFCoopPlayerSessionState[] sessions = FindObjectsOfType<DFCoopPlayerSessionState>();
-            foreach (DFCoopPlayerSessionState session in sessions)
+            DFMPPlayerSessionState[] sessions = FindObjectsOfType<DFMPPlayerSessionState>();
+            foreach (DFMPPlayerSessionState session in sessions)
             {
-                if (!DFCoopRemotePlayerPresentation.IsRemoteSession(session, DFCoopSpawnAssignmentController.LocalConnectionId))
+                if (!DFMPRemotePlayerPresentation.IsRemoteSession(session, DFMPSpawnAssignmentController.LocalConnectionId))
                     continue;
 
                 int sessionId = session.GetInstanceID();
@@ -148,16 +148,16 @@ namespace DFCoop.Runtime
                 DFPosition remoteMapPixel = DaggerfallConnect.Arena2.MapsFile.WorldCoordToMapPixel(session.WorldX, session.WorldZ);
                 bool isInLocalMapPixel = remoteMapPixel.X == streamingWorld.LocalPlayerGPS.CurrentMapPixel.X && remoteMapPixel.Y == streamingWorld.LocalPlayerGPS.CurrentMapPixel.Y;
                 Vector3 localPosition = streamingWorld.LocalPlayerGPS.transform.position;
-                Vector3 targetPosition = DFCoopRemotePlayerPresentation.WorldToScenePosition(streamingWorld.LocalPlayerGPS, localPosition, session.WorldX, session.WorldZ);
-                targetPosition = DFCoopRemotePlayerPresentation.GroundScenePosition(streamingWorld, targetPosition);
-                bool isVisible = isInLocalMapPixel && DFCoopRemotePlayerPresentation.IsVisibleInLocalMapPixel(localPosition, targetPosition);
+                Vector3 targetPosition = DFMPRemotePlayerPresentation.WorldToScenePosition(streamingWorld.LocalPlayerGPS, localPosition, session.WorldX, session.WorldZ);
+                targetPosition = DFMPRemotePlayerPresentation.GroundScenePosition(streamingWorld, targetPosition);
+                bool isVisible = isInLocalMapPixel && DFMPRemotePlayerPresentation.IsVisibleInLocalMapPixel(localPosition, targetPosition);
 
                 if (isVisible)
                 {
                     if (!proxy.activeSelf)
                         proxy.transform.position = targetPosition;
                     else
-                        proxy.transform.position = DFCoopRemotePlayerPresentation.InterpolatePosition(proxy.transform.position, targetPosition, Time.unscaledDeltaTime);
+                        proxy.transform.position = DFMPRemotePlayerPresentation.InterpolatePosition(proxy.transform.position, targetPosition, Time.unscaledDeltaTime);
 
                     proxy.transform.rotation = Quaternion.Euler(0f, session.FacingYaw, 0f);
                     FaceLabelToCamera(proxy);
@@ -175,14 +175,14 @@ namespace DFCoop.Runtime
             if (proxies.TryGetValue(sessionId, out proxy))
                 return proxy;
 
-            proxy = new GameObject($"DFCoop_RemotePlayer_{connectionId}");
-            proxy.name = $"DFCoop_RemotePlayer_{connectionId}";
+            proxy = new GameObject($"DFMP_RemotePlayer_{connectionId}");
+            proxy.name = $"DFMP_RemotePlayer_{connectionId}";
             CreateDaggerfallAvatar(proxy.transform);
             CreateLabel(proxy.transform, connectionId);
             proxy.SetActive(false);
             Object.DontDestroyOnLoad(proxy);
             proxies.Add(sessionId, proxy);
-            Debug.Log($"[DFCoop Remote] Created player proxy: connectionId={connectionId}.");
+            Debug.Log($"[DFMP Remote] Created player proxy: connectionId={connectionId}.");
             return proxy;
         }
 
@@ -193,7 +193,7 @@ namespace DFCoop.Runtime
             var billboard = avatarGo.AddComponent<MobilePersonBillboard>();
             billboard.SetPerson(Races.Breton, Genders.Male, 0, false, 0, 192);
             avatarGo.transform.localPosition = new Vector3(0f, billboard.GetSize().y * 0.5f, 0f);
-            avatarGo.AddComponent<DFCoopRemoteAvatarAppearance>();
+            avatarGo.AddComponent<DFMPRemoteAvatarAppearance>();
         }
 
         static void CreateLabel(Transform proxyTransform, int connectionId)
@@ -217,9 +217,9 @@ namespace DFCoop.Runtime
                 label.text = displayName;
         }
 
-        static void UpdateAvatar(GameObject proxy, DFCoopPlayerSessionState session)
+        static void UpdateAvatar(GameObject proxy, DFMPPlayerSessionState session)
         {
-            DFCoopRemoteAvatarAppearance avatar = proxy.GetComponentInChildren<DFCoopRemoteAvatarAppearance>();
+            DFMPRemoteAvatarAppearance avatar = proxy.GetComponentInChildren<DFMPRemoteAvatarAppearance>();
             if (avatar != null)
                 avatar.ApplyIfChanged(session);
         }
@@ -229,7 +229,7 @@ namespace DFCoop.Runtime
                 Camera mainCamera = Camera.main;
                 TextMesh label = proxy.GetComponentInChildren<TextMesh>();
                 if (mainCamera != null && label != null)
-                label.transform.rotation = DFCoopRemotePlayerPresentation.GetLabelBillboardRotation(label.transform.position, mainCamera.transform.position);
+                label.transform.rotation = DFMPRemotePlayerPresentation.GetLabelBillboardRotation(label.transform.position, mainCamera.transform.position);
             }
 
         void RemoveStaleProxies(HashSet<int> liveProxyIds)
