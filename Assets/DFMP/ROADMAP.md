@@ -14,7 +14,7 @@ The near-term target is a playable public beta for roughly 8-16 concurrent playe
 | M2 | Server-owned player session state holds canonical Daggerfall coordinates and identity. | Done |
 | M3 | Players see each other move as named, grounded avatars in the shared exterior world. | In progress |
 | M4 | Global text chat, expanded server configuration, and a server-side event bus. | Planned |
-| M5 | Account identity, whitelist, and structured server-side character persistence. | Planned |
+| M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Planned |
 | M6 | World context, location occupancy, interest management, and safe transitions. | Planned |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Planned |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Planned |
@@ -158,17 +158,36 @@ Players create a character on first join and return to it on later sessions.
 
 - Stable account identity per player, established at connect time.
 - Optional whitelist gating connections for private and invite-only servers.
-- Character creation flows through DFU's normal client-side creation UI; the resulting character record is submitted to the server.
 - Server stores each character as a **structured record** with explicit fields for identity, position and world context, vitals, attributes and skills, inventory and equipment, and progression. It is deliberately not an opaque DFU save blob, so individual fields can be validated as authority tightens.
 - The record carries a schema version with a defined migration path, so beta characters survive later milestones that add fields.
-- Reconnect restores the stored character and its last world context.
 
-Trust model for beta: the server stores the character and the client simulates it. Strict field validation is a later hardening pass, which the structured schema is designed to enable.
+#### Join Flow
+
+The server resolves every connection down the same path, branching only on whether a character record already exists:
+
+1. Client connects and presents its account identity.
+2. Server checks the whitelist and connection limits, rejecting with a readable reason when refused.
+3. Server looks up a stored character for that identity.
+4. **No record (first join):** the client runs DFU's normal character creation UI. The resulting character is submitted to the server, which validates it against the server's creation rules, persists it, and assigns the configured starting location. Daggerfall city is the beta default; the starting location is server-configurable and later scriptable.
+5. **Record exists (returning player):** the server sends the stored record, and the client restores it rather than showing creation or the DFU load-game UI.
+6. In both cases the server assigns the spawn context, the client relocates through DFU's normal grounding path, and the client acknowledges its final coordinate. This reuses the M2 spawn-assignment and acknowledgement flow rather than adding a second one.
+7. The character record is written back on a periodic autosave, on clean disconnect, and on server shutdown.
+
+The client never chooses its own character or spawn point, and DFU's single-player title, save, and load menus are suppressed in multiplayer sessions.
+
+#### Storage
+
+- Persistence sits behind a narrow character-store interface so the backing store is a deployment choice, not an architectural one.
+- Beta ships a file-backed store: one structured JSON record per character, written atomically. At beta player counts this is sufficient, trivially inspectable, and hand-editable while debugging.
+- A SQL-backed store (SQLite for single-server, PostgreSQL for larger or multi-server deployments) is a later addition behind the same interface, motivated by concurrent access, query needs, and administrative tooling rather than by beta scale.
+- Records are keyed by account identity and server world identity, so one player can hold separate characters on separate servers.
+
+Trust model for beta: the server stores the character and the client simulates it, so a modified client can still misreport its own stats. This is an accepted beta limitation on a whitelisted server. Strict per-field validation is a later hardening pass, which the structured schema and the single store interface are designed to enable without a rewrite.
 
 Verification:
 
-- EditMode tests for record serialization, schema migration, whitelist decisions, and reconnect resolution.
-- Smoke test confirms a character created on first join is restored after disconnect and server restart.
+- EditMode tests for record serialization, schema migration, whitelist decisions, join-flow branching, and reconnect resolution.
+- Smoke test confirms a first-time join creates a character and spawns in the configured start location, and that the same character is restored after disconnect and after server restart.
 
 ### M6: World Context, Occupancy, and Interest Management
 
@@ -259,7 +278,7 @@ Beyond the public beta, in rough priority order:
 - Server scripting layer bound to the M4 event bus, with an event and command API for server owners.
 - Shared quest progression for parties, building on the personal quest model.
 - Shared and persistent world state options: doors, containers, loot mode selection, and shared economy.
-- Server persistence hardening, restart recovery, and administrative tooling.
+- SQL-backed character and world persistence (SQLite, then PostgreSQL) behind the M5 store interface, plus restart recovery and administrative tooling.
 - Strict authority: full server-side combat validation, inventory and equipment authority, trade, and anti-cheat.
 - Scaling work toward 100+ concurrent players, including replication budgeting and load testing.
 - Optional citizen and ambient NPC synchronization, only if it proves to matter in practice.
