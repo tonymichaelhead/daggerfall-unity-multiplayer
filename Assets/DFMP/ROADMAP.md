@@ -154,7 +154,11 @@ Status: Planned. Not started.
 Ship DFMP as a separate client application that reuses the player's existing Daggerfall data instead of replacing or modifying their Daggerfall Unity install. The DFMP client is a sibling of DFU in the same way DFU is a sibling of classic Daggerfall: another engine binary reading the same `arena2` data.
 
 - Launcher locates the player's existing Daggerfall game files and writes `MyDaggerfallPath` into the DFMP client settings, using the same path resolution the dedicated server bootstrap already relies on.
-- DFMP client ships as a portable install (`Portable.txt`) so settings, saves, keybinds, and mods live in its own `PortableAppdata` folder and never read or write DFU's persistent data folder.
+- DFMP client ships as a portable install (`Portable.txt`) so settings, saves, keybinds, and mod settings live in its own `PortableAppdata` folder and never read or write DFU's persistent data folder.
+- Mod bundles are already install-local because `ModDirectory` defaults to `StreamingAssets/Mods`, so the DFMP client has its own mod folder independent of the player's DFU install.
+- Net effect: separate settings, saves, keybinds, mod list, and mod configs. The only shared resource is the read-only `arena2` game data.
+- Players do not inherit their existing DFU mods or keybinds. Keybind import is a possible later launcher convenience. Mod inheritance is explicitly not wanted.
+- Server dictates the allowed mod set and the launcher provisions the client's mod folder to match, without touching the player's single-player setup.
 - Launcher owns client version management and update integrity.
 - Launcher provides a server list and launches the client with connect arguments.
 - No game files are copied, moved, or patched. The player's vanilla DFU install keeps working side by side.
@@ -162,6 +166,7 @@ Ship DFMP as a separate client application that reuses the player's existing Dag
 Verification:
 
 - Launch a DFMP client against an unmodified Daggerfall install and confirm DFU's persistent data folder is untouched.
+- Confirm the DFMP client resolves settings, saves, and mods from its own portable paths while a vanilla DFU install is present.
 - Confirm launcher-supplied connect arguments reach the client bootstrap and establish a session.
 
 ### Optional: Mod-Packaged Client (Not Planned)
