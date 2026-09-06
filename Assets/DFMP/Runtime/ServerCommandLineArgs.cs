@@ -17,6 +17,7 @@ namespace DFMP.Runtime
         public int MaxConnections;
         public string Arena2Path;
         public float HeartbeatInterval;
+        public string ServerName;
 
         public static ServerCommandLineArgs Default => new ServerCommandLineArgs
         {
@@ -27,7 +28,8 @@ namespace DFMP.Runtime
             TickRate = 30,
             MaxConnections = 16,
             Arena2Path = null,
-            HeartbeatInterval = 5.0f
+            HeartbeatInterval = 5.0f,
+            ServerName = null
         };
 
         public static ServerCommandLineArgs Parse(string[] args, bool isBatchMode = false)
@@ -87,6 +89,11 @@ namespace DFMP.Runtime
                 {
                     if (float.TryParse(args[i + 1], out float interval))
                         result.HeartbeatInterval = Mathf.Max(1.0f, interval);
+                }
+                else if ((arg == "-name" || arg == "--name" || arg == "-servername" || arg == "--servername") && i + 1 < args.Length)
+                {
+                    if (!string.IsNullOrEmpty(args[i + 1]))
+                        result.ServerName = args[i + 1];
                 }
             }
 

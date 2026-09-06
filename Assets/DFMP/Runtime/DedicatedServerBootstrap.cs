@@ -21,8 +21,12 @@ namespace DFMP.Runtime
 
         public static bool IsDedicatedServer { get; private set; }
         public static int ServerPort { get; private set; } = 7777;
+        public static int DiscoveryPort { get; private set; } = 7778;
         public static int ServerTickRate { get; private set; } = 30;
         public static int MaxConnections { get; private set; } = 16;
+        public static string ServerName { get; private set; } = "Tony's DFU RP";
+        public static string Motd { get; private set; } = "Welcome to Daggerfall Unity Multiplayer";
+        public static bool LanDiscoveryEnabled { get; private set; } = true;
         public static string Arena2OverridePath { get; private set; } = null;
         public static float HeartbeatInterval { get; private set; } = 5.0f;
 
@@ -32,17 +36,27 @@ namespace DFMP.Runtime
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EarlyInitialize()
         {
-            var config = ServerCommandLineArgs.Parse(Environment.GetCommandLineArgs(), Application.isBatchMode);
+            var cli = ServerCommandLineArgs.Parse(Environment.GetCommandLineArgs(), Application.isBatchMode);
 
-            if (!config.IsDedicatedServer)
+            if (!cli.IsDedicatedServer)
                 return;
 
+            // Load server config file (creates default dfmp-server.json if missing)
+            var fileConfig = DFMPServerConfig.LoadOrCreate();
+
             IsDedicatedServer = true;
-            ServerPort = config.Port;
-            ServerTickRate = config.TickRate;
-            MaxConnections = config.MaxConnections;
-            Arena2OverridePath = config.Arena2Path;
-            HeartbeatInterval = config.HeartbeatInterval;
+
+            // Command-line args take precedence over config file values if explicitly set
+            ServerPort = cli.Port != 7777 ? cli.Port : fileConfig.Port;
+            DiscoveryPort = fileConfig.DiscoveryPort != 0 ? fileConfig.DiscoveryPort : (ServerPort + 1);
+            ServerTickRate = cli.TickRate != 30 ? cli.TickRate : fileConfig.TickRate;
+            MaxConnections = cli.MaxConnections != 16 ? cli.MaxConnections : fileConfig.MaxConnections;
+            HeartbeatInterval = cli.HeartbeatInterval != 5.0f ? cli.HeartbeatInterval : fileConfig.HeartbeatInterval;
+            ServerName = !string.IsNullOrEmpty(cli.ServerName) ? cli.ServerName : fileConfig.ServerName;
+            Motd = fileConfig.Motd;
+            LanDiscoveryEnabled = fileConfig.LanDiscoveryEnabled;
+            Arena2OverridePath = cli.Arena2Path;
+
             DFMPLogRouter.Initialize(DFMPLogRole.Server);
 
             // Configure headless execution settings
@@ -84,7 +98,7 @@ namespace DFMP.Runtime
             DontDestroyOnLoad(bootstrapGo);
             Instance = bootstrapGo.AddComponent<DedicatedServerBootstrap>();
 
-            Debug.Log($"[DFMP] Dedicated Server Bootstrapped: TickRate={ServerTickRate}, Port={ServerPort}, MaxConnections={MaxConnections}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}', LogFile='{DFMPLogRouter.LogFilePath}'");
+            Debug.Log($"[DFMP] Dedicated Server Bootstrapped: Name='{ServerName}', TickRate={ServerTickRate}, Port={ServerPort}, MaxConnections={MaxConnections}, LanDiscovery={LanDiscoveryEnabled}, Arena2Path='{DaggerfallUnity.Settings.MyDaggerfallPath}', LogFile='{DFMPLogRouter.LogFilePath}'");
         }
 
         private void Awake()
@@ -167,7 +181,7 @@ namespace DFMP.Runtime
                 GameManager.Instance.PauseGame(false);
             }
 
-            DFMPNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections);
+            DFMPNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections, ServerName, Motd, LanDiscoveryEnabled, DiscoveryPort);
 
             Debug.Log("[DFMP] Headless World Initialized (NoWorld=true, Unpaused). Starting heartbeat...");
 

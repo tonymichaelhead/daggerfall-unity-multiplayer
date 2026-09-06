@@ -1,0 +1,10 @@
+{
+  "ServerName": "Tony's DFU RP",
+  "Port": 7777,
+  "DiscoveryPort": 7778,
+  "MaxConnections": 16,
+  "TickRate": 30,
+  "HeartbeatInterval": 5.0,
+  "LanDiscoveryEnabled": true,
+  "Motd": "Welcome to Daggerfall Unity Multiplayer"
+}

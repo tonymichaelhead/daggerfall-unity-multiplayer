@@ -15,6 +15,16 @@ namespace DFMP.Runtime
         public static KcpTransport Transport { get; private set; }
         public static DFMPTimeState TimeState { get; private set; }
         public static ushort Port { get; private set; }
+        public static string ServerName { get; set; } = "Tony's DFU RP";
+        public static int MaxConnections { get; private set; } = 16;
+        public static string Motd { get; set; } = "Welcome to Daggerfall Unity Multiplayer";
+
+        public static int ConnectedPlayerCount
+        {
+            get { return playerSessionStates.Count; }
+        }
+
+        static DFMPServerDiscoveryListener discoveryListener;
 
         static readonly Dictionary<int, DFMPPlayerSessionState> playerSessionStates = new Dictionary<int, DFMPPlayerSessionState>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
@@ -26,7 +36,7 @@ namespace DFMP.Runtime
             get { return NetworkServer.active && Transport != null && Transport.ServerActive(); }
         }
 
-        public static void Start(ushort port, int tickRate, int maxConnections)
+        public static void Start(ushort port, int tickRate, int maxConnections, string serverName = null, string motd = null, bool enableDiscovery = true, int discoveryPort = 7778)
         {
             if (IsListening)
             {
@@ -41,6 +51,11 @@ namespace DFMP.Runtime
             }
 
             Port = port;
+            MaxConnections = maxConnections;
+            if (!string.IsNullOrEmpty(serverName))
+                ServerName = serverName;
+            if (motd != null)
+                Motd = motd;
 
             GameObject networkGo = new GameObject("DFMP_NetworkServer");
             networkGo.SetActive(false);
@@ -73,7 +88,26 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             SpawnTimeState();
 
-            Debug.Log($"[DFMP Net] Dedicated listener requested: transport=KCP, port={port}, tickRate={tickRate}, maxConnections={maxConnections}.");
+            if (enableDiscovery)
+            {
+                if (discoveryListener != null)
+                {
+                    discoveryListener.Stop();
+                    discoveryListener = null;
+                }
+
+                discoveryListener = new DFMPServerDiscoveryListener(
+                    discoveryPort,
+                    port,
+                    () => ServerName,
+                    () => ConnectedPlayerCount,
+                    () => MaxConnections,
+                    () => Motd
+                );
+                discoveryListener.Start();
+            }
+
+            Debug.Log($"[DFMP Net] Dedicated listener requested: transport=KCP, port={port}, tickRate={tickRate}, maxConnections={maxConnections}, serverName='{ServerName}', discoveryPort={discoveryPort}.");
         }
 
         private static void SpawnTimeState()
@@ -243,6 +277,12 @@ namespace DFMP.Runtime
 
         public static void Stop()
         {
+            if (discoveryListener != null)
+            {
+                discoveryListener.Stop();
+                discoveryListener = null;
+            }
+
             if (Manager != null && Manager.isNetworkActive)
                 Manager.StopServer();
 

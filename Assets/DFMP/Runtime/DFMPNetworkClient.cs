@@ -33,6 +33,9 @@ namespace DFMP.Runtime
             Address = string.IsNullOrEmpty(address) ? "127.0.0.1" : address;
             Port = port;
 
+            DFMPLogRouter.Initialize(DFMPLogRole.Client);
+            DFMPClientBootstrap.ApplyClientRuntimeSettings(tickRate);
+
             GameObject networkGo = new GameObject("DFMP_NetworkClient");
             networkGo.SetActive(false);
 

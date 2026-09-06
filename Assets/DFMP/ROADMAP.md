@@ -10,6 +10,7 @@ This roadmap tracks the multiplayer architecture and milestones implemented on t
 - Server-owned world and session state must never live on a player prefab.
 - Client reports are inputs. The server validates and writes replicated state.
 - Native Daggerfall world coordinates are authoritative. Unity scene positions are local presentation data because floating origin can rebase them.
+- `Assets/DFMP/Runtime/` must not depend on edits to upstream DFU source, so the same assembly could ship inside this build or inside a mod bundle without redesign.
 
 ## Completed
 
@@ -145,6 +146,35 @@ Verification:
 
 - EditMode tests for authority, message validation, lifecycle transitions, and persistence.
 - Headless and graphical combat/inventory integration smoke tests.
+
+### M7: Client Distribution and Launcher
+
+Status: Planned. Not started.
+
+Ship DFMP as a separate client application that reuses the player's existing Daggerfall data instead of replacing or modifying their Daggerfall Unity install. The DFMP client is a sibling of DFU in the same way DFU is a sibling of classic Daggerfall: another engine binary reading the same `arena2` data.
+
+- Launcher locates the player's existing Daggerfall game files and writes `MyDaggerfallPath` into the DFMP client settings, using the same path resolution the dedicated server bootstrap already relies on.
+- DFMP client ships as a portable install (`Portable.txt`) so settings, saves, keybinds, and mods live in its own `PortableAppdata` folder and never read or write DFU's persistent data folder.
+- Launcher owns client version management and update integrity.
+- Launcher provides a server list and launches the client with connect arguments.
+- No game files are copied, moved, or patched. The player's vanilla DFU install keeps working side by side.
+
+Verification:
+
+- Launch a DFMP client against an unmodified Daggerfall install and confirm DFU's persistent data folder is untouched.
+- Confirm launcher-supplied connect arguments reach the client bootstrap and establish a session.
+
+### Optional: Mod-Packaged Client (Not Planned)
+
+Status: Optional. Deliberately not scheduled.
+
+A `.dfmod` distribution would let players join from their own DFU install with no second client binary. It is recorded here only to keep the option open, not as committed work.
+
+- DFU's mod loader can load precompiled assemblies from a mod bundle, so `DFMP.Runtime` and its transport dependencies could ship as binaries.
+- The hook layer would be replaced by runtime patching against upstream DFU methods, which requires vendoring a patching library. This is the entire cost of the route.
+- Runtime patching fails silently when upstream changes behavior without changing signatures, unlike a rebase, which fails loudly. That risk is why this route is not the default.
+- This route applies to the client only. The dedicated server needs build post-processing and boot control, so it remains a first-party build regardless.
+- The architectural rule keeping `Assets/DFMP/Runtime/` free of upstream source dependencies is what keeps this option cheap. Preserve it even though the route is unscheduled.
 
 ## Delivery Standard
 
