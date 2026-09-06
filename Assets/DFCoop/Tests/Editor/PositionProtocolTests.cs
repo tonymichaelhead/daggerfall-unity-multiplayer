@@ -21,6 +21,36 @@ namespace DFCoop.Tests
             Assert.IsFalse(DFCoopPositionProtocol.IsValidWorldPosition(new DFCoopPlayerPositionReport { WorldX = 0, WorldY = 0f, WorldZ = 0 }));
             Assert.IsFalse(DFCoopPositionProtocol.IsValidWorldPosition(new DFCoopPlayerPositionReport { WorldX = 6792821, WorldY = float.NaN, WorldZ = 9374554 }));
             Assert.IsFalse(DFCoopPositionProtocol.IsValidWorldPosition(new DFCoopPlayerPositionReport { WorldX = 6792821, WorldY = float.PositiveInfinity, WorldZ = 9374554 }));
+            Assert.IsFalse(DFCoopPositionProtocol.IsValidWorldPosition(new DFCoopPlayerPositionReport { WorldX = 6792821, WorldY = 0f, WorldZ = 9374554, FacingYaw = float.NaN }));
+        }
+
+        [Test]
+        public void DisplayNameSanitization_ProducesBoundedReadableNames()
+        {
+            Assert.AreEqual("Alyx-42", DFCoopPositionProtocol.SanitizeDisplayName("  Alyx-42  "));
+            Assert.AreEqual("Player", DFCoopPositionProtocol.SanitizeDisplayName("<>"));
+            Assert.AreEqual("abcdefghijklmnopqrstuvwx", DFCoopPositionProtocol.SanitizeDisplayName("abcdefghijklmnopqrstuvwxyz"));
+        }
+
+        [Test]
+        public void FacingYaw_NormalizesFiniteAnglesAndRejectsInvalidValues()
+        {
+            Assert.AreEqual(270f, DFCoopPositionProtocol.NormalizeFacingYaw(-90f));
+            Assert.AreEqual(45f, DFCoopPositionProtocol.NormalizeFacingYaw(405f));
+            Assert.IsFalse(DFCoopPositionProtocol.IsValidFacingYaw(float.PositiveInfinity));
+        }
+
+        [Test]
+        public void AppearanceSelection_MapsAndClampsForNativeBillboards()
+        {
+            Assert.AreEqual(1, DFCoopPositionProtocol.GetDisplayRace(4));
+            Assert.AreEqual(2, DFCoopPositionProtocol.GetDisplayRace(2));
+            Assert.AreEqual(0, DFCoopPositionProtocol.GetDisplayGender(-1));
+            Assert.AreEqual(1, DFCoopPositionProtocol.GetDisplayGender(1));
+            Assert.AreEqual(0, DFCoopPositionProtocol.GetOutfitVariant(-1));
+            Assert.AreEqual(3, DFCoopPositionProtocol.GetOutfitVariant(4));
+            Assert.AreEqual(23, DFCoopPositionProtocol.GetFaceVariant(99));
+            Assert.AreEqual(2, DFCoopPositionProtocol.GetInitialOutfitVariant(6));
         }
 
         [Test]

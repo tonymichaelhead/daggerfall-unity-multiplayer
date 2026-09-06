@@ -1,4 +1,5 @@
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Game;
 using Mirror;
 using UnityEngine;
 
@@ -8,6 +9,7 @@ namespace DFCoop.Runtime
     {
         static DFCoopPositionReporter instance;
         float nextReportTime;
+        float nextIdentityReportTime;
 
         public static void EnsureInstance()
         {
@@ -43,12 +45,31 @@ namespace DFCoop.Runtime
                 return;
 
             nextReportTime = Time.unscaledTime + DFCoopPositionProtocol.MinimumReportInterval;
+            SendIdentityReport();
             NetworkClient.Send(new DFCoopPlayerPositionReport
             {
                 WorldX = streamingWorld.LocalPlayerGPS.WorldX,
                 WorldY = 0f,
-                WorldZ = streamingWorld.LocalPlayerGPS.WorldZ
+                WorldZ = streamingWorld.LocalPlayerGPS.WorldZ,
+                FacingYaw = streamingWorld.LocalPlayerGPS.transform.eulerAngles.y
             }, Channels.Unreliable);
+        }
+
+        void SendIdentityReport()
+        {
+            if (Time.unscaledTime < nextIdentityReportTime || GameManager.Instance == null || GameManager.Instance.PlayerEntity == null)
+                return;
+
+            nextIdentityReportTime = Time.unscaledTime + 5f;
+            var playerEntity = GameManager.Instance.PlayerEntity;
+            NetworkClient.Send(new DFCoopPlayerIdentityReport
+            {
+                DisplayName = playerEntity.Name,
+                Race = (int)playerEntity.Race,
+                Gender = (int)playerEntity.Gender,
+                OutfitVariant = DFCoopPositionProtocol.GetInitialOutfitVariant(playerEntity.FaceIndex),
+                FaceVariant = playerEntity.FaceIndex
+            });
         }
     }
 }

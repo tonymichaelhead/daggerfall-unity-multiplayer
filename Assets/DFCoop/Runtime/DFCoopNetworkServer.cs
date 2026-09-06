@@ -69,6 +69,7 @@ namespace DFCoop.Runtime
             Manager.StartServer();
             NetworkServer.RegisterHandler<DFCoopSpawnAcknowledgement>(OnSpawnAcknowledgement);
             NetworkServer.RegisterHandler<DFCoopPlayerPositionReport>(OnPlayerPositionReport);
+            NetworkServer.RegisterHandler<DFCoopPlayerIdentityReport>(OnPlayerIdentityReport);
             SpawnTimeState();
 
             Debug.Log($"[DFCoop Net] Dedicated listener requested: transport=KCP, port={port}, tickRate={tickRate}, maxConnections={maxConnections}.");
@@ -193,8 +194,23 @@ namespace DFCoop.Runtime
                 return;
 
             sessionState.SetPosition(report.WorldX, report.WorldY, report.WorldZ);
+            sessionState.SetFacingYaw(DFCoopPositionProtocol.NormalizeFacingYaw(report.FacingYaw));
             if (activePositionReportConnections.Add(conn.connectionId))
                 Debug.Log($"[DFCoop Session] Server accepted player position reports: connectionId={conn.connectionId}.");
+        }
+
+        private static void OnPlayerIdentityReport(NetworkConnectionToClient conn, DFCoopPlayerIdentityReport report)
+        {
+            DFCoopPlayerSessionState sessionState;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState) || sessionState == null || !sessionState.SpawnConfirmed)
+                return;
+
+            sessionState.SetDisplayName(DFCoopPositionProtocol.SanitizeDisplayName(report.DisplayName));
+            sessionState.SetAppearance(
+                report.Race,
+                DFCoopPositionProtocol.GetDisplayGender(report.Gender),
+                DFCoopPositionProtocol.GetOutfitVariant(report.OutfitVariant),
+                DFCoopPositionProtocol.GetFaceVariant(report.FaceVariant));
         }
 
         public static void DestroyPlayerSessionState(NetworkConnectionToClient conn)

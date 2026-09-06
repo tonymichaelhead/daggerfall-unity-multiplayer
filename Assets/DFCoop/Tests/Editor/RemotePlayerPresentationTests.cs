@@ -72,5 +72,33 @@ namespace DFCoop.Tests
             Assert.AreEqual(0f, position.y);
             Assert.AreEqual(0f, position.z);
         }
+
+        [Test]
+        public void GetLabelBillboardRotation_ShowsTextFrontToCameraWithoutPitch()
+        {
+            Quaternion rotation = DFCoopRemotePlayerPresentation.GetLabelBillboardRotation(new Vector3(2f, 1f, 3f), new Vector3(2f, 100f, 13f));
+
+            Assert.AreEqual(Vector3.back, rotation * Vector3.forward);
+            Assert.AreEqual(Vector3.up, rotation * Vector3.up);
+        }
+
+        [Test]
+        public void IsAppearanceChanged_UpdatesOnlyWhenReplicatedAppearanceChanges()
+        {
+            GameObject go = new GameObject("DFCoop_AppearanceCacheTest");
+
+            try
+            {
+                var session = go.AddComponent<DFCoopPlayerSessionState>();
+                session.SetAppearance(1, 0, 2, 6);
+
+                Assert.IsFalse(DFCoopRemotePlayerPresentation.IsAppearanceChanged(1, 0, 2, 6, session));
+                Assert.IsTrue(DFCoopRemotePlayerPresentation.IsAppearanceChanged(1, 1, 2, 6, session));
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
     }
 }

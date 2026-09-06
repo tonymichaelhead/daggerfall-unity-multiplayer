@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Game.Entity;
 using Mirror;
 using UnityEngine;
 
@@ -24,6 +25,20 @@ namespace DFCoop.Runtime
                 (worldZ - localPlayerGPS.WorldZ) / StreamingWorld.SceneMapRatio);
         }
 
+        public static Vector3 GroundScenePosition(StreamingWorld streamingWorld, Vector3 scenePosition)
+        {
+            GameObject terrainObject = streamingWorld.GetTerrainFromPixel(streamingWorld.LocalPlayerGPS.CurrentMapPixel);
+            if (terrainObject == null)
+                return scenePosition;
+
+            Terrain terrain = terrainObject.GetComponent<Terrain>();
+            if (terrain == null)
+                return scenePosition;
+
+            scenePosition.y = terrain.SampleHeight(scenePosition + terrain.transform.position) + streamingWorld.WorldCompensation.y;
+            return scenePosition;
+        }
+
         public static bool IsVisibleInLocalMapPixel(Vector3 localScenePosition, Vector3 remoteScenePosition)
         {
             return Vector3.SqrMagnitude(remoteScenePosition - localScenePosition) <= MaximumVisibleDistance * MaximumVisibleDistance;
@@ -33,6 +48,43 @@ namespace DFCoop.Runtime
         {
             float interpolationFactor = 1f - Mathf.Exp(-PositionSmoothingSpeed * Mathf.Max(0f, deltaTime));
             return Vector3.Lerp(currentPosition, targetPosition, interpolationFactor);
+        }
+
+        public static Quaternion GetLabelBillboardRotation(Vector3 labelPosition, Vector3 cameraPosition)
+        {
+            Vector3 directionToCamera = labelPosition - cameraPosition;
+            directionToCamera.y = 0f;
+            return directionToCamera.sqrMagnitude > 0.0001f ? Quaternion.LookRotation(directionToCamera) : Quaternion.identity;
+        }
+
+        public static bool IsAppearanceChanged(int cachedRace, int cachedGender, int cachedOutfitVariant, int cachedFaceVariant, DFCoopPlayerSessionState session)
+        {
+            return cachedRace != session.Race || cachedGender != session.Gender || cachedOutfitVariant != session.OutfitVariant || cachedFaceVariant != session.FaceVariant;
+        }
+    }
+
+    public class DFCoopRemoteAvatarAppearance : MonoBehaviour
+    {
+        int race = int.MinValue;
+        int gender = int.MinValue;
+        int outfitVariant = int.MinValue;
+        int faceVariant = int.MinValue;
+
+        public void ApplyIfChanged(DFCoopPlayerSessionState session)
+        {
+            if (!DFCoopRemotePlayerPresentation.IsAppearanceChanged(race, gender, outfitVariant, faceVariant, session))
+                return;
+
+            var billboard = GetComponent<MobilePersonBillboard>();
+            Races displayRace = (Races)DFCoopPositionProtocol.GetDisplayRace(session.Race);
+            Genders displayGender = (Genders)DFCoopPositionProtocol.GetDisplayGender(session.Gender);
+            billboard.SetPerson(displayRace, displayGender, session.OutfitVariant, false, session.FaceVariant, 0);
+            transform.localPosition = new Vector3(0f, billboard.GetSize().y * 0.5f, 0f);
+
+            race = session.Race;
+            gender = session.Gender;
+            outfitVariant = session.OutfitVariant;
+            faceVariant = session.FaceVariant;
         }
     }
 
@@ -91,10 +143,13 @@ namespace DFCoop.Runtime
                 int sessionId = session.GetInstanceID();
                 liveProxyIds.Add(sessionId);
                 GameObject proxy = GetOrCreateProxy(sessionId, session.ConnectionId);
+                UpdateLabel(proxy, session.DisplayName);
+                UpdateAvatar(proxy, session);
                 DFPosition remoteMapPixel = DaggerfallConnect.Arena2.MapsFile.WorldCoordToMapPixel(session.WorldX, session.WorldZ);
                 bool isInLocalMapPixel = remoteMapPixel.X == streamingWorld.LocalPlayerGPS.CurrentMapPixel.X && remoteMapPixel.Y == streamingWorld.LocalPlayerGPS.CurrentMapPixel.Y;
                 Vector3 localPosition = streamingWorld.LocalPlayerGPS.transform.position;
                 Vector3 targetPosition = DFCoopRemotePlayerPresentation.WorldToScenePosition(streamingWorld.LocalPlayerGPS, localPosition, session.WorldX, session.WorldZ);
+                targetPosition = DFCoopRemotePlayerPresentation.GroundScenePosition(streamingWorld, targetPosition);
                 bool isVisible = isInLocalMapPixel && DFCoopRemotePlayerPresentation.IsVisibleInLocalMapPixel(localPosition, targetPosition);
 
                 if (isVisible)
@@ -103,6 +158,9 @@ namespace DFCoop.Runtime
                         proxy.transform.position = targetPosition;
                     else
                         proxy.transform.position = DFCoopRemotePlayerPresentation.InterpolatePosition(proxy.transform.position, targetPosition, Time.unscaledDeltaTime);
+
+                    proxy.transform.rotation = Quaternion.Euler(0f, session.FacingYaw, 0f);
+                    FaceLabelToCamera(proxy);
                 }
 
                 proxy.SetActive(isVisible);
@@ -117,18 +175,25 @@ namespace DFCoop.Runtime
             if (proxies.TryGetValue(sessionId, out proxy))
                 return proxy;
 
-            proxy = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            proxy = new GameObject($"DFCoop_RemotePlayer_{connectionId}");
             proxy.name = $"DFCoop_RemotePlayer_{connectionId}";
-            Destroy(proxy.GetComponent<Collider>());
-            proxy.transform.localScale = new Vector3(0.6f, 1f, 0.6f);
-            var renderer = proxy.GetComponent<Renderer>();
-            renderer.material.color = new Color(0.1f, 0.95f, 0.4f);
+            CreateDaggerfallAvatar(proxy.transform);
             CreateLabel(proxy.transform, connectionId);
             proxy.SetActive(false);
             Object.DontDestroyOnLoad(proxy);
             proxies.Add(sessionId, proxy);
             Debug.Log($"[DFCoop Remote] Created player proxy: connectionId={connectionId}.");
             return proxy;
+        }
+
+        static void CreateDaggerfallAvatar(Transform parent)
+        {
+            GameObject avatarGo = new GameObject("DaggerfallAvatar");
+            avatarGo.transform.SetParent(parent, false);
+            var billboard = avatarGo.AddComponent<MobilePersonBillboard>();
+            billboard.SetPerson(Races.Breton, Genders.Male, 0, false, 0, 192);
+            avatarGo.transform.localPosition = new Vector3(0f, billboard.GetSize().y * 0.5f, 0f);
+            avatarGo.AddComponent<DFCoopRemoteAvatarAppearance>();
         }
 
         static void CreateLabel(Transform proxyTransform, int connectionId)
@@ -144,6 +209,28 @@ namespace DFCoop.Runtime
             label.alignment = TextAlignment.Center;
             label.color = Color.white;
         }
+
+        static void UpdateLabel(GameObject proxy, string displayName)
+        {
+            TextMesh label = proxy.GetComponentInChildren<TextMesh>();
+            if (label != null)
+                label.text = displayName;
+        }
+
+        static void UpdateAvatar(GameObject proxy, DFCoopPlayerSessionState session)
+        {
+            DFCoopRemoteAvatarAppearance avatar = proxy.GetComponentInChildren<DFCoopRemoteAvatarAppearance>();
+            if (avatar != null)
+                avatar.ApplyIfChanged(session);
+        }
+
+            static void FaceLabelToCamera(GameObject proxy)
+            {
+                Camera mainCamera = Camera.main;
+                TextMesh label = proxy.GetComponentInChildren<TextMesh>();
+                if (mainCamera != null && label != null)
+                label.transform.rotation = DFCoopRemotePlayerPresentation.GetLabelBillboardRotation(label.transform.position, mainCamera.transform.position);
+            }
 
         void RemoveStaleProxies(HashSet<int> liveProxyIds)
         {
