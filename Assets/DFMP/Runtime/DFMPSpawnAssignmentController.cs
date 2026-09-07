@@ -14,6 +14,9 @@ namespace DFMP.Runtime
         public int ConnectionId;
         public int MapPixelX;
         public int MapPixelY;
+        public int WorldX;
+        public float WorldY;
+        public int WorldZ;
     }
 
     public struct DFMPSpawnAcknowledgement : NetworkMessage
@@ -118,8 +121,18 @@ namespace DFMP.Runtime
             {
                 fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
                 sharedTestSpawnApplied = false;
-                streamingWorld.TeleportToCoordinates(assignmentState.Assignment.MapPixelX, assignmentState.Assignment.MapPixelY, StreamingWorld.RepositionMethods.RandomStartMarker);
-                Debug.Log($"[DFMP Session] Client requested grounded city spawn: mapPixel={assignmentState.Assignment.MapPixelX}/{assignmentState.Assignment.MapPixelY}.");
+                if (assignmentState.Assignment.WorldX != 0 || assignmentState.Assignment.WorldZ != 0)
+                {
+                    streamingWorld.TeleportToWorldCoordinates(
+                        assignmentState.Assignment.WorldX,
+                        assignmentState.Assignment.WorldZ);
+                    Debug.Log($"[DFMP Session] Client requested persisted world spawn: world={assignmentState.Assignment.WorldX}/{assignmentState.Assignment.WorldY:F2}/{assignmentState.Assignment.WorldZ}.");
+                }
+                else
+                {
+                    streamingWorld.TeleportToCoordinates(assignmentState.Assignment.MapPixelX, assignmentState.Assignment.MapPixelY, StreamingWorld.RepositionMethods.RandomStartMarker);
+                    Debug.Log($"[DFMP Session] Client requested grounded city spawn: mapPixel={assignmentState.Assignment.MapPixelX}/{assignmentState.Assignment.MapPixelY}.");
+                }
                 return;
             }
 
@@ -130,8 +143,15 @@ namespace DFMP.Runtime
                     streamingWorld.LocalPlayerGPS.CurrentMapPixel.Y != assignmentState.Assignment.MapPixelY)
                     return;
 
-                if (!TryApplySharedTestSpawnPoint(streamingWorld) && Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
-                    return;
+                if (assignmentState.Assignment.WorldX == 0 && assignmentState.Assignment.WorldZ == 0)
+                {
+                    if (!TryApplySharedTestSpawnPoint(streamingWorld) && Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
+                        return;
+                }
+                else
+                {
+                    Debug.Log($"[DFMP Session] Preserved persisted world spawn: world={assignmentState.Assignment.WorldX}/{assignmentState.Assignment.WorldY:F2}/{assignmentState.Assignment.WorldZ}.");
+                }
 
                 // Acknowledge on a later frame so StreamingWorld resyncs GPS to the new scene position first.
                 sharedTestSpawnApplied = true;

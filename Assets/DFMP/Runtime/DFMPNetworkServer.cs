@@ -41,6 +41,26 @@ namespace DFMP.Runtime
             get { return NetworkServer.active && Transport != null && Transport.ServerActive(); }
         }
 
+        static void SaveCharacterRecord(int connectionId, DFMPPlayerSessionState sessionState)
+        {
+            if (CharacterStore == null || sessionState == null)
+                return;
+
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(connectionId, out joinDecision) || joinDecision.CharacterRecord == null)
+                return;
+
+            DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
+            CharacterStore.Save(joinDecision.CharacterRecord);
+            Debug.Log($"[DFMP Character] Saved character record: connectionId={connectionId}, account='{joinDecision.AccountId}', world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
+        }
+
+        static void SaveAllCharacterRecords()
+        {
+            foreach (KeyValuePair<int, DFMPPlayerSessionState> entry in playerSessionStates)
+                SaveCharacterRecord(entry.Key, entry.Value);
+        }
+
         public static void Start(ushort port, int tickRate, int maxConnections, string serverName = null, string motd = null, bool enableDiscovery = true, int discoveryPort = 7778, DFMPServerConfig config = null)
         {
             if (IsListening)
@@ -215,6 +235,16 @@ namespace DFMP.Runtime
             int worldX;
             int worldZ;
             GetInitialSpawnCoordinates(out worldX, out worldZ);
+
+            DFMPJoinDecision savedJoinDecision;
+            if (joinDecisions.TryGetValue(conn.connectionId, out savedJoinDecision) &&
+                savedJoinDecision.CharacterRecord != null &&
+                (savedJoinDecision.CharacterRecord.WorldX != 0 || savedJoinDecision.CharacterRecord.WorldZ != 0))
+            {
+                worldX = savedJoinDecision.CharacterRecord.WorldX;
+                worldZ = savedJoinDecision.CharacterRecord.WorldZ;
+            }
+
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
 
             DFMPJoinDecision joinDecision;
@@ -223,7 +253,7 @@ namespace DFMP.Runtime
                 DFMPCharacterRecord record = joinDecision.CharacterRecord;
                 sessionState.SetDisplayName(DFMPPositionProtocol.SanitizeDisplayName(record.CharacterName));
                 sessionState.SetAppearance(
-                    DFMPPositionProtocol.GetDisplayRace(record.Race),
+                    DFMPPositionProtocol.GetPlayerRace(record.Race),
                     DFMPPositionProtocol.GetDisplayGender(record.Gender),
                     DFMPPositionProtocol.GetOutfitVariant(record.OutfitVariant),
                     DFMPPositionProtocol.GetFaceVariant(record.FaceVariant));
@@ -363,15 +393,12 @@ namespace DFMP.Runtime
                 DFMPPositionProtocol.GetFaceVariant(report.FaceVariant));
 
             DFMPJoinDecision joinDecision;
-            if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)
+            if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) &&
+                joinDecision.Kind == DFMPJoinDecisionKind.FirstJoin && joinDecision.CharacterRecord != null)
             {
-                DFMPCharacterRecord record = joinDecision.CharacterRecord;
-                record.CharacterName = sessionState.DisplayName;
-                record.Race = sessionState.Race;
-                record.Gender = sessionState.Gender;
-                record.OutfitVariant = sessionState.OutfitVariant;
-                record.FaceVariant = sessionState.FaceVariant;
-                CharacterStore.Save(record);
+                DFMPCharacterPersistence.ApplyIdentityReport(joinDecision.CharacterRecord, report);
+                DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
+                CharacterStore.Save(joinDecision.CharacterRecord);
             }
         }
 
@@ -453,6 +480,8 @@ namespace DFMP.Runtime
                 discoveryListener.Stop();
                 discoveryListener = null;
             }
+
+            SaveAllCharacterRecords();
 
             if (Manager != null && Manager.isNetworkActive)
                 Manager.StopServer();

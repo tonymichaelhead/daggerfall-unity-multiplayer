@@ -111,7 +111,10 @@ namespace DFMP.Runtime
 
         private void Update()
         {
-            if (!hasPendingSnapshot || ServerIdentityApplied || GameManager.Instance == null || GameManager.Instance.PlayerEntity == null)
+            StartGameBehaviour startGameBehaviour = FindObjectOfType<StartGameBehaviour>();
+            if (!hasPendingSnapshot || ServerIdentityApplied || startGameBehaviour == null ||
+                startGameBehaviour.LastStartMethod != StartGameBehaviour.StartMethods.NewCharacter ||
+                GameManager.Instance == null || GameManager.Instance.PlayerEntity == null)
                 return;
 
             ApplySnapshotToLocalPlayer(pendingSnapshot);
@@ -158,6 +161,12 @@ namespace DFMP.Runtime
             return Flow.ShouldReportLocalIdentity(ServerIdentityApplied);
         }
 
+        public static bool IsMultiplayerIntroQuest(string questName)
+        {
+            return string.Equals(questName, "_TUTOR__", System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(questName, "_BRISIEN", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         void ApplySnapshotToLocalPlayer(DFMPCharacterSnapshotMessage snapshot)
         {
             var playerEntity = GameManager.Instance.PlayerEntity;
@@ -165,10 +174,20 @@ namespace DFMP.Runtime
             playerEntity.BirthRaceTemplate = DaggerfallWorkshop.Game.Player.CharacterDocument.GetRaceTemplate((Races)snapshot.Race);
             playerEntity.Gender = (Genders)snapshot.Gender;
             playerEntity.FaceIndex = snapshot.FaceVariant;
+            playerEntity.Level = snapshot.Level;
+            playerEntity.MaxHealth = snapshot.MaxHealth;
+            playerEntity.CurrentHealth = snapshot.Health;
+            playerEntity.CurrentMagicka = snapshot.SpellPoints;
+            playerEntity.CurrentFatigue = snapshot.Fatigue;
+            for (int index = 0; index < snapshot.Attributes.Length; index++)
+                playerEntity.Stats.SetPermanentStatValue(index, Mathf.Clamp(snapshot.Attributes[index], 0, 100));
+            for (int index = 0; index < snapshot.Skills.Length; index++)
+                playerEntity.Skills.SetPermanentSkillValue(index, (short)Mathf.Clamp(snapshot.Skills[index], 0, 100));
+            playerEntity.GoldPieces = snapshot.Gold;
             ServerIdentityApplied = true;
             hasPendingSnapshot = false;
             Flow.MarkInGame();
-            Debug.Log($"[DFMP Join] Applied server character snapshot: name='{snapshot.CharacterName}', race={snapshot.Race}, gender={snapshot.Gender}, face={snapshot.FaceVariant}.");
+            Debug.Log($"[DFMP Join] Applied server character snapshot: name='{snapshot.CharacterName}', race={snapshot.Race}, gender={snapshot.Gender}, face={snapshot.FaceVariant}, level={snapshot.Level}, health={snapshot.Health}/{snapshot.MaxHealth}, spellPoints={snapshot.SpellPoints}/{snapshot.MaxSpellPoints}, fatigue={snapshot.Fatigue}/{snapshot.MaxFatigue}.");
         }
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -202,14 +221,14 @@ namespace DFMP.Runtime
                 foreach (ulong questUid in QuestMachine.Instance.GetAllActiveQuests())
                 {
                     Quest quest = QuestMachine.Instance.GetQuest(questUid);
-                    if (quest != null && string.Equals(quest.QuestName, "_TUTOR__", System.StringComparison.OrdinalIgnoreCase))
+                    if (quest != null && IsMultiplayerIntroQuest(quest.QuestName))
                     {
                         if (QuestMachine.Instance.RemoveQuest(questUid))
                             removedQuestCount++;
                     }
                 }
 
-                Debug.Log($"[DFMP Join] Beginner tutorial disabled by server: removedTutorialQuests={removedQuestCount}.");
+                Debug.Log($"[DFMP Join] Multiplayer intro quests disabled by server: removedQuestCount={removedQuestCount}.");
             }
         }
 

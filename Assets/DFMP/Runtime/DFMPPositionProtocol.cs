@@ -17,6 +17,16 @@ namespace DFMP.Runtime
         public int Gender;
         public int OutfitVariant;
         public int FaceVariant;
+        public int Level;
+        public int Health;
+        public int MaxHealth;
+        public int SpellPoints;
+        public int MaxSpellPoints;
+        public int Fatigue;
+        public int MaxFatigue;
+        public int Gold;
+        public int[] Attributes;
+        public int[] Skills;
     }
 
     public enum DFMPPositionRejectionReason
@@ -46,6 +56,11 @@ namespace DFMP.Runtime
         public static int GetDisplayRace(int race)
         {
             return race == 1 || race == 2 || race == 3 ? race : 1;
+        }
+
+        public static int GetPlayerRace(int race)
+        {
+            return Mathf.Clamp(race, 1, 8);
         }
 
         public static int GetDisplayGender(int gender)

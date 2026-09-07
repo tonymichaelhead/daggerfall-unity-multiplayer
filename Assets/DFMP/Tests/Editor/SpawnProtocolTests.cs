@@ -11,7 +11,7 @@ namespace DFMP.Tests
         public void AssignmentState_ReceiveRequeueAndReset_TracksLifecycle()
         {
             var state = new DFMPSpawnAssignmentState();
-            var assignment = new DFMPSpawnAssignment { MapPixelX = 207, MapPixelY = 213 };
+            var assignment = new DFMPSpawnAssignment { MapPixelX = 207, MapPixelY = 213, WorldX = 6792821, WorldY = 12.5f, WorldZ = 9374554 };
 
             state.Receive(assignment);
 
@@ -20,6 +20,9 @@ namespace DFMP.Tests
             Assert.IsFalse(state.TeleportRequested);
             Assert.AreEqual(207, state.Assignment.MapPixelX);
             Assert.AreEqual(213, state.Assignment.MapPixelY);
+            Assert.AreEqual(6792821, state.Assignment.WorldX);
+            Assert.AreEqual(12.5f, state.Assignment.WorldY);
+            Assert.AreEqual(9374554, state.Assignment.WorldZ);
 
             Assert.IsTrue(state.TryRequestTeleport());
             state.Requeue();

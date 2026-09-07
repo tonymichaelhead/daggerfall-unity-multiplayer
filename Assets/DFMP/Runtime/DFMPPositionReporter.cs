@@ -66,13 +66,31 @@ namespace DFMP.Runtime
 
             nextIdentityReportTime = Time.unscaledTime + 5f;
             var playerEntity = GameManager.Instance.PlayerEntity;
+            int[] attributes = new int[8];
+            for (int index = 0; index < attributes.Length; index++)
+                attributes[index] = playerEntity.Stats.GetPermanentStatValue(index);
+
+            int[] skills = new int[35];
+            for (int index = 0; index < skills.Length; index++)
+                skills[index] = playerEntity.Skills.GetPermanentSkillValue(index);
+
             NetworkClient.Send(new DFMPPlayerIdentityReport
             {
                 DisplayName = playerEntity.Name,
                 Race = (int)playerEntity.Race,
                 Gender = (int)playerEntity.Gender,
                 OutfitVariant = DFMPPositionProtocol.GetInitialOutfitVariant(playerEntity.FaceIndex),
-                FaceVariant = playerEntity.FaceIndex
+                FaceVariant = playerEntity.FaceIndex,
+                Level = playerEntity.Level,
+                Health = playerEntity.CurrentHealth,
+                MaxHealth = playerEntity.MaxHealth,
+                SpellPoints = playerEntity.CurrentMagicka,
+                MaxSpellPoints = playerEntity.MaxMagicka,
+                Fatigue = playerEntity.CurrentFatigue,
+                MaxFatigue = playerEntity.MaxFatigue,
+                Gold = playerEntity.GoldPieces,
+                Attributes = attributes,
+                Skills = skills
             });
         }
     }

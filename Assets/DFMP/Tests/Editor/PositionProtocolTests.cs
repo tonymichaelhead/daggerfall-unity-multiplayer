@@ -45,6 +45,8 @@ namespace DFMP.Tests
         {
             Assert.AreEqual(1, DFMPPositionProtocol.GetDisplayRace(4));
             Assert.AreEqual(2, DFMPPositionProtocol.GetDisplayRace(2));
+            Assert.AreEqual(4, DFMPPositionProtocol.GetPlayerRace(4));
+            Assert.AreEqual(8, DFMPPositionProtocol.GetPlayerRace(99));
             Assert.AreEqual(0, DFMPPositionProtocol.GetDisplayGender(-1));
             Assert.AreEqual(1, DFMPPositionProtocol.GetDisplayGender(1));
             Assert.AreEqual(0, DFMPPositionProtocol.GetOutfitVariant(-1));

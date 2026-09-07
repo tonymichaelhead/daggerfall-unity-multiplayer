@@ -200,6 +200,7 @@ Everything the server needs to know where players are before it can own entities
 - Server-managed occupancy: which players are currently in which location and dungeon block.
 - Interest management derived from occupancy, so a client receives only entities in its own location. Bandwidth then scales with co-located players rather than total players.
 - Safe transitions for doors, dungeon entry and exit, death and respawn, save load, and reconnect.
+- Configurable starting-location policy: server owners can choose a default city center, a named gate or start marker, explicit Daggerfall world coordinates, or a later scripted spawn rule. The server assigns the location and clients never choose it.
 - **Time-advance policy.** Global game time is server-owned, so no single player may advance it:
   - Configurable server time scale, expressed as a multiplier where `1.0` is real time and `12.0` matches DFU's default. Owners choosing slow time get long, grounded days; owners choosing fast time get vanilla pacing.
   - Fast travel becomes a server-issued instant teleport with no time cost. Clients never self-relocate.

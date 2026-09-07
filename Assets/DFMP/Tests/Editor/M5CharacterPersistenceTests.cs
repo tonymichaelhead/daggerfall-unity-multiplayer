@@ -211,18 +211,40 @@ namespace DFMP.Tests
             record.Gender = 4;
             record.OutfitVariant = 99;
             record.FaceVariant = 99;
+            record.Level = 4;
+            record.MaxHealth = 20;
+            record.Health = 17;
+            record.MaxSpellPoints = 12;
+            record.SpellPoints = 8;
+            record.MaxFatigue = 100;
+            record.Fatigue = 75;
+            record.Attributes[0] = 91;
+            record.Skills[0] = 73;
+            record.Gold = 456;
+            record.Experience = 7890;
 
             DFMPCharacterSnapshotMessage snapshot = DFMPCharacterSnapshotProtocol.FromRecord(record);
 
             Assert.AreEqual("steam:charlie", snapshot.AccountId);
             Assert.AreEqual("Charlie", snapshot.CharacterName);
-            Assert.AreEqual(1, snapshot.Race);
+            Assert.AreEqual(8, snapshot.Race);
             Assert.AreEqual(0, snapshot.Gender);
             Assert.AreEqual(3, snapshot.OutfitVariant);
-            Assert.AreEqual(23, snapshot.FaceVariant);
+            Assert.AreEqual(9, snapshot.FaceVariant);
+            Assert.AreEqual(4, snapshot.Level);
+            Assert.AreEqual(17, snapshot.Health);
+            Assert.AreEqual(20, snapshot.MaxHealth);
+            Assert.AreEqual(8, snapshot.SpellPoints);
+            Assert.AreEqual(12, snapshot.MaxSpellPoints);
+            Assert.AreEqual(75, snapshot.Fatigue);
+            Assert.AreEqual(100, snapshot.MaxFatigue);
+            Assert.AreEqual(91, snapshot.Attributes[0]);
+            Assert.AreEqual(73, snapshot.Skills[0]);
+            Assert.AreEqual(456, snapshot.Gold);
+            Assert.AreEqual(7890, snapshot.Experience);
             Assert.IsTrue(DFMPCharacterSnapshotProtocol.IsValid(snapshot));
 
-            snapshot.FaceVariant = 24;
+            snapshot.FaceVariant = 10;
             Assert.IsFalse(DFMPCharacterSnapshotProtocol.IsValid(snapshot));
         }
 
@@ -252,6 +274,81 @@ namespace DFMP.Tests
 
                 Assert.IsFalse(config.Gameplay.EnableBeginnerTutorial);
                 Assert.IsFalse(new DFMPJoinResultMessage().EnableBeginnerTutorial);
+            }
+
+            [Test]
+            public void ClientJoinFlow_IdentifiesMultiplayerIntroQuests()
+            {
+                Assert.IsTrue(DFMPClientJoinFlowController.IsMultiplayerIntroQuest("_TUTOR__"));
+                Assert.IsTrue(DFMPClientJoinFlowController.IsMultiplayerIntroQuest("_BRISIEN"));
+                Assert.IsFalse(DFMPClientJoinFlowController.IsMultiplayerIntroQuest("S0000001"));
+            }
+
+            [Test]
+            public void CharacterPersistence_AppliesCanonicalSessionPositionAndIdentity()
+            {
+                var record = DFMPCharacterRecord.CreateNew("steam:player", "world-m5", "Player");
+                var sessionObject = new UnityEngine.GameObject("DFMP_Test_PersistenceSession");
+
+                try
+                {
+                    var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                    session.Initialize(7, 6799360, 12.5f, 9388032);
+                    session.SetDisplayName("  Saved Hero  ");
+                    session.SetAppearance(3, 1, 2, 6);
+
+                    DFMPCharacterPersistence.ApplySessionState(record, session);
+
+                    Assert.AreEqual("Saved Hero", record.CharacterName);
+                    Assert.AreEqual(6799360, record.WorldX);
+                    Assert.AreEqual(12.5f, record.WorldY);
+                    Assert.AreEqual(9388032, record.WorldZ);
+                    Assert.AreEqual(3, record.Race);
+                    Assert.AreEqual(1, record.Gender);
+                    Assert.AreEqual(2, record.OutfitVariant);
+                    Assert.AreEqual(6, record.FaceVariant);
+                    Assert.Greater(record.MapPixelX, 0);
+                    Assert.Greater(record.MapPixelY, 0);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(sessionObject);
+                }
+            }
+
+            [Test]
+            public void CharacterPersistence_AppliesFirstJoinIdentityReport()
+            {
+                var record = DFMPCharacterRecord.CreateNew("steam:first", "world-m5", "Player");
+                var report = new DFMPPlayerIdentityReport
+                {
+                    DisplayName = "Created Hero",
+                    Race = 3,
+                    Gender = 1,
+                    FaceVariant = 11,
+                    Level = 4,
+                    Health = 17,
+                    MaxHealth = 20,
+                    SpellPoints = 8,
+                    MaxSpellPoints = 12,
+                    Fatigue = 75,
+                    MaxFatigue = 100,
+                    Gold = 456,
+                    Attributes = new[] { 91, 82, 73, 64, 55, 46, 37, 28 },
+                    Skills = new[] { 73, 62, 51, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9 }
+                };
+
+                DFMPCharacterPersistence.ApplyIdentityReport(record, report);
+
+                Assert.AreEqual("Created Hero", record.CharacterName);
+                Assert.AreEqual(3, record.Race);
+                Assert.AreEqual(1, record.Gender);
+                Assert.AreEqual(9, record.FaceVariant);
+                Assert.AreEqual(4, record.Level);
+                Assert.AreEqual(17, record.Health);
+                Assert.AreEqual(456, record.Gold);
+                Assert.AreEqual(91, record.Attributes[0]);
+                Assert.AreEqual(73, record.Skills[0]);
             }
     }
 }

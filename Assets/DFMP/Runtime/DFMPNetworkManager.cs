@@ -74,7 +74,10 @@ namespace DFMP.Runtime
                 {
                     ConnectionId = conn.connectionId,
                     MapPixelX = mapPixel.X,
-                    MapPixelY = mapPixel.Y
+                    MapPixelY = mapPixel.Y,
+                    WorldX = sessionState.WorldX,
+                    WorldY = sessionState.WorldY,
+                    WorldZ = sessionState.WorldZ
                 });
 
                 Debug.Log($"[DFMP Session] Server sent spawn assignment: connectionId={conn.connectionId}, mapPixel={mapPixel.X}/{mapPixel.Y}.");

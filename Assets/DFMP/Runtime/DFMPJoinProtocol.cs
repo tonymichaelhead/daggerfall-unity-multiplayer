@@ -1,4 +1,5 @@
 using Mirror;
+using UnityEngine;
 
 namespace DFMP.Runtime
 {
@@ -24,6 +25,17 @@ namespace DFMP.Runtime
         public int Gender;
         public int OutfitVariant;
         public int FaceVariant;
+        public int Level;
+        public int Health;
+        public int MaxHealth;
+        public int SpellPoints;
+        public int MaxSpellPoints;
+        public int Fatigue;
+        public int MaxFatigue;
+        public int[] Attributes;
+        public int[] Skills;
+        public int Gold;
+        public int Experience;
     }
 
     public static class DFMPCharacterSnapshotProtocol
@@ -34,10 +46,21 @@ namespace DFMP.Runtime
             {
                 AccountId = record.AccountId,
                 CharacterName = DFMPPositionProtocol.SanitizeDisplayName(record.CharacterName),
-                Race = DFMPPositionProtocol.GetDisplayRace(record.Race),
+                Race = DFMPPositionProtocol.GetPlayerRace(record.Race),
                 Gender = DFMPPositionProtocol.GetDisplayGender(record.Gender),
                 OutfitVariant = DFMPPositionProtocol.GetOutfitVariant(record.OutfitVariant),
-                FaceVariant = DFMPPositionProtocol.GetFaceVariant(record.FaceVariant)
+                FaceVariant = Mathf.Clamp(record.FaceVariant, 0, 9),
+                Level = record.Level,
+                Health = record.Health,
+                MaxHealth = record.MaxHealth,
+                SpellPoints = record.SpellPoints,
+                MaxSpellPoints = record.MaxSpellPoints,
+                Fatigue = record.Fatigue,
+                MaxFatigue = record.MaxFatigue,
+                Attributes = record.Attributes ?? new int[0],
+                Skills = record.Skills ?? new int[0],
+                Gold = record.Gold,
+                Experience = record.Experience
             };
         }
 
@@ -45,10 +68,17 @@ namespace DFMP.Runtime
         {
             return !string.IsNullOrWhiteSpace(snapshot.AccountId) &&
                 DFMPPositionProtocol.SanitizeDisplayName(snapshot.CharacterName) == snapshot.CharacterName &&
-                snapshot.Race == DFMPPositionProtocol.GetDisplayRace(snapshot.Race) &&
+                snapshot.Race == DFMPPositionProtocol.GetPlayerRace(snapshot.Race) &&
                 snapshot.Gender == DFMPPositionProtocol.GetDisplayGender(snapshot.Gender) &&
                 snapshot.OutfitVariant == DFMPPositionProtocol.GetOutfitVariant(snapshot.OutfitVariant) &&
-                snapshot.FaceVariant == DFMPPositionProtocol.GetFaceVariant(snapshot.FaceVariant);
+                snapshot.FaceVariant >= 0 && snapshot.FaceVariant <= 9 &&
+                snapshot.Level >= 1 &&
+                snapshot.MaxHealth >= 1 && snapshot.Health >= 0 && snapshot.Health <= snapshot.MaxHealth &&
+                snapshot.MaxSpellPoints >= 0 && snapshot.SpellPoints >= 0 && snapshot.SpellPoints <= snapshot.MaxSpellPoints &&
+                snapshot.MaxFatigue >= 1 && snapshot.Fatigue >= 0 && snapshot.Fatigue <= snapshot.MaxFatigue &&
+                snapshot.Attributes != null && snapshot.Attributes.Length == 8 &&
+                snapshot.Skills != null && snapshot.Skills.Length == 35 &&
+                snapshot.Gold >= 0 && snapshot.Experience >= 0;
         }
     }
 
