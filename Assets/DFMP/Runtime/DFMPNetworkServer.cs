@@ -32,6 +32,7 @@ namespace DFMP.Runtime
         static readonly Dictionary<int, DFMPPlayerSessionState> playerSessionStates = new Dictionary<int, DFMPPlayerSessionState>();
         static readonly Dictionary<int, DFMPJoinDecision> joinDecisions = new Dictionary<int, DFMPJoinDecision>();
         static readonly DFMPActiveAccountRegistry activeAccounts = new DFMPActiveAccountRegistry();
+        static readonly DFMPWorldOccupancyRegistry worldOccupancy = new DFMPWorldOccupancyRegistry();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
@@ -246,6 +247,14 @@ namespace DFMP.Runtime
             }
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
+            var mapPixel = MapsFile.WorldCoordToMapPixel(worldX, worldZ);
+            worldOccupancy.SetContext(conn.connectionId, new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Exterior,
+                MapPixelX = mapPixel.X,
+                MapPixelY = mapPixel.Y,
+                LocationId = "Daggerfall"
+            });
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)
@@ -464,6 +473,7 @@ namespace DFMP.Runtime
 
             playerSessionStates.Remove(conn.connectionId);
             joinDecisions.Remove(conn.connectionId);
+            worldOccupancy.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
@@ -491,6 +501,7 @@ namespace DFMP.Runtime
             TimeState = null;
             playerSessionStates.Clear();
             joinDecisions.Clear();
+            worldOccupancy.Clear();
             lastPositionReportTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();
