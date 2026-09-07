@@ -44,6 +44,13 @@ namespace DFMP.Runtime
 
         public override void OnServerReady(NetworkConnectionToClient conn)
         {
+            if (!DFMPNetworkServer.IsJoinAccepted(conn))
+            {
+                Debug.LogWarning($"[DFMP Join] Client became ready before identity acceptance: connectionId={conn.connectionId}.");
+                conn.Disconnect();
+                return;
+            }
+
             base.OnServerReady(conn);
 
             conn.Send(new ObjectSpawnStartedMessage());
@@ -76,7 +83,10 @@ namespace DFMP.Runtime
 
         public override void OnClientConnect()
         {
-            base.OnClientConnect();
+            NetworkClient.Send(new DFMPAccountIdentityMessage
+            {
+                AccountId = DFMPNetworkClient.AccountId
+            });
             Debug.Log($"[DFMP Net] Connected to server: address={networkAddress}, port={DFMPNetworkClient.Port}.");
         }
 

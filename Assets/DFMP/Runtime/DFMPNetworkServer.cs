@@ -5,6 +5,7 @@ using DaggerfallWorkshop;
 using kcp2k;
 using Mirror;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 namespace DFMP.Runtime
@@ -18,6 +19,8 @@ namespace DFMP.Runtime
         public static string ServerName { get; set; } = "Tony's DFU RP";
         public static int MaxConnections { get; private set; } = 16;
         public static string Motd { get; set; } = "Welcome to Daggerfall Unity Multiplayer";
+        public static DFMPServerConfig Config { get; private set; }
+        public static IDFMPCharacterStore CharacterStore { get; private set; }
 
         public static int ConnectedPlayerCount
         {
@@ -27,6 +30,8 @@ namespace DFMP.Runtime
         static DFMPServerDiscoveryListener discoveryListener;
 
         static readonly Dictionary<int, DFMPPlayerSessionState> playerSessionStates = new Dictionary<int, DFMPPlayerSessionState>();
+        static readonly Dictionary<int, DFMPJoinDecision> joinDecisions = new Dictionary<int, DFMPJoinDecision>();
+        static readonly DFMPActiveAccountRegistry activeAccounts = new DFMPActiveAccountRegistry();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
@@ -36,7 +41,7 @@ namespace DFMP.Runtime
             get { return NetworkServer.active && Transport != null && Transport.ServerActive(); }
         }
 
-        public static void Start(ushort port, int tickRate, int maxConnections, string serverName = null, string motd = null, bool enableDiscovery = true, int discoveryPort = 7778)
+        public static void Start(ushort port, int tickRate, int maxConnections, string serverName = null, string motd = null, bool enableDiscovery = true, int discoveryPort = 7778, DFMPServerConfig config = null)
         {
             if (IsListening)
             {
@@ -52,6 +57,9 @@ namespace DFMP.Runtime
 
             Port = port;
             MaxConnections = maxConnections;
+            Config = config ?? new DFMPServerConfig();
+            Config.Normalize();
+            CharacterStore = new DFMPFileCharacterStore(GetCharacterStoreDirectory());
             if (!string.IsNullOrEmpty(serverName))
                 ServerName = serverName;
             if (motd != null)
@@ -78,7 +86,7 @@ namespace DFMP.Runtime
             Manager.autoCreatePlayer = false;
             Manager.sendRate = tickRate;
 
-            Object.DontDestroyOnLoad(networkGo);
+            UnityEngine.Object.DontDestroyOnLoad(networkGo);
             networkGo.SetActive(true);
 
             Mirror.Transport.active = Transport;
@@ -87,6 +95,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPChatMessage>(OnChatMessage);
+            NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
             SpawnTimeState();
 
             if (enableDiscovery)
@@ -111,6 +120,62 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Net] Dedicated listener requested: transport=KCP, port={port}, tickRate={tickRate}, maxConnections={maxConnections}, serverName='{ServerName}', discoveryPort={discoveryPort}.");
         }
 
+        public static bool IsJoinAccepted(NetworkConnectionToClient conn)
+        {
+            return conn != null && joinDecisions.ContainsKey(conn.connectionId) && joinDecisions[conn.connectionId].Accepted;
+        }
+
+        static string GetCharacterStoreDirectory()
+        {
+            return Path.Combine(Application.persistentDataPath, "DFMP", "Characters");
+        }
+
+        static void OnAccountIdentityMessage(NetworkConnectionToClient conn, DFMPAccountIdentityMessage message)
+        {
+            if (conn == null || Config == null || CharacterStore == null)
+                return;
+
+            DFMPJoinDecision decision = DFMPJoinPolicy.Resolve(message.AccountId, Config, CharacterStore);
+
+            if (decision.Accepted && !activeAccounts.TryClaim(decision.AccountId, conn.connectionId))
+            {
+                decision = new DFMPJoinDecision
+                {
+                    Kind = DFMPJoinDecisionKind.Rejected,
+                    AccountId = decision.AccountId,
+                    ServerWorldId = decision.ServerWorldId,
+                    Reason = "account is already connected"
+                };
+            }
+
+            if (decision.Accepted && decision.Kind == DFMPJoinDecisionKind.FirstJoin)
+            {
+                decision.CharacterRecord = DFMPCharacterRecord.CreateNew(
+                    decision.AccountId,
+                    decision.ServerWorldId,
+                    "Player");
+                CharacterStore.Save(decision.CharacterRecord);
+            }
+
+            joinDecisions[conn.connectionId] = decision;
+            conn.Send(new DFMPJoinResultMessage
+            {
+                Decision = decision.Kind,
+                AccountId = decision.AccountId,
+                ServerWorldId = decision.ServerWorldId,
+                Reason = decision.Reason
+            });
+
+            if (!decision.Accepted)
+            {
+                Debug.LogWarning($"[DFMP Join] Rejected account identity: connectionId={conn.connectionId}, reason={decision.Reason}.");
+                conn.Disconnect();
+                return;
+            }
+
+            Debug.Log($"[DFMP Join] Accepted account identity: connectionId={conn.connectionId}, account='{decision.AccountId}', decision={decision.Kind}, world='{decision.ServerWorldId}'.");
+        }
+
         private static void SpawnTimeState()
         {
             if (TimeState != null)
@@ -121,7 +186,7 @@ namespace DFMP.Runtime
 
             timeGo.AddComponent<NetworkIdentity>();
             TimeState = timeGo.AddComponent<DFMPTimeState>();
-            Object.DontDestroyOnLoad(timeGo);
+            UnityEngine.Object.DontDestroyOnLoad(timeGo);
             timeGo.SetActive(true);
 
             NetworkServer.Spawn(timeGo, DFMPTimeState.AssetId);
@@ -147,7 +212,20 @@ namespace DFMP.Runtime
             int worldZ;
             GetInitialSpawnCoordinates(out worldX, out worldZ);
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
-            Object.DontDestroyOnLoad(sessionGo);
+
+            DFMPJoinDecision joinDecision;
+            if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)
+            {
+                DFMPCharacterRecord record = joinDecision.CharacterRecord;
+                sessionState.SetDisplayName(DFMPPositionProtocol.SanitizeDisplayName(record.CharacterName));
+                sessionState.SetAppearance(
+                    DFMPPositionProtocol.GetDisplayRace(record.Race),
+                    DFMPPositionProtocol.GetDisplayGender(record.Gender),
+                    DFMPPositionProtocol.GetOutfitVariant(record.OutfitVariant),
+                    DFMPPositionProtocol.GetFaceVariant(record.FaceVariant));
+            }
+
+            UnityEngine.Object.DontDestroyOnLoad(sessionGo);
             sessionGo.SetActive(true);
 
             NetworkServer.Spawn(sessionGo, DFMPPlayerSessionState.AssetId);
@@ -235,7 +313,11 @@ namespace DFMP.Runtime
         {
             DFMPPlayerSessionState sessionState;
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
+            {
+                joinDecisions.Remove(conn.connectionId);
+                activeAccounts.Release(conn.connectionId);
                 return;
+            }
 
             float lastReportTime;
             float elapsedSeconds = lastPositionReportTimes.TryGetValue(conn.connectionId, out lastReportTime)
@@ -275,6 +357,18 @@ namespace DFMP.Runtime
                 DFMPPositionProtocol.GetDisplayGender(report.Gender),
                 DFMPPositionProtocol.GetOutfitVariant(report.OutfitVariant),
                 DFMPPositionProtocol.GetFaceVariant(report.FaceVariant));
+
+            DFMPJoinDecision joinDecision;
+            if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)
+            {
+                DFMPCharacterRecord record = joinDecision.CharacterRecord;
+                record.CharacterName = sessionState.DisplayName;
+                record.Race = sessionState.Race;
+                record.Gender = sessionState.Gender;
+                record.OutfitVariant = sessionState.OutfitVariant;
+                record.FaceVariant = sessionState.FaceVariant;
+                CharacterStore.Save(record);
+            }
         }
 
         private static void OnChatMessage(NetworkConnectionToClient conn, DFMPChatMessage message)
@@ -338,10 +432,12 @@ namespace DFMP.Runtime
             });
 
             playerSessionStates.Remove(conn.connectionId);
+            joinDecisions.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
             DFMPChatProtocol.RateLimiter.Reset(conn.connectionId);
+            activeAccounts.Release(conn.connectionId);
             if (sessionState != null)
                 NetworkServer.Destroy(sessionState.gameObject);
         }
@@ -361,10 +457,14 @@ namespace DFMP.Runtime
             Transport = null;
             TimeState = null;
             playerSessionStates.Clear();
+            joinDecisions.Clear();
             lastPositionReportTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();
+            activeAccounts.Clear();
             Port = 0;
+            Config = null;
+            CharacterStore = null;
         }
     }
 }

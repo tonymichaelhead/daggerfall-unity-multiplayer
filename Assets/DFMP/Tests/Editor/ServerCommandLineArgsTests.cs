@@ -22,6 +22,7 @@ namespace DFMP.Tests
             Assert.AreEqual(16, def.MaxConnections);
             Assert.IsNull(def.Arena2Path);
             Assert.AreEqual(5.0f, def.HeartbeatInterval);
+            Assert.IsNull(def.AccountId);
         }
 
         [Test]
@@ -80,6 +81,16 @@ namespace DFMP.Tests
             Assert.IsFalse(result.IsDedicatedServer);
             Assert.AreEqual("192.168.1.10", result.Address);
             Assert.AreEqual(8888, result.Port);
+        }
+
+        [Test]
+        public void Parse_ClientAccount_ParsedCorrectly()
+        {
+            string[] args = new string[] { "-client", "-account", "local:alice" };
+            var result = ServerCommandLineArgs.Parse(args, true);
+
+            Assert.IsTrue(result.IsClient);
+            Assert.AreEqual("local:alice", result.AccountId);
         }
 
         [Test]

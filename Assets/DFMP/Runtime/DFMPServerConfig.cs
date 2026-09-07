@@ -12,6 +12,14 @@ namespace DFMP.Runtime
     }
 
     [Serializable]
+    public class DFMPServerIdentityConfig
+    {
+        public string ServerWorldId = "default";
+        public bool WhitelistEnabled;
+        public string[] AllowedAccountIds = new string[0];
+    }
+
+    [Serializable]
     public class DFMPServerConfig
     {
         public const string DefaultConfigFileName = "dfmp-server.json";
@@ -25,6 +33,7 @@ namespace DFMP.Runtime
         public bool LanDiscoveryEnabled = true;
         public string Motd = "Welcome to Daggerfall Unity Multiplayer";
         public DFMPServerChatConfig Chat = new DFMPServerChatConfig();
+        public DFMPServerIdentityConfig Identity = new DFMPServerIdentityConfig();
 
         public void Normalize()
         {
@@ -45,6 +54,12 @@ namespace DFMP.Runtime
 
             Chat.MaxMessageLength = Chat.MaxMessageLength > 0 && Chat.MaxMessageLength <= 2048 ? Chat.MaxMessageLength : 256;
             Chat.MinIntervalSeconds = Chat.MinIntervalSeconds > 0f ? Chat.MinIntervalSeconds : 1.0f;
+
+            if (Identity == null)
+                Identity = new DFMPServerIdentityConfig();
+
+            Identity.ServerWorldId = string.IsNullOrWhiteSpace(Identity.ServerWorldId) ? "default" : Identity.ServerWorldId.Trim();
+            Identity.AllowedAccountIds = Identity.AllowedAccountIds ?? new string[0];
         }
 
         public static string GetConfigFilePath()

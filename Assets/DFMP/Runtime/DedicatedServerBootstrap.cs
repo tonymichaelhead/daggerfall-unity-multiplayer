@@ -29,6 +29,7 @@ namespace DFMP.Runtime
         public static bool LanDiscoveryEnabled { get; private set; } = true;
         public static string Arena2OverridePath { get; private set; } = null;
         public static float HeartbeatInterval { get; private set; } = 5.0f;
+        private static DFMPServerConfig serverConfig;
 
         private bool gameSceneInitialized = false;
         private Coroutine heartbeatCoroutine;
@@ -43,6 +44,7 @@ namespace DFMP.Runtime
 
             // Load server config file (creates default dfmp-server.json if missing)
             var fileConfig = DFMPServerConfig.LoadOrCreate();
+            serverConfig = fileConfig;
 
             IsDedicatedServer = true;
 
@@ -184,7 +186,7 @@ namespace DFMP.Runtime
                 GameManager.Instance.PauseGame(false);
             }
 
-            DFMPNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections, ServerName, Motd, LanDiscoveryEnabled, DiscoveryPort);
+            DFMPNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections, ServerName, Motd, LanDiscoveryEnabled, DiscoveryPort, serverConfig);
 
             Debug.Log("[DFMP] Headless World Initialized (NoWorld=true, Unpaused). Starting heartbeat...");
 

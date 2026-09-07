@@ -18,6 +18,7 @@ namespace DFMP.Runtime
         public string Arena2Path;
         public float HeartbeatInterval;
         public string ServerName;
+        public string AccountId;
 
         public static ServerCommandLineArgs Default => new ServerCommandLineArgs
         {
@@ -29,7 +30,8 @@ namespace DFMP.Runtime
             MaxConnections = 16,
             Arena2Path = null,
             HeartbeatInterval = 5.0f,
-            ServerName = null
+            ServerName = null,
+            AccountId = null
         };
 
         public static ServerCommandLineArgs Parse(string[] args, bool isBatchMode = false)
@@ -94,6 +96,11 @@ namespace DFMP.Runtime
                 {
                     if (!string.IsNullOrEmpty(args[i + 1]))
                         result.ServerName = args[i + 1];
+                }
+                else if ((arg == "-account" || arg == "--account" || arg == "-identity" || arg == "--identity") && i + 1 < args.Length)
+                {
+                    if (!string.IsNullOrEmpty(args[i + 1]))
+                        result.AccountId = args[i + 1];
                 }
             }
 

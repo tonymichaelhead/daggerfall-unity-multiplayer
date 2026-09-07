@@ -9,6 +9,7 @@ namespace DFMP.Runtime
         public static string ServerAddress { get; private set; } = "127.0.0.1";
         public static int ServerPort { get; private set; } = 7777;
         public static int ClientTickRate { get; private set; } = 30;
+        public static string AccountId { get; private set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EarlyInitialize()
@@ -22,6 +23,7 @@ namespace DFMP.Runtime
             ServerAddress = config.Address;
             ServerPort = config.Port;
             ClientTickRate = config.TickRate;
+            AccountId = config.AccountId;
             DFMPLogRouter.Initialize(DFMPLogRole.Client);
 
             ApplyClientRuntimeSettings(ClientTickRate);
@@ -35,7 +37,7 @@ namespace DFMP.Runtime
 
         private void Start()
         {
-            DFMPNetworkClient.Start(ServerAddress, (ushort)ServerPort, ClientTickRate);
+            DFMPNetworkClient.Start(ServerAddress, (ushort)ServerPort, ClientTickRate, AccountId);
         }
 
         public static void ApplyClientRuntimeSettings(int tickRate)

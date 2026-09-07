@@ -12,8 +12,8 @@ The near-term target is a playable public beta for roughly 8-16 concurrent playe
 | M0.5 | Mirror/KCP listener accepts client connections with a basic handshake. | Done |
 | M1 | Server-owned game time replicates to clients instead of living on a player prefab. | Done |
 | M2 | Server-owned player session state holds canonical Daggerfall coordinates and identity. | Done |
-| M3 | Players see each other move as named, grounded avatars in the shared exterior world. | In progress |
-| M4 | Global text chat, expanded server configuration, and a server-side event bus. | Planned |
+| M3 | Players see each other move as named, grounded avatars in the shared exterior world. | Done |
+| M4 | Global text chat, expanded server configuration, and a server-side event bus. | Done |
 | M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Planned |
 | M6 | World context, location occupancy, interest management, and safe transitions. | Planned |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Planned |
@@ -105,7 +105,7 @@ Verification:
 
 ### M3: First Visible Multiplayer Presence
 
-Status: In progress.
+Status: Complete.
 
 Complete slices:
 
@@ -131,7 +131,7 @@ Verification:
 
 ### M4: Global Chat, Server Configuration, and Event Bus
 
-Status: Planned.
+Status: Complete.
 
 One global MMO-style text channel, plus the configuration and event surfaces that later milestones build on.
 
