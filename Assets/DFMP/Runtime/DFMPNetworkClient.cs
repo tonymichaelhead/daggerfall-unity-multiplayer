@@ -66,6 +66,7 @@ namespace DFMP.Runtime
             DFMPSpawnAssignmentController.RegisterClientHandler();
             NetworkClient.RegisterHandler<DFMPChatMessage>(OnChatMessageReceived);
             NetworkClient.RegisterHandler<DFMPJoinResultMessage>(OnJoinResultReceived);
+            NetworkClient.RegisterHandler<DFMPCharacterSnapshotMessage>(OnCharacterSnapshotReceived);
             DFMPPositionReporter.EnsureInstance();
             DFMPRemotePlayerPresentationController.EnsureInstance();
 
@@ -106,6 +107,22 @@ namespace DFMP.Runtime
                 if (NetworkClient.isConnected && !NetworkClient.ready)
                     NetworkClient.Ready();
             }
+        }
+
+        static void OnCharacterSnapshotReceived(DFMPCharacterSnapshotMessage message)
+        {
+            string normalizedAccountId;
+            string reason;
+            if (!DFMPCharacterSnapshotProtocol.IsValid(message) ||
+                !DFMPAccountPolicy.TryNormalize(AccountId, out normalizedAccountId, out reason) ||
+                message.AccountId != normalizedAccountId)
+            {
+                Debug.LogWarning("[DFMP Join] Rejected invalid or mismatched character snapshot from server.");
+                return;
+            }
+
+            if (DFMPClientJoinFlowController.Instance != null)
+                DFMPClientJoinFlowController.Instance.ApplyCharacterSnapshot(message);
         }
 
         static string GetDefaultAccountId()

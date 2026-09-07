@@ -13,6 +13,43 @@ namespace DFMP.Runtime
         public string AccountId;
         public string ServerWorldId;
         public string Reason;
+        public bool EnableBeginnerTutorial;
+    }
+
+    public struct DFMPCharacterSnapshotMessage : NetworkMessage
+    {
+        public string AccountId;
+        public string CharacterName;
+        public int Race;
+        public int Gender;
+        public int OutfitVariant;
+        public int FaceVariant;
+    }
+
+    public static class DFMPCharacterSnapshotProtocol
+    {
+        public static DFMPCharacterSnapshotMessage FromRecord(DFMPCharacterRecord record)
+        {
+            return new DFMPCharacterSnapshotMessage
+            {
+                AccountId = record.AccountId,
+                CharacterName = DFMPPositionProtocol.SanitizeDisplayName(record.CharacterName),
+                Race = DFMPPositionProtocol.GetDisplayRace(record.Race),
+                Gender = DFMPPositionProtocol.GetDisplayGender(record.Gender),
+                OutfitVariant = DFMPPositionProtocol.GetOutfitVariant(record.OutfitVariant),
+                FaceVariant = DFMPPositionProtocol.GetFaceVariant(record.FaceVariant)
+            };
+        }
+
+        public static bool IsValid(DFMPCharacterSnapshotMessage snapshot)
+        {
+            return !string.IsNullOrWhiteSpace(snapshot.AccountId) &&
+                DFMPPositionProtocol.SanitizeDisplayName(snapshot.CharacterName) == snapshot.CharacterName &&
+                snapshot.Race == DFMPPositionProtocol.GetDisplayRace(snapshot.Race) &&
+                snapshot.Gender == DFMPPositionProtocol.GetDisplayGender(snapshot.Gender) &&
+                snapshot.OutfitVariant == DFMPPositionProtocol.GetOutfitVariant(snapshot.OutfitVariant) &&
+                snapshot.FaceVariant == DFMPPositionProtocol.GetFaceVariant(snapshot.FaceVariant);
+        }
     }
 
     public enum DFMPJoinDecisionKind

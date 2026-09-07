@@ -60,6 +60,10 @@ namespace DFMP.Runtime
             if (Time.unscaledTime < nextIdentityReportTime || GameManager.Instance == null || GameManager.Instance.PlayerEntity == null)
                 return;
 
+            if (DFMPClientJoinFlowController.Instance != null &&
+                !DFMPClientJoinFlowController.Instance.ShouldReportLocalIdentity())
+                return;
+
             nextIdentityReportTime = Time.unscaledTime + 5f;
             var playerEntity = GameManager.Instance.PlayerEntity;
             NetworkClient.Send(new DFMPPlayerIdentityReport

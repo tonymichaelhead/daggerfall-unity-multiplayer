@@ -6,5 +6,8 @@
   "TickRate": 30,
   "HeartbeatInterval": 5.0,
   "LanDiscoveryEnabled": true,
-  "Motd": "Welcome to Daggerfall Unity Multiplayer"
+  "Motd": "Welcome to Daggerfall Unity Multiplayer",
+  "Gameplay": {
+    "EnableBeginnerTutorial": false
+  }
 }

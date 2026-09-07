@@ -163,8 +163,12 @@ namespace DFMP.Runtime
                 Decision = decision.Kind,
                 AccountId = decision.AccountId,
                 ServerWorldId = decision.ServerWorldId,
-                Reason = decision.Reason
+                Reason = decision.Reason,
+                EnableBeginnerTutorial = Config.Gameplay.EnableBeginnerTutorial
             });
+
+            if (decision.Accepted && decision.Kind == DFMPJoinDecisionKind.ReturningPlayer && decision.CharacterRecord != null)
+                conn.Send(DFMPCharacterSnapshotProtocol.FromRecord(decision.CharacterRecord));
 
             if (!decision.Accepted)
             {

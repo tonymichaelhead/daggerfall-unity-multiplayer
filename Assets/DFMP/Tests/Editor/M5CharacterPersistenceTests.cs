@@ -183,9 +183,11 @@ namespace DFMP.Tests
 
             flow.ApplyJoinResult(new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.ReturningPlayer });
             Assert.AreEqual(DFMPClientJoinState.ReturningPlayerRestore, flow.State);
+            Assert.IsFalse(flow.ShouldReportLocalIdentity(false));
 
             flow.ApplyJoinResult(new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.Rejected });
             Assert.AreEqual(DFMPClientJoinState.Rejected, flow.State);
+            Assert.IsTrue(flow.ShouldReportLocalIdentity(false));
         }
 
         [Test]
@@ -200,5 +202,56 @@ namespace DFMP.Tests
             Assert.IsFalse(DFMPClientJoinFlow.ShouldLoadGameScene(
                 new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.ReturningPlayer }, 1));
         }
+
+        [Test]
+        public void CharacterSnapshot_NormalizesAndValidatesSavedIdentity()
+        {
+            var record = DFMPCharacterRecord.CreateNew("steam:charlie", "world-m5", "  Charlie  ");
+            record.Race = 99;
+            record.Gender = 4;
+            record.OutfitVariant = 99;
+            record.FaceVariant = 99;
+
+            DFMPCharacterSnapshotMessage snapshot = DFMPCharacterSnapshotProtocol.FromRecord(record);
+
+            Assert.AreEqual("steam:charlie", snapshot.AccountId);
+            Assert.AreEqual("Charlie", snapshot.CharacterName);
+            Assert.AreEqual(1, snapshot.Race);
+            Assert.AreEqual(0, snapshot.Gender);
+            Assert.AreEqual(3, snapshot.OutfitVariant);
+            Assert.AreEqual(23, snapshot.FaceVariant);
+            Assert.IsTrue(DFMPCharacterSnapshotProtocol.IsValid(snapshot));
+
+            snapshot.FaceVariant = 24;
+            Assert.IsFalse(DFMPCharacterSnapshotProtocol.IsValid(snapshot));
+        }
+
+        [Test]
+        public void CharacterSnapshot_IsOnlyProducedForReturningCharacters()
+        {
+            var firstJoin = new DFMPJoinDecision { Kind = DFMPJoinDecisionKind.FirstJoin };
+            var returning = new DFMPJoinDecision
+            {
+                Kind = DFMPJoinDecisionKind.ReturningPlayer,
+                CharacterRecord = DFMPCharacterRecord.CreateNew("steam:charlie", "world-m5", "Charlie")
+            };
+
+            Assert.IsTrue(firstJoin.Accepted);
+            Assert.IsNull(firstJoin.CharacterRecord);
+            Assert.IsTrue(returning.Accepted);
+            Assert.NotNull(returning.CharacterRecord);
+            Assert.IsTrue(DFMPCharacterSnapshotProtocol.IsValid(
+                DFMPCharacterSnapshotProtocol.FromRecord(returning.CharacterRecord)));
+        }
+
+            [Test]
+            public void JoinResult_DefaultsBeginnerTutorialToDisabled()
+            {
+                var config = new DFMPServerConfig();
+                config.Normalize();
+
+                Assert.IsFalse(config.Gameplay.EnableBeginnerTutorial);
+                Assert.IsFalse(new DFMPJoinResultMessage().EnableBeginnerTutorial);
+            }
     }
 }
