@@ -59,6 +59,7 @@ namespace DFMP.Runtime
             DFMPTimeState.RegisterClientSpawnHandler();
             DFMPPlayerSessionState.RegisterClientSpawnHandler();
             DFMPSpawnAssignmentController.RegisterClientHandler();
+            NetworkClient.RegisterHandler<DFMPChatMessage>(OnChatMessageReceived);
             DFMPPositionReporter.EnsureInstance();
             DFMPRemotePlayerPresentationController.EnsureInstance();
 
@@ -69,6 +70,19 @@ namespace DFMP.Runtime
             Manager.StartClient();
 
             Debug.Log($"[DFMP Net] Client connection requested: transport=KCP, address={Address}, port={port}, tickRate={tickRate}.");
+        }
+
+        static void OnChatMessageReceived(DFMPChatMessage message)
+        {
+            DFMPEventBus.Instance.PublishChatMessageReceived(new DFMPChatMessageReceivedEvent
+            {
+                ConnectionId = message.ConnectionId,
+                SenderDisplayName = message.SenderDisplayName,
+                MessageText = message.Text,
+                Message = message
+            });
+
+            Debug.Log($"[DFMP Chat] Client received chat: sender='{message.SenderDisplayName}', text='{message.Text}'.");
         }
 
         public static void Stop()

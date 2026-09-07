@@ -94,6 +94,7 @@ namespace DFMP.Runtime
 
             sessionState.SetPosition(acknowledgement.WorldX, acknowledgement.WorldY, acknowledgement.WorldZ);
             sessionState.ConfirmSpawn();
+            sessionState.SetMovement(false);
             return true;
         }
     }

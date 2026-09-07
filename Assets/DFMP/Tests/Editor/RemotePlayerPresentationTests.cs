@@ -100,5 +100,12 @@ namespace DFMP.Tests
                 Object.DestroyImmediate(go);
             }
         }
+
+        [Test]
+        public void AvatarIdleState_MapsReplicatedMovementState()
+        {
+            Assert.IsFalse(DFMPRemotePlayerPresentation.GetAvatarIsIdle(true));
+            Assert.IsTrue(DFMPRemotePlayerPresentation.GetAvatarIsIdle(false));
+        }
     }
 }

@@ -68,6 +68,7 @@ namespace DFMP.Tests
 
                 session.ConfirmSpawn();
                 Assert.IsFalse(DFMPPositionProtocol.IsAccepted(session, report, 0.04f));
+                Assert.AreEqual(DFMPPositionRejectionReason.TooSoon, DFMPPositionProtocol.GetRejectionReason(session, report, 0.04f));
             }
             finally
             {
@@ -96,6 +97,86 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void PositionRejectionReason_IdentifiesInvalidReport()
+        {
+            GameObject go = new GameObject("DFMP_PositionRejectionReasonTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6792821, 0f, 9374554);
+                session.ConfirmSpawn();
+                var report = new DFMPPlayerPositionReport { WorldX = 0, WorldY = 0f, WorldZ = 0 };
+
+                Assert.AreEqual(DFMPPositionRejectionReason.InvalidWorldPosition, DFMPPositionProtocol.GetRejectionReason(session, report, 0.1f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void MovementProtocol_StationaryReportRemainsIdle()
+        {
+            Assert.IsFalse(DFMPMovementProtocol.IsMoving(100, 200, 100, 200));
+            Assert.IsFalse(DFMPMovementProtocol.IsMoving(100, 200, 100 + DFMPMovementProtocol.MovementThreshold, 200));
+        }
+
+        [Test]
+        public void MovementProtocol_MovementAboveThresholdIsMoving()
+        {
+            Assert.IsTrue(DFMPMovementProtocol.IsMoving(100, 200, 100 + DFMPMovementProtocol.MovementThreshold + 1, 200));
+        }
+
+        [Test]
+        public void MovementProtocol_ReturnsToIdleWhenAcceptedReportStops()
+        {
+            Assert.IsTrue(DFMPMovementProtocol.IsMoving(100, 200, 200, 200));
+            Assert.IsFalse(DFMPMovementProtocol.IsMoving(200, 200, 200, 200));
+        }
+
+        [Test]
+        public void SessionMovementState_StartsIdle()
+        {
+            GameObject go = new GameObject("DFMP_MovementStateTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6792821, 0f, 9374554);
+
+                Assert.IsFalse(session.IsMoving);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void RejectedPositionReport_DoesNotChangeMovementState()
+        {
+            GameObject go = new GameObject("DFMP_RejectedMovementStateTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6792821, 0f, 9374554);
+                session.ConfirmSpawn();
+                session.SetMovement(true);
+                var rejectedReport = new DFMPPlayerPositionReport { WorldX = 6800000, WorldY = 0f, WorldZ = 9374554 };
+
+                Assert.IsFalse(DFMPPositionProtocol.IsAccepted(session, rejectedReport, 0.1f));
+                Assert.IsTrue(session.IsMoving);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void IsAccepted_RejectsExcessiveMovement()
         {
             GameObject go = new GameObject("DFMP_PositionSpeedTest");
@@ -108,6 +189,7 @@ namespace DFMP.Tests
                 var report = new DFMPPlayerPositionReport { WorldX = 6800000, WorldY = 0f, WorldZ = 9374554 };
 
                 Assert.IsFalse(DFMPPositionProtocol.IsAccepted(session, report, 0.1f));
+                Assert.AreEqual(DFMPPositionRejectionReason.ExcessiveDisplacement, DFMPPositionProtocol.GetRejectionReason(session, report, 0.1f));
             }
             finally
             {

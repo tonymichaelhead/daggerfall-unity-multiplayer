@@ -23,6 +23,9 @@ namespace DFMP.Runtime
         bool spawnConfirmed;
 
         [SyncVar]
+        bool isMoving;
+
+        [SyncVar]
         string displayName = "Player";
 
         [SyncVar]
@@ -63,6 +66,11 @@ namespace DFMP.Runtime
         public bool SpawnConfirmed
         {
             get { return spawnConfirmed; }
+        }
+
+        public bool IsMoving
+        {
+            get { return isMoving; }
         }
 
         public string DisplayName
@@ -106,6 +114,11 @@ namespace DFMP.Runtime
         public void ConfirmSpawn()
         {
             spawnConfirmed = true;
+        }
+
+        public void SetMovement(bool newIsMoving)
+        {
+            isMoving = newIsMoving;
         }
 
         public void SetPosition(int newWorldX, float newWorldY, int newWorldZ)

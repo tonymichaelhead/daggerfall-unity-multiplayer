@@ -86,6 +86,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPSpawnAcknowledgement>(OnSpawnAcknowledgement);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
+            NetworkServer.RegisterHandler<DFMPChatMessage>(OnChatMessage);
             SpawnTimeState();
 
             if (enableDiscovery)
@@ -151,6 +152,12 @@ namespace DFMP.Runtime
 
             NetworkServer.Spawn(sessionGo, DFMPPlayerSessionState.AssetId);
             playerSessionStates.Add(conn.connectionId, sessionState);
+            DFMPEventBus.Instance.PublishPlayerConnected(new DFMPPlayerConnectedEvent
+            {
+                ConnectionId = conn.connectionId,
+                Address = conn.address,
+                SessionState = sessionState
+            });
 
             Debug.Log($"[DFMP Session] Server created player session state: connectionId={conn.connectionId}, world={worldX}/0/{worldZ}.");
             return sessionState;
@@ -212,6 +219,15 @@ namespace DFMP.Runtime
 
             lastPositionReportTimes.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
+            DFMPEventBus.Instance.PublishPlayerSpawned(new DFMPPlayerSpawnedEvent
+            {
+                ConnectionId = conn.connectionId,
+                SessionState = sessionState,
+                WorldX = sessionState.WorldX,
+                WorldY = sessionState.WorldY,
+                WorldZ = sessionState.WorldZ,
+                DisplayName = sessionState.DisplayName
+            });
             Debug.Log($"[DFMP Session] Server confirmed spawn: connectionId={conn.connectionId}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
         }
 
@@ -226,19 +242,22 @@ namespace DFMP.Runtime
                 ? Time.unscaledTime - lastReportTime
                 : DFMPPositionProtocol.MinimumReportInterval;
 
-            if (!DFMPPositionProtocol.IsAccepted(sessionState, report, elapsedSeconds))
+            DFMPPositionRejectionReason rejectionReason = DFMPPositionProtocol.GetRejectionReason(sessionState, report, elapsedSeconds);
+            if (rejectionReason != DFMPPositionRejectionReason.None)
             {
                 // Anchor time is deliberately not advanced so the movement budget keeps growing and a
                 // legitimate teleport re-anchors instead of locking the session out forever.
                 if (sessionState != null && sessionState.SpawnConfirmed && rejectedPositionReportConnections.Add(conn.connectionId))
-                    Debug.LogWarning($"[DFMP Session] Server rejected player position report: connectionId={conn.connectionId}, session={sessionState.WorldX}/{sessionState.WorldZ}, report={report.WorldX}/{report.WorldZ}, elapsed={elapsedSeconds:F2}s.");
+                    Debug.LogWarning($"[DFMP Session] Server rejected player position report: connectionId={conn.connectionId}, reason={rejectionReason}, session={sessionState.WorldX}/{sessionState.WorldZ}, report={report.WorldX}/{report.WorldZ}, elapsed={elapsedSeconds:F2}s.");
 
                 return;
             }
 
             lastPositionReportTimes[conn.connectionId] = Time.unscaledTime;
             rejectedPositionReportConnections.Remove(conn.connectionId);
+            bool isMoving = DFMPMovementProtocol.IsMoving(sessionState.WorldX, sessionState.WorldZ, report.WorldX, report.WorldZ);
             sessionState.SetPosition(report.WorldX, report.WorldY, report.WorldZ);
+            sessionState.SetMovement(isMoving);
             sessionState.SetFacingYaw(DFMPPositionProtocol.NormalizeFacingYaw(report.FacingYaw));
             if (activePositionReportConnections.Add(conn.connectionId))
                 Debug.Log($"[DFMP Session] Server accepted player position reports: connectionId={conn.connectionId}.");
@@ -258,6 +277,49 @@ namespace DFMP.Runtime
                 DFMPPositionProtocol.GetFaceVariant(report.FaceVariant));
         }
 
+        private static void OnChatMessage(NetworkConnectionToClient conn, DFMPChatMessage message)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
+            {
+                Debug.LogWarning($"[DFMP Chat] Rejected message without a session: connectionId={conn.connectionId}.");
+                return;
+            }
+
+            string reason;
+            if (!DFMPChatProtocol.TryValidateSender(sessionState, conn.connectionId, conn.connectionId, out reason))
+            {
+                Debug.LogWarning($"[DFMP Chat] Rejected message: connectionId={conn.connectionId}, reason={reason}.");
+                return;
+            }
+
+            string sanitizedText;
+            if (!DFMPChatProtocol.TrySanitize(message.Text, out sanitizedText, out reason))
+            {
+                Debug.LogWarning($"[DFMP Chat] Rejected message: connectionId={conn.connectionId}, reason={reason}.");
+                return;
+            }
+
+            if (!DFMPChatProtocol.RateLimiter.TryConsume(conn.connectionId, Time.unscaledTime, out reason))
+            {
+                Debug.LogWarning($"[DFMP Chat] Rejected message: connectionId={conn.connectionId}, reason={reason}.");
+                return;
+            }
+
+            var acceptedMessage = new DFMPChatMessage
+            {
+                ConnectionId = conn.connectionId,
+                SenderDisplayName = sessionState.DisplayName,
+                Text = sanitizedText
+            };
+
+            NetworkServer.SendToReady(acceptedMessage);
+            Debug.Log($"[DFMP Chat] Accepted message: connectionId={conn.connectionId}, sender='{sessionState.DisplayName}', text='{sanitizedText}'.");
+        }
+
         public static void DestroyPlayerSessionState(NetworkConnectionToClient conn)
         {
             if (conn == null)
@@ -267,10 +329,19 @@ namespace DFMP.Runtime
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
                 return;
 
+            DFMPEventBus.Instance.PublishPlayerDisconnected(new DFMPPlayerDisconnectedEvent
+            {
+                ConnectionId = conn.connectionId,
+                Address = conn.address,
+                SessionState = sessionState,
+                Reason = "disconnect"
+            });
+
             playerSessionStates.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
+            DFMPChatProtocol.RateLimiter.Reset(conn.connectionId);
             if (sessionState != null)
                 NetworkServer.Destroy(sessionState.gameObject);
         }

@@ -61,6 +61,11 @@ namespace DFMP.Runtime
         {
             return cachedRace != session.Race || cachedGender != session.Gender || cachedOutfitVariant != session.OutfitVariant || cachedFaceVariant != session.FaceVariant;
         }
+
+        public static bool GetAvatarIsIdle(bool isMoving)
+        {
+            return !isMoving;
+        }
     }
 
     public class DFMPRemoteAvatarAppearance : MonoBehaviour
@@ -79,6 +84,7 @@ namespace DFMP.Runtime
             Races displayRace = (Races)DFMPPositionProtocol.GetDisplayRace(session.Race);
             Genders displayGender = (Genders)DFMPPositionProtocol.GetDisplayGender(session.Gender);
             billboard.SetPerson(displayRace, displayGender, session.OutfitVariant, false, session.FaceVariant, 0);
+            billboard.IsIdle = DFMPRemotePlayerPresentation.GetAvatarIsIdle(session.IsMoving);
             transform.localPosition = new Vector3(0f, billboard.GetSize().y * 0.5f, 0f);
 
             race = session.Race;
@@ -200,10 +206,12 @@ namespace DFMP.Runtime
         {
             GameObject labelGo = new GameObject("Label");
             labelGo.transform.SetParent(proxyTransform, false);
-            labelGo.transform.localPosition = new Vector3(0f, 1.4f, 0f);
+            MobilePersonBillboard billboard = proxyTransform.GetComponentInChildren<MobilePersonBillboard>();
+            float avatarHeight = billboard != null ? billboard.GetSize().y : 2f;
+            labelGo.transform.localPosition = new Vector3(0f, avatarHeight + 0.2f, 0f);
             var label = labelGo.AddComponent<TextMesh>();
             label.text = $"Player {connectionId}";
-            label.characterSize = 0.15f;
+            label.characterSize = 0.05f;
             label.fontSize = 32;
             label.anchor = TextAnchor.MiddleCenter;
             label.alignment = TextAlignment.Center;
@@ -222,6 +230,14 @@ namespace DFMP.Runtime
             DFMPRemoteAvatarAppearance avatar = proxy.GetComponentInChildren<DFMPRemoteAvatarAppearance>();
             if (avatar != null)
                 avatar.ApplyIfChanged(session);
+
+            MobilePersonBillboard billboard = proxy.GetComponentInChildren<MobilePersonBillboard>();
+            if (billboard != null)
+            {
+                bool isIdle = DFMPRemotePlayerPresentation.GetAvatarIsIdle(session.IsMoving);
+                if (billboard.IsIdle != isIdle)
+                    billboard.IsIdle = isIdle;
+            }
         }
 
             static void FaceLabelToCamera(GameObject proxy)

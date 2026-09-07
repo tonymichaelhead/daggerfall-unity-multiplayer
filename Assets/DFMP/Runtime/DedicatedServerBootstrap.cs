@@ -46,6 +46,9 @@ namespace DFMP.Runtime
 
             IsDedicatedServer = true;
 
+            fileConfig.Normalize();
+            DFMPChatProtocol.ConfigureFromConfig(fileConfig);
+
             // Command-line args take precedence over config file values if explicitly set
             ServerPort = cli.Port != 7777 ? cli.Port : fileConfig.Port;
             DiscoveryPort = fileConfig.DiscoveryPort != 0 ? fileConfig.DiscoveryPort : (ServerPort + 1);

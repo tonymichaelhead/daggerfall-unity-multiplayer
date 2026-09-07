@@ -115,11 +115,11 @@ Complete slices:
 - M3.4: Server-owned display names and facing yaw drive remote presentation.
 - M3.5: Remote visuals use DFU's native `MobilePersonBillboard` rather than a player or enemy gameplay prefab.
 - M3.6: Race, gender, outfit, and face metadata configure native avatar visuals. Unsupported native mobile-person races use a neutral visual fallback while their actual race remains in session state.
+- M3.7: Accepted authoritative movement reports derive a replicated moving/idle state and drive `MobilePersonBillboard.IsIdle`.
+- M3.8: Spawn re-anchoring resets stale movement state, and rejected position reports expose concise server-side rejection reasons.
 
 Remaining M3 work:
 
-- M3.7: Derive moving/idle visual state from accepted authoritative movement and drive `MobilePersonBillboard.IsIdle`.
-- M3.8: Add travel/respawn-aware movement rules and concise diagnostics for rejected reports.
 - M3 close-out: Two graphical clients connect, spawn, see grounded named avatars, observe movement and facing, and hide remote avatars outside presentation scope.
 
 Verification:

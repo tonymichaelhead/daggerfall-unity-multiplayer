@@ -106,10 +106,12 @@ namespace DFMP.Tests
             {
                 var session = go.AddComponent<DFMPPlayerSessionState>();
                 session.Initialize(7, 6799360, 0f, 9388032);
+                session.SetMovement(true);
                 var acknowledgement = new DFMPSpawnAcknowledgement { WorldX = 6792821, WorldY = 12.5f, WorldZ = 9374554 };
 
                 Assert.IsTrue(DFMPSpawnProtocol.TryConfirmSpawn(session, acknowledgement));
                 Assert.IsTrue(session.SpawnConfirmed);
+                Assert.IsFalse(session.IsMoving);
                 Assert.AreEqual(6792821, session.WorldX);
                 Assert.AreEqual(12.5f, session.WorldY);
                 Assert.AreEqual(9374554, session.WorldZ);

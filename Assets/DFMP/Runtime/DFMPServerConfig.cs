@@ -5,6 +5,13 @@ using UnityEngine;
 namespace DFMP.Runtime
 {
     [Serializable]
+    public class DFMPServerChatConfig
+    {
+        public int MaxMessageLength = 256;
+        public float MinIntervalSeconds = 1.0f;
+    }
+
+    [Serializable]
     public class DFMPServerConfig
     {
         public const string DefaultConfigFileName = "dfmp-server.json";
@@ -17,10 +24,31 @@ namespace DFMP.Runtime
         public float HeartbeatInterval = 5.0f;
         public bool LanDiscoveryEnabled = true;
         public string Motd = "Welcome to Daggerfall Unity Multiplayer";
+        public DFMPServerChatConfig Chat = new DFMPServerChatConfig();
+
+        public void Normalize()
+        {
+            if (string.IsNullOrWhiteSpace(ServerName))
+                ServerName = "Tony's DFU RP";
+
+            Port = Port > 0 && Port <= 65535 ? Port : 7777;
+            DiscoveryPort = DiscoveryPort > 0 && DiscoveryPort <= 65535 ? DiscoveryPort : 7778;
+            MaxConnections = MaxConnections > 0 && MaxConnections <= 128 ? MaxConnections : 16;
+            TickRate = TickRate >= 10 && TickRate <= 120 ? TickRate : 30;
+            HeartbeatInterval = HeartbeatInterval > 0f ? HeartbeatInterval : 5.0f;
+            LanDiscoveryEnabled = true;
+            if (string.IsNullOrWhiteSpace(Motd))
+                Motd = "Welcome to Daggerfall Unity Multiplayer";
+
+            if (Chat == null)
+                Chat = new DFMPServerChatConfig();
+
+            Chat.MaxMessageLength = Chat.MaxMessageLength > 0 && Chat.MaxMessageLength <= 2048 ? Chat.MaxMessageLength : 256;
+            Chat.MinIntervalSeconds = Chat.MinIntervalSeconds > 0f ? Chat.MinIntervalSeconds : 1.0f;
+        }
 
         public static string GetConfigFilePath()
         {
-            // First check root project/working directory, else persistentDataPath
             string rootPath = Path.Combine(Directory.GetCurrentDirectory(), DefaultConfigFileName);
             return rootPath;
         }
@@ -36,7 +64,10 @@ namespace DFMP.Runtime
                     string json = File.ReadAllText(filePath);
                     var config = JsonUtility.FromJson<DFMPServerConfig>(json);
                     if (config != null)
+                    {
+                        config.Normalize();
                         return config;
+                    }
                 }
             }
             catch (Exception ex)
@@ -45,6 +76,7 @@ namespace DFMP.Runtime
             }
 
             var defaultConfig = new DFMPServerConfig();
+            defaultConfig.Normalize();
             Save(defaultConfig, filePath);
             return defaultConfig;
         }
@@ -54,6 +86,7 @@ namespace DFMP.Runtime
             if (config == null)
                 return;
 
+            config.Normalize();
             string filePath = !string.IsNullOrEmpty(customPath) ? customPath : GetConfigFilePath();
 
             try

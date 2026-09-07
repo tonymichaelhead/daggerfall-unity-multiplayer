@@ -19,6 +19,16 @@ namespace DFMP.Runtime
         public int FaceVariant;
     }
 
+    public enum DFMPPositionRejectionReason
+    {
+        None,
+        MissingSession,
+        SpawnNotConfirmed,
+        TooSoon,
+        InvalidWorldPosition,
+        ExcessiveDisplacement
+    }
+
     public static class DFMPPositionProtocol
     {
         public const float MinimumReportInterval = 0.1f;
@@ -98,13 +108,39 @@ namespace DFMP.Runtime
 
         public static bool IsAccepted(DFMPPlayerSessionState sessionState, DFMPPlayerPositionReport report, float elapsedSeconds)
         {
-            if (sessionState == null || !sessionState.SpawnConfirmed || elapsedSeconds < MinimumAcceptedReportInterval || !IsValidWorldPosition(report))
-                return false;
+            return GetRejectionReason(sessionState, report, elapsedSeconds) == DFMPPositionRejectionReason.None;
+        }
+
+        public static DFMPPositionRejectionReason GetRejectionReason(DFMPPlayerSessionState sessionState, DFMPPlayerPositionReport report, float elapsedSeconds)
+        {
+            if (sessionState == null)
+                return DFMPPositionRejectionReason.MissingSession;
+            if (!sessionState.SpawnConfirmed)
+                return DFMPPositionRejectionReason.SpawnNotConfirmed;
+            if (elapsedSeconds < MinimumAcceptedReportInterval)
+                return DFMPPositionRejectionReason.TooSoon;
+            if (!IsValidWorldPosition(report))
+                return DFMPPositionRejectionReason.InvalidWorldPosition;
 
             float maxDistance = MaximumSpeed * elapsedSeconds;
             float deltaX = report.WorldX - sessionState.WorldX;
             float deltaZ = report.WorldZ - sessionState.WorldZ;
-            return deltaX * deltaX + deltaZ * deltaZ <= maxDistance * maxDistance;
+            return deltaX * deltaX + deltaZ * deltaZ <= maxDistance * maxDistance
+                ? DFMPPositionRejectionReason.None
+                : DFMPPositionRejectionReason.ExcessiveDisplacement;
+        }
+    }
+
+    public static class DFMPMovementProtocol
+    {
+        public const int MovementThreshold = 0;
+
+        public static bool IsMoving(int previousWorldX, int previousWorldZ, int currentWorldX, int currentWorldZ)
+        {
+            long deltaX = (long)currentWorldX - previousWorldX;
+            long deltaZ = (long)currentWorldZ - previousWorldZ;
+            long threshold = MovementThreshold;
+            return deltaX * deltaX + deltaZ * deltaZ > threshold * threshold;
         }
     }
 }
