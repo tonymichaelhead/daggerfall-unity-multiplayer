@@ -25,6 +25,46 @@ namespace DFMP.Runtime
         public bool EnableBeginnerTutorial;
     }
 
+    public static class DFMPStartingLocationModes
+    {
+        public const string LocationCenter = "LocationCenter";
+        public const string ExplicitWorldCoordinates = "ExplicitWorldCoordinates";
+        public const string NamedStartMarker = "NamedStartMarker";
+        public const string Scripted = "Scripted";
+    }
+
+    [Serializable]
+    public class DFMPServerStartingLocationConfig
+    {
+        public string Mode = DFMPStartingLocationModes.LocationCenter;
+        public string RegionName = "Daggerfall";
+        public string LocationName = "Daggerfall";
+        public string MarkerName = string.Empty;
+        public int WorldX;
+        public float WorldY;
+        public int WorldZ;
+
+        public void Normalize()
+        {
+            Mode = NormalizeMode(Mode);
+            RegionName = string.IsNullOrWhiteSpace(RegionName) ? "Daggerfall" : RegionName.Trim();
+            LocationName = string.IsNullOrWhiteSpace(LocationName) ? "Daggerfall" : LocationName.Trim();
+            MarkerName = string.IsNullOrWhiteSpace(MarkerName) ? string.Empty : MarkerName.Trim();
+        }
+
+        static string NormalizeMode(string mode)
+        {
+            if (string.Equals(mode, DFMPStartingLocationModes.ExplicitWorldCoordinates, StringComparison.OrdinalIgnoreCase))
+                return DFMPStartingLocationModes.ExplicitWorldCoordinates;
+            if (string.Equals(mode, DFMPStartingLocationModes.NamedStartMarker, StringComparison.OrdinalIgnoreCase))
+                return DFMPStartingLocationModes.NamedStartMarker;
+            if (string.Equals(mode, DFMPStartingLocationModes.Scripted, StringComparison.OrdinalIgnoreCase))
+                return DFMPStartingLocationModes.Scripted;
+
+            return DFMPStartingLocationModes.LocationCenter;
+        }
+    }
+
     [Serializable]
     public class DFMPServerConfig
     {
@@ -41,6 +81,7 @@ namespace DFMP.Runtime
         public DFMPServerChatConfig Chat = new DFMPServerChatConfig();
         public DFMPServerIdentityConfig Identity = new DFMPServerIdentityConfig();
         public DFMPServerGameplayConfig Gameplay = new DFMPServerGameplayConfig();
+        public DFMPServerStartingLocationConfig StartingLocation = new DFMPServerStartingLocationConfig();
 
         public void Normalize()
         {
@@ -70,6 +111,11 @@ namespace DFMP.Runtime
 
             if (Gameplay == null)
                 Gameplay = new DFMPServerGameplayConfig();
+
+            if (StartingLocation == null)
+                StartingLocation = new DFMPServerStartingLocationConfig();
+
+            StartingLocation.Normalize();
         }
 
         public static string GetConfigFilePath()

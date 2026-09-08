@@ -1,3 +1,7 @@
+using DaggerfallConnect;
+using DaggerfallConnect.Arena2;
+using DaggerfallConnect.Utility;
+using DaggerfallWorkshop;
 using UnityEngine;
 
 namespace DFMP.Runtime
@@ -7,6 +11,12 @@ namespace DFMP.Runtime
         public int WorldX;
         public float WorldY;
         public int WorldZ;
+    }
+
+    public struct DFMPStartingLocationResolution
+    {
+        public DFMPWorldPosition Position;
+        public DFMPWorldContextKey Context;
     }
 
     public class DFMPSpawnAssignmentState
@@ -95,6 +105,107 @@ namespace DFMP.Runtime
             sessionState.SetPosition(acknowledgement.WorldX, acknowledgement.WorldY, acknowledgement.WorldZ);
             sessionState.ConfirmSpawn();
             sessionState.SetMovement(false);
+            return true;
+        }
+
+        public static bool TryResolveStartingLocation(DFMPServerStartingLocationConfig config, out DFMPStartingLocationResolution resolution, out string reason)
+        {
+            resolution = new DFMPStartingLocationResolution();
+            reason = string.Empty;
+
+            if (config == null)
+                config = new DFMPServerStartingLocationConfig();
+
+            config.Normalize();
+            if (config.Mode == DFMPStartingLocationModes.ExplicitWorldCoordinates)
+                return TryResolveExplicitWorldCoordinates(config, out resolution, out reason);
+
+            if (config.Mode == DFMPStartingLocationModes.NamedStartMarker)
+            {
+                reason = "named start markers require the transition assignment protocol to carry marker identity";
+                return false;
+            }
+
+            if (config.Mode == DFMPStartingLocationModes.Scripted)
+            {
+                reason = "scripted starting locations are reserved for a later scripting milestone";
+                return false;
+            }
+
+            return TryResolveLocationCenter(config.RegionName, config.LocationName, out resolution, out reason);
+        }
+
+        public static bool TryResolveExplicitWorldCoordinates(DFMPServerStartingLocationConfig config, out DFMPStartingLocationResolution resolution, out string reason)
+        {
+            resolution = new DFMPStartingLocationResolution();
+            reason = string.Empty;
+
+            if (config == null)
+            {
+                reason = "starting-location config is unavailable";
+                return false;
+            }
+
+            if (config.WorldX == 0 && config.WorldZ == 0)
+            {
+                reason = "explicit world coordinates must not be the world origin";
+                return false;
+            }
+
+            DFPosition mapPixel = MapsFile.WorldCoordToMapPixel(config.WorldX, config.WorldZ);
+            resolution = new DFMPStartingLocationResolution
+            {
+                Position = new DFMPWorldPosition
+                {
+                    WorldX = config.WorldX,
+                    WorldY = config.WorldY,
+                    WorldZ = config.WorldZ
+                },
+                Context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = mapPixel.X,
+                    MapPixelY = mapPixel.Y,
+                    LocationId = config.LocationName
+                }
+            };
+            return true;
+        }
+
+        public static bool TryResolveLocationCenter(string regionName, string locationName, out DFMPStartingLocationResolution resolution, out string reason)
+        {
+            resolution = new DFMPStartingLocationResolution();
+            reason = string.Empty;
+
+            if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.ContentReader == null || DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
+            {
+                reason = "Daggerfall location data is unavailable";
+                return false;
+            }
+
+            DFLocation location = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetLocation(regionName, locationName);
+            if (!location.Loaded)
+            {
+                reason = $"location '{regionName}/{locationName}' was not found in MAPS.BSA";
+                return false;
+            }
+
+            DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
+            Rect locationRect = DaggerfallLocation.GetLocationRect(location);
+            DFMPWorldPosition spawnPosition = GetLocationCenter(locationRect);
+            resolution = new DFMPStartingLocationResolution
+            {
+                Position = spawnPosition,
+                Context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = mapPixel.X,
+                    MapPixelY = mapPixel.Y,
+                    RegionIndex = location.RegionIndex,
+                    LocationIndex = location.LocationIndex,
+                    LocationId = location.Name
+                }
+            };
             return true;
         }
     }

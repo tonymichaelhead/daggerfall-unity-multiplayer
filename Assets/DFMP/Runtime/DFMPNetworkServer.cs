@@ -261,7 +261,8 @@ namespace DFMP.Runtime
             var sessionState = sessionGo.AddComponent<DFMPPlayerSessionState>();
             int worldX;
             int worldZ;
-            GetInitialSpawnCoordinates(out worldX, out worldZ);
+            DFMPWorldContextKey initialContext;
+            GetInitialSpawn(out worldX, out worldZ, out initialContext);
 
             DFMPJoinDecision savedJoinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out savedJoinDecision) &&
@@ -270,10 +271,13 @@ namespace DFMP.Runtime
             {
                 worldX = savedJoinDecision.CharacterRecord.WorldX;
                 worldZ = savedJoinDecision.CharacterRecord.WorldZ;
+                initialContext = savedJoinDecision.CharacterRecord.Context != null
+                    ? savedJoinDecision.CharacterRecord.Context.ToKey()
+                    : CreateExteriorWorldContext(worldX, worldZ, "Daggerfall");
             }
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
-            worldOccupancy.SetContext(conn.connectionId, CreateExteriorWorldContext(worldX, worldZ, "Daggerfall"));
+            worldOccupancy.SetContext(conn.connectionId, initialContext);
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)
@@ -315,10 +319,24 @@ namespace DFMP.Runtime
             }
         }
 
-        private static void GetInitialSpawnCoordinates(out int worldX, out int worldZ)
+        private static void GetInitialSpawn(out int worldX, out int worldZ, out DFMPWorldContextKey context)
         {
             worldX = 0;
             worldZ = 0;
+            context = CreateExteriorWorldContext(0, 0, "Daggerfall");
+
+            DFMPStartingLocationResolution resolution;
+            string reason;
+            if (DFMPSpawnProtocol.TryResolveStartingLocation(Config != null ? Config.StartingLocation : null, out resolution, out reason))
+            {
+                worldX = resolution.Position.WorldX;
+                worldZ = resolution.Position.WorldZ;
+                context = resolution.Context;
+                Debug.Log($"[DFMP Session] Resolved configured spawn: mode={(Config != null && Config.StartingLocation != null ? Config.StartingLocation.Mode : DFMPStartingLocationModes.LocationCenter)}, mapPixel={context.MapPixelX}/{context.MapPixelY}, world={worldX}/{worldZ}.");
+                return;
+            }
+
+            Debug.LogWarning($"[DFMP Session] Configured spawn was unavailable: {reason}. Falling back to Daggerfall city center.");
 
             if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.ContentReader == null || DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
             {
@@ -338,6 +356,15 @@ namespace DFMP.Runtime
             DFMPWorldPosition spawnPosition = DFMPSpawnProtocol.GetLocationCenter(locationRect);
             worldX = spawnPosition.WorldX;
             worldZ = spawnPosition.WorldZ;
+            context = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Exterior,
+                MapPixelX = mapPixel.X,
+                MapPixelY = mapPixel.Y,
+                RegionIndex = location.RegionIndex,
+                LocationIndex = location.LocationIndex,
+                LocationId = location.Name
+            };
 
             Debug.Log($"[DFMP Session] Resolved Daggerfall City spawn: mapPixel={mapPixel.X}/{mapPixel.Y}, locationRect={locationRect.xMin}/{locationRect.yMin}/{locationRect.width}/{locationRect.height}, world={worldX}/{worldZ}.");
         }

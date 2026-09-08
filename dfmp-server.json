@@ -9,5 +9,14 @@
   "Motd": "Welcome to Daggerfall Unity Multiplayer",
   "Gameplay": {
     "EnableBeginnerTutorial": false
+  },
+  "StartingLocation": {
+    "Mode": "LocationCenter",
+    "RegionName": "Daggerfall",
+    "LocationName": "Daggerfall",
+    "MarkerName": "",
+    "WorldX": 0,
+    "WorldY": 0.0,
+    "WorldZ": 0
   }
 }

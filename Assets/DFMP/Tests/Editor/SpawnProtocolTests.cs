@@ -137,5 +137,44 @@ namespace DFMP.Tests
             Assert.AreEqual(0f, spawn.WorldY);
             Assert.IsTrue(DFMPSpawnProtocol.IsWithinMapPixel(spawn.WorldX, spawn.WorldZ, 207, 213));
         }
+
+        [Test]
+        public void StartingLocation_ResolvesExplicitWorldCoordinates()
+        {
+            var config = new DFMPServerStartingLocationConfig
+            {
+                Mode = DFMPStartingLocationModes.ExplicitWorldCoordinates,
+                LocationName = "Daggerfall",
+                WorldX = 6792821,
+                WorldY = 12.5f,
+                WorldZ = 9374554
+            };
+
+            DFMPStartingLocationResolution resolution;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveStartingLocation(config, out resolution, out reason), reason);
+            Assert.AreEqual(6792821, resolution.Position.WorldX);
+            Assert.AreEqual(12.5f, resolution.Position.WorldY);
+            Assert.AreEqual(9374554, resolution.Position.WorldZ);
+            Assert.AreEqual(DFMPWorldContextKind.Exterior, resolution.Context.Kind);
+            Assert.AreEqual(207, resolution.Context.MapPixelX);
+            Assert.AreEqual(213, resolution.Context.MapPixelY);
+            Assert.AreEqual("Daggerfall", resolution.Context.LocationId);
+        }
+
+        [Test]
+        public void StartingLocation_RejectsDeferredModesWithReason()
+        {
+            var config = new DFMPServerStartingLocationConfig
+            {
+                Mode = DFMPStartingLocationModes.NamedStartMarker,
+                MarkerName = "West Gate"
+            };
+
+            DFMPStartingLocationResolution resolution;
+            string reason;
+            Assert.IsFalse(DFMPSpawnProtocol.TryResolveStartingLocation(config, out resolution, out reason));
+            Assert.IsTrue(reason.Contains("marker identity"));
+        }
     }
 }

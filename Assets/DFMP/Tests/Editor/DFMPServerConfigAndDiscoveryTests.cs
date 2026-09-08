@@ -19,6 +19,10 @@ namespace DFMP.Tests
             Assert.AreEqual(5.0f, config.HeartbeatInterval);
             Assert.IsTrue(config.LanDiscoveryEnabled);
             Assert.IsFalse(string.IsNullOrEmpty(config.Motd));
+            Assert.NotNull(config.StartingLocation);
+            Assert.AreEqual(DFMPStartingLocationModes.LocationCenter, config.StartingLocation.Mode);
+            Assert.AreEqual("Daggerfall", config.StartingLocation.RegionName);
+            Assert.AreEqual("Daggerfall", config.StartingLocation.LocationName);
         }
 
         [Test]
@@ -116,6 +120,28 @@ namespace DFMP.Tests
             Assert.IsTrue(display.Contains("[3/16]"));
             Assert.IsTrue(display.Contains("(127.0.0.1:7777)"));
             Assert.IsTrue(display.Contains("12ms"));
+        }
+
+        [Test]
+        public void ServerConfig_NormalizesStartingLocation()
+        {
+            var config = new DFMPServerConfig
+            {
+                StartingLocation = new DFMPServerStartingLocationConfig
+                {
+                    Mode = "explicitworldcoordinates",
+                    RegionName = " Daggerfall ",
+                    LocationName = " Castle Daggerfall ",
+                    MarkerName = " West Gate "
+                }
+            };
+
+            config.Normalize();
+
+            Assert.AreEqual(DFMPStartingLocationModes.ExplicitWorldCoordinates, config.StartingLocation.Mode);
+            Assert.AreEqual("Daggerfall", config.StartingLocation.RegionName);
+            Assert.AreEqual("Castle Daggerfall", config.StartingLocation.LocationName);
+            Assert.AreEqual("West Gate", config.StartingLocation.MarkerName);
         }
     }
 }
