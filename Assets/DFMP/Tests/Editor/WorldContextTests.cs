@@ -326,5 +326,103 @@ namespace DFMP.Tests
                 DFMPNetworkServer.Stop();
             }
         }
+
+        [Test]
+        public void NetworkServer_SetSessionWorldContext_PublishesChangeAndLocationEventsOnce()
+        {
+            int contextChangedCount = 0;
+            int locationEnteredCount = 0;
+            DFMPPlayerWorldContextChangedEvent changedEvent = null;
+            DFMPLocationEnteredEvent locationEvent = null;
+            System.Action<DFMPPlayerWorldContextChangedEvent> changedHandler = e =>
+            {
+                contextChangedCount++;
+                changedEvent = e;
+            };
+            System.Action<DFMPLocationEnteredEvent> locationHandler = e =>
+            {
+                locationEnteredCount++;
+                locationEvent = e;
+            };
+
+            DFMPEventBus.Instance.PlayerWorldContextChanged += changedHandler;
+            DFMPEventBus.Instance.LocationEntered += locationHandler;
+            GameObject go = new GameObject("DFMP_ContextEventTest");
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(71, 6799360, 0f, 9388032);
+                var context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall"
+                };
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(71, session, context, "test"));
+                Assert.IsFalse(DFMPNetworkServer.SetSessionWorldContext(71, session, context, "test"));
+
+                Assert.AreEqual(1, contextChangedCount);
+                Assert.AreEqual(1, locationEnteredCount);
+                Assert.NotNull(changedEvent);
+                Assert.IsFalse(changedEvent.HadPreviousContext);
+                Assert.AreEqual(71, changedEvent.ConnectionId);
+                Assert.AreEqual("test", changedEvent.Reason);
+                Assert.AreEqual(context, changedEvent.CurrentContext);
+                Assert.NotNull(locationEvent);
+                Assert.AreEqual(context, locationEvent.Context);
+            }
+            finally
+            {
+                DFMPEventBus.Instance.PlayerWorldContextChanged -= changedHandler;
+                DFMPEventBus.Instance.LocationEntered -= locationHandler;
+                Object.DestroyImmediate(go);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void NetworkServer_SetSessionWorldContext_PublishesDungeonBlockEvent()
+        {
+            int dungeonBlockEnteredCount = 0;
+            DFMPDungeonBlockEnteredEvent dungeonEvent = null;
+            System.Action<DFMPDungeonBlockEnteredEvent> dungeonHandler = e =>
+            {
+                dungeonBlockEnteredCount++;
+                dungeonEvent = e;
+            };
+
+            DFMPEventBus.Instance.DungeonBlockEntered += dungeonHandler;
+            GameObject go = new GameObject("DFMP_DungeonBlockEventTest");
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(72, 6799360, 0f, 9388032);
+                var context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall Dungeon",
+                    DungeonBlockIndex = 7,
+                    DungeonBlockName = "S0000161.RDB"
+                };
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(72, session, context, "dungeon-report"));
+
+                Assert.AreEqual(1, dungeonBlockEnteredCount);
+                Assert.NotNull(dungeonEvent);
+                Assert.AreEqual(72, dungeonEvent.ConnectionId);
+                Assert.AreEqual("dungeon-report", dungeonEvent.Reason);
+                Assert.AreEqual(context, dungeonEvent.Context);
+            }
+            finally
+            {
+                DFMPEventBus.Instance.DungeonBlockEntered -= dungeonHandler;
+                Object.DestroyImmediate(go);
+                DFMPNetworkServer.Stop();
+            }
+        }
     }
 }

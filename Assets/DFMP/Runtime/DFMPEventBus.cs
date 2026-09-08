@@ -35,6 +35,32 @@ namespace DFMP.Runtime
         public DFMPChatMessage Message;
     }
 
+    public class DFMPPlayerWorldContextChangedEvent
+    {
+        public int ConnectionId;
+        public DFMPPlayerSessionState SessionState;
+        public bool HadPreviousContext;
+        public DFMPWorldContextKey PreviousContext;
+        public DFMPWorldContextKey CurrentContext;
+        public string Reason;
+    }
+
+    public class DFMPLocationEnteredEvent
+    {
+        public int ConnectionId;
+        public DFMPPlayerSessionState SessionState;
+        public DFMPWorldContextKey Context;
+        public string Reason;
+    }
+
+    public class DFMPDungeonBlockEnteredEvent
+    {
+        public int ConnectionId;
+        public DFMPPlayerSessionState SessionState;
+        public DFMPWorldContextKey Context;
+        public string Reason;
+    }
+
     public sealed class DFMPEventBus
     {
         public static DFMPEventBus Instance { get; } = new DFMPEventBus();
@@ -43,6 +69,9 @@ namespace DFMP.Runtime
         public event Action<DFMPPlayerDisconnectedEvent> PlayerDisconnected;
         public event Action<DFMPPlayerSpawnedEvent> PlayerSpawned;
         public event Action<DFMPChatMessageReceivedEvent> ChatMessageReceived;
+        public event Action<DFMPPlayerWorldContextChangedEvent> PlayerWorldContextChanged;
+        public event Action<DFMPLocationEnteredEvent> LocationEntered;
+        public event Action<DFMPDungeonBlockEnteredEvent> DungeonBlockEntered;
 
         public void PublishPlayerConnected(DFMPPlayerConnectedEvent e)
         {
@@ -80,6 +109,36 @@ namespace DFMP.Runtime
                 return;
 
             var handler = ChatMessageReceived;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishPlayerWorldContextChanged(DFMPPlayerWorldContextChangedEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = PlayerWorldContextChanged;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishLocationEntered(DFMPLocationEnteredEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = LocationEntered;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishDungeonBlockEntered(DFMPDungeonBlockEnteredEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = DungeonBlockEntered;
             if (handler != null)
                 handler(e);
         }

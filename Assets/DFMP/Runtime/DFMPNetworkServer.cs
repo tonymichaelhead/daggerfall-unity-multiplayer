@@ -78,7 +78,47 @@ namespace DFMP.Runtime
 
             DFMPWorldContextKey context;
             DFMPWorldContextProtocol.TryCreateKey(report, out context);
+            SetSessionWorldContext(connectionId, sessionState, context, "client-report");
+            return true;
+        }
+
+        public static bool SetSessionWorldContext(int connectionId, DFMPPlayerSessionState sessionState, DFMPWorldContextKey context, string reason)
+        {
+            DFMPWorldContextKey previousContext;
+            bool hadPreviousContext = worldOccupancy.TryGetContext(connectionId, out previousContext);
+            if (hadPreviousContext && previousContext.Equals(context))
+                return false;
+
             worldOccupancy.SetContext(connectionId, context);
+            DFMPEventBus.Instance.PublishPlayerWorldContextChanged(new DFMPPlayerWorldContextChangedEvent
+            {
+                ConnectionId = connectionId,
+                SessionState = sessionState,
+                HadPreviousContext = hadPreviousContext,
+                PreviousContext = previousContext,
+                CurrentContext = context,
+                Reason = reason ?? string.Empty
+            });
+
+            DFMPEventBus.Instance.PublishLocationEntered(new DFMPLocationEnteredEvent
+            {
+                ConnectionId = connectionId,
+                SessionState = sessionState,
+                Context = context,
+                Reason = reason ?? string.Empty
+            });
+
+            if (context.Kind == DFMPWorldContextKind.Dungeon && context.DungeonBlockIndex > 0)
+            {
+                DFMPEventBus.Instance.PublishDungeonBlockEntered(new DFMPDungeonBlockEnteredEvent
+                {
+                    ConnectionId = connectionId,
+                    SessionState = sessionState,
+                    Context = context,
+                    Reason = reason ?? string.Empty
+                });
+            }
+
             return true;
         }
 
@@ -307,7 +347,7 @@ namespace DFMP.Runtime
             }
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
-            worldOccupancy.SetContext(conn.connectionId, initialContext);
+            SetSessionWorldContext(conn.connectionId, sessionState, initialContext, "initial-spawn");
             if (!string.IsNullOrWhiteSpace(startMarkerName))
                 startMarkerAssignments[conn.connectionId] = startMarkerName;
             else
