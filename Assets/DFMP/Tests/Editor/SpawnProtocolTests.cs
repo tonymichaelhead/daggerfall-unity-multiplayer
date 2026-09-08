@@ -74,6 +74,7 @@ namespace DFMP.Tests
             Assert.IsTrue(state.HasPendingAssignment);
             Assert.IsFalse(state.TeleportRequested);
             Assert.AreEqual(42, state.Assignment.AssignmentId);
+            Assert.AreEqual(-1, state.Assignment.ConnectionId);
 
             Assert.IsTrue(state.TryRequestTeleport());
             Assert.IsFalse(state.TryRequestTeleport());
@@ -129,11 +130,22 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void TransitionAssignmentState_ServerIssuedAssignmentCanBeAcknowledged()
+        {
+            var state = new DFMPTransitionAssignmentState();
+            state.Receive(CreateDungeonTransitionAssignment(42));
+
+            Assert.IsTrue(state.TryRequestTeleport());
+            Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.None, state.GetAcknowledgeRejectionReason(CreateDungeonTransitionAcknowledgement(42, 6792821, 9374554), false));
+        }
+
+        [Test]
         public void TransitionAssignment_CarriesCanonicalContext()
         {
             var assignment = CreateDungeonTransitionAssignment(42);
 
             DFMPWorldContextKey context = DFMPSpawnProtocol.GetAssignedContext(assignment);
+            DFMPWorldContextReport report = DFMPSpawnProtocol.GetAssignedContextReport(assignment);
 
             Assert.AreEqual(DFMPWorldContextKind.Dungeon, context.Kind);
             Assert.AreEqual(207, context.MapPixelX);
@@ -143,6 +155,88 @@ namespace DFMP.Tests
             Assert.AreEqual("Daggerfall Dungeon", context.LocationId);
             Assert.AreEqual(7, context.DungeonBlockIndex);
             Assert.AreEqual("S0000161.RDB", context.DungeonBlockName);
+            Assert.AreEqual(context.Kind, report.Kind);
+            Assert.AreEqual(context.MapPixelX, report.MapPixelX);
+            Assert.AreEqual(context.MapPixelY, report.MapPixelY);
+            Assert.AreEqual(context.LocationId, report.LocationId);
+            Assert.AreEqual(context.DungeonBlockIndex, report.DungeonBlockIndex);
+            Assert.AreEqual(context.DungeonBlockName, report.DungeonBlockName);
+        }
+
+        [Test]
+        public void TransitionAssignment_CarriesAssignedConnectionId()
+        {
+            var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(
+                42,
+                7,
+                DFMPTransitionKind.Reconnect,
+                new DFMPWorldPosition { WorldX = 6792821, WorldY = 12.5f, WorldZ = 9374554 },
+                new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall"
+                });
+
+            Assert.AreEqual(7, assignment.ConnectionId);
+            Assert.AreEqual(DFMPTransitionKind.Reconnect, assignment.Kind);
+        }
+
+        [Test]
+        public void TransitionProtocol_ConfirmsMatchingReconnectAndUpdatesSession()
+        {
+            GameObject go = new GameObject("DFMP_TransitionAcknowledgementTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                session.SetMovement(true);
+                var assignmentState = new DFMPTransitionAssignmentState();
+                assignmentState.Receive(DFMPSpawnProtocol.CreateTransitionAssignment(
+                    42,
+                    7,
+                    DFMPTransitionKind.Reconnect,
+                    new DFMPWorldPosition { WorldX = 6792821, WorldY = 12.5f, WorldZ = 9374554 },
+                    new DFMPWorldContextKey
+                    {
+                        Kind = DFMPWorldContextKind.Exterior,
+                        MapPixelX = 207,
+                        MapPixelY = 213,
+                        LocationId = "Daggerfall"
+                    }));
+                assignmentState.TryRequestTeleport();
+                var acknowledgement = new DFMPTransitionAcknowledgement
+                {
+                    AssignmentId = 42,
+                    WorldX = 6792821,
+                    WorldY = 12.5f,
+                    WorldZ = 9374554,
+                    Context = new DFMPWorldContextReport
+                    {
+                        Kind = DFMPWorldContextKind.Exterior,
+                        MapPixelX = 207,
+                        MapPixelY = 213,
+                        LocationId = "Daggerfall"
+                    }
+                };
+
+                DFMPTransitionAcknowledgeRejectionReason rejectionReason;
+                Assert.IsTrue(DFMPSpawnProtocol.TryConfirmTransition(session, assignmentState, acknowledgement, false, out rejectionReason));
+
+                Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.None, rejectionReason);
+                Assert.IsTrue(session.SpawnConfirmed);
+                Assert.IsFalse(session.IsMoving);
+                Assert.AreEqual(6792821, session.WorldX);
+                Assert.AreEqual(12.5f, session.WorldY);
+                Assert.AreEqual(9374554, session.WorldZ);
+                Assert.IsFalse(assignmentState.HasPendingAssignment);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
         }
 
         [Test]

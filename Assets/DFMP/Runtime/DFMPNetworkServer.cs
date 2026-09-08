@@ -34,9 +34,11 @@ namespace DFMP.Runtime
         static readonly DFMPActiveAccountRegistry activeAccounts = new DFMPActiveAccountRegistry();
         static readonly DFMPWorldOccupancyRegistry worldOccupancy = new DFMPWorldOccupancyRegistry();
         static readonly Dictionary<int, string> startMarkerAssignments = new Dictionary<int, string>();
+        static readonly Dictionary<int, DFMPTransitionAssignmentState> transitionAssignmentStates = new Dictionary<int, DFMPTransitionAssignmentState>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
+        static int nextTransitionAssignmentId = 1;
 
         public static bool IsListening
         {
@@ -208,6 +210,7 @@ namespace DFMP.Runtime
             Mirror.Transport.active = Transport;
             Manager.StartServer();
             NetworkServer.RegisterHandler<DFMPSpawnAcknowledgement>(OnSpawnAcknowledgement);
+            NetworkServer.RegisterHandler<DFMPTransitionAcknowledgement>(OnTransitionAcknowledgement);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
@@ -383,6 +386,51 @@ namespace DFMP.Runtime
             return sessionState;
         }
 
+        public static bool TrySendReconnectTransitionAssignment(NetworkConnectionToClient conn, DFMPPlayerSessionState sessionState)
+        {
+            if (conn == null || sessionState == null)
+                return false;
+
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(conn.connectionId, out joinDecision) || joinDecision.Kind != DFMPJoinDecisionKind.ReturningPlayer)
+                return false;
+
+            DFMPWorldContextKey context;
+            if (!worldOccupancy.TryGetContext(conn.connectionId, out context) || context.Kind != DFMPWorldContextKind.Exterior)
+                return false;
+
+            return TrySendTransitionAssignment(
+                conn,
+                DFMPTransitionKind.Reconnect,
+                new DFMPWorldPosition
+                {
+                    WorldX = sessionState.WorldX,
+                    WorldY = sessionState.WorldY,
+                    WorldZ = sessionState.WorldZ
+                },
+                context);
+        }
+
+        public static bool TrySendTransitionAssignment(NetworkConnectionToClient conn, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
+        {
+            if (conn == null || context.Kind != DFMPWorldContextKind.Exterior)
+                return false;
+
+            var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(nextTransitionAssignmentId++, conn.connectionId, kind, position, context, startMarkerName);
+            DFMPTransitionAssignmentState assignmentState;
+            if (!transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState))
+            {
+                assignmentState = new DFMPTransitionAssignmentState();
+                transitionAssignmentStates.Add(conn.connectionId, assignmentState);
+            }
+
+            assignmentState.Receive(assignment);
+            assignmentState.TryRequestTeleport();
+            conn.Send(assignment);
+            Debug.Log($"[DFMP Transition] Server sent transition assignment: connectionId={conn.connectionId}, assignmentId={assignment.AssignmentId}, kind={assignment.Kind}, mapPixel={assignment.MapPixelX}/{assignment.MapPixelY}.");
+            return true;
+        }
+
         public static void MakeSessionStatesVisibleTo(NetworkConnectionToClient conn)
         {
             if (conn == null)
@@ -462,18 +510,48 @@ namespace DFMP.Runtime
                 return;
             }
 
-            lastPositionReportTimes.Remove(conn.connectionId);
-            rejectedPositionReportConnections.Remove(conn.connectionId);
+            ConfirmSessionArrival(conn.connectionId, sessionState);
+            Debug.Log($"[DFMP Session] Server confirmed spawn: connectionId={conn.connectionId}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
+        }
+
+        private static void OnTransitionAcknowledgement(NetworkConnectionToClient conn, DFMPTransitionAcknowledgement acknowledgement)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            DFMPTransitionAssignmentState assignmentState;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState) || sessionState == null || !transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState))
+            {
+                Debug.LogWarning($"[DFMP Transition] Ignored transition acknowledgement without an assignment: connectionId={conn.connectionId}.");
+                return;
+            }
+
+            DFMPTransitionAcknowledgeRejectionReason rejectionReason;
+            if (!DFMPSpawnProtocol.TryConfirmTransition(sessionState, assignmentState, acknowledgement, false, out rejectionReason))
+            {
+                Debug.LogWarning($"[DFMP Transition] Ignored transition acknowledgement: connectionId={conn.connectionId}, assignmentId={acknowledgement.AssignmentId}, reason={rejectionReason}.");
+                return;
+            }
+
+            SetSessionWorldContext(conn.connectionId, sessionState, DFMPSpawnProtocol.GetAssignedContext(assignmentState.Assignment), $"transition-{assignmentState.Assignment.Kind}");
+            ConfirmSessionArrival(conn.connectionId, sessionState);
+            Debug.Log($"[DFMP Transition] Server confirmed transition: connectionId={conn.connectionId}, assignmentId={acknowledgement.AssignmentId}, kind={assignmentState.Assignment.Kind}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
+        }
+
+        static void ConfirmSessionArrival(int connectionId, DFMPPlayerSessionState sessionState)
+        {
+            lastPositionReportTimes.Remove(connectionId);
+            rejectedPositionReportConnections.Remove(connectionId);
             DFMPEventBus.Instance.PublishPlayerSpawned(new DFMPPlayerSpawnedEvent
             {
-                ConnectionId = conn.connectionId,
+                ConnectionId = connectionId,
                 SessionState = sessionState,
                 WorldX = sessionState.WorldX,
                 WorldY = sessionState.WorldY,
                 WorldZ = sessionState.WorldZ,
                 DisplayName = sessionState.DisplayName
             });
-            Debug.Log($"[DFMP Session] Server confirmed spawn: connectionId={conn.connectionId}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
         }
 
         private static void OnPlayerPositionReport(NetworkConnectionToClient conn, DFMPPlayerPositionReport report)
@@ -614,6 +692,8 @@ namespace DFMP.Runtime
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
                 return;
 
+            SaveCharacterRecord(conn.connectionId, sessionState);
+
             DFMPEventBus.Instance.PublishPlayerDisconnected(new DFMPPlayerDisconnectedEvent
             {
                 ConnectionId = conn.connectionId,
@@ -626,6 +706,7 @@ namespace DFMP.Runtime
             joinDecisions.Remove(conn.connectionId);
             worldOccupancy.Remove(conn.connectionId);
             startMarkerAssignments.Remove(conn.connectionId);
+            transitionAssignmentStates.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
@@ -655,10 +736,12 @@ namespace DFMP.Runtime
             joinDecisions.Clear();
             worldOccupancy.Clear();
             startMarkerAssignments.Clear();
+            transitionAssignmentStates.Clear();
             lastPositionReportTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();
             activeAccounts.Clear();
+            nextTransitionAssignmentId = 1;
             Port = 0;
             Config = null;
             CharacterStore = null;

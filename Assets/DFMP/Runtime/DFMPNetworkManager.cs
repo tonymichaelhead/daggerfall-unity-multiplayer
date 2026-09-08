@@ -69,6 +69,9 @@ namespace DFMP.Runtime
             DFMPPlayerSessionState sessionState = DFMPNetworkServer.CreatePlayerSessionState(conn);
             if (sessionState != null)
             {
+                if (DFMPNetworkServer.TrySendReconnectTransitionAssignment(conn, sessionState))
+                    return;
+
                 var mapPixel = DaggerfallConnect.Arena2.MapsFile.WorldCoordToMapPixel(sessionState.WorldX, sessionState.WorldZ);
                 string startMarkerName;
                 bool hasStartMarker = DFMPNetworkServer.TryGetStartMarkerAssignment(conn.connectionId, out startMarkerName);

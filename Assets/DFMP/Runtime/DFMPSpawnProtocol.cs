@@ -35,6 +35,7 @@ namespace DFMP.Runtime
     public struct DFMPTransitionAssignment : Mirror.NetworkMessage
     {
         public int AssignmentId;
+        public int ConnectionId;
         public DFMPTransitionKind Kind;
         public int MapPixelX;
         public int MapPixelY;
@@ -235,6 +236,25 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static bool TryConfirmTransition(DFMPPlayerSessionState sessionState, DFMPTransitionAssignmentState assignmentState, DFMPTransitionAcknowledgement acknowledgement, bool repositioning, out DFMPTransitionAcknowledgeRejectionReason rejectionReason)
+        {
+            rejectionReason = DFMPTransitionAcknowledgeRejectionReason.MissingAssignment;
+            if (sessionState == null || assignmentState == null)
+                return false;
+
+            rejectionReason = assignmentState.GetAcknowledgeRejectionReason(acknowledgement, repositioning);
+            if (rejectionReason != DFMPTransitionAcknowledgeRejectionReason.None)
+                return false;
+
+            if (!assignmentState.TryAcknowledge(acknowledgement, repositioning))
+                return false;
+
+            sessionState.SetPosition(acknowledgement.WorldX, acknowledgement.WorldY, acknowledgement.WorldZ);
+            sessionState.ConfirmSpawn();
+            sessionState.SetMovement(false);
+            return true;
+        }
+
         public static bool TryResolveStartingLocation(DFMPServerStartingLocationConfig config, out DFMPStartingLocationResolution resolution, out string reason)
         {
             resolution = new DFMPStartingLocationResolution();
@@ -273,9 +293,15 @@ namespace DFMP.Runtime
 
         public static DFMPTransitionAssignment CreateTransitionAssignment(int assignmentId, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
         {
+            return CreateTransitionAssignment(assignmentId, -1, kind, position, context, startMarkerName);
+        }
+
+        public static DFMPTransitionAssignment CreateTransitionAssignment(int assignmentId, int connectionId, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
+        {
             return new DFMPTransitionAssignment
             {
                 AssignmentId = assignmentId,
+                ConnectionId = connectionId,
                 Kind = kind,
                 MapPixelX = context.MapPixelX,
                 MapPixelY = context.MapPixelY,
@@ -311,6 +337,23 @@ namespace DFMP.Runtime
             };
 
             return record.ToKey();
+        }
+
+        public static DFMPWorldContextReport GetAssignedContextReport(DFMPTransitionAssignment assignment)
+        {
+            return new DFMPWorldContextReport
+            {
+                Kind = assignment.ContextKind,
+                MapPixelX = assignment.MapPixelX,
+                MapPixelY = assignment.MapPixelY,
+                RegionIndex = assignment.RegionIndex,
+                LocationIndex = assignment.LocationIndex,
+                LocationId = assignment.LocationId ?? string.Empty,
+                BuildingKey = assignment.BuildingKey,
+                DungeonBlockIndex = assignment.DungeonBlockIndex,
+                DungeonBlockName = assignment.DungeonBlockName ?? string.Empty,
+                InstanceId = assignment.InstanceId ?? string.Empty
+            };
         }
 
         public static bool TrySelectStartMarker(Vector3[] markerPositions, string markerName, out int markerIndex)
