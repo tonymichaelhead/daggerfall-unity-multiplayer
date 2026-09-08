@@ -666,6 +666,9 @@ namespace DaggerfallWorkshop.Game
         /// <param name="door">Exterior door player clicked on.</param>
         public void TransitionInterior(Transform doorOwner, StaticDoor door, bool doFade = false, bool start = true)
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleBuildingInteriorTransition != null && DFMP.Hooks.DaggerfallHooks.TryHandleBuildingInteriorTransition(this, doorOwner, door, doFade, start))
+                return;
+
             // Store start flag
             lastInteriorStartFlag = start;
 
@@ -819,6 +822,9 @@ namespace DaggerfallWorkshop.Game
         {
             // Exit if missing required components or not currently inside
             if (!ReferenceComponents() || !interior || !isPlayerInside)
+                return;
+
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleBuildingExteriorTransition != null && DFMP.Hooks.DaggerfallHooks.TryHandleBuildingExteriorTransition(this, doFade))
                 return;
 
             // Redirect to coroutine verion for fade support

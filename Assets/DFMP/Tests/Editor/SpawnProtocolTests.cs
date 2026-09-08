@@ -248,6 +248,101 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DoorTransition_ExteriorEntryAssignsBuildingInteriorContext()
+        {
+            GameObject go = new GameObject("DFMP_DoorEntryRequestTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                session.ConfirmSpawn();
+                var currentContext = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall"
+                };
+                var request = CreateDoorTransitionRequest(true);
+
+                Assert.AreEqual(DFMPDoorTransitionRejectionReason.None, DFMPSpawnProtocol.GetDoorTransitionRejectionReason(session, currentContext, true, request));
+
+                DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDoorTransitionAssignedContext(request);
+                Assert.AreEqual(DFMPWorldContextKind.BuildingInterior, assignedContext.Kind);
+                Assert.AreEqual(207, assignedContext.MapPixelX);
+                Assert.AreEqual(213, assignedContext.MapPixelY);
+                Assert.AreEqual("Daggerfall", assignedContext.LocationId);
+                Assert.AreEqual(12345, assignedContext.BuildingKey);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DoorTransition_BuildingExitAssignsExteriorContext()
+        {
+            GameObject go = new GameObject("DFMP_DoorExitRequestTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                session.ConfirmSpawn();
+                var currentContext = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.BuildingInterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall",
+                    BuildingKey = 12345
+                };
+                var request = CreateDoorTransitionRequest(false);
+
+                Assert.AreEqual(DFMPDoorTransitionRejectionReason.None, DFMPSpawnProtocol.GetDoorTransitionRejectionReason(session, currentContext, true, request));
+
+                DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDoorTransitionAssignedContext(request);
+                Assert.AreEqual(DFMPWorldContextKind.Exterior, assignedContext.Kind);
+                Assert.AreEqual(207, assignedContext.MapPixelX);
+                Assert.AreEqual(213, assignedContext.MapPixelY);
+                Assert.AreEqual("Daggerfall", assignedContext.LocationId);
+                Assert.AreEqual(0, assignedContext.BuildingKey);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DoorTransition_RejectsContextMismatch()
+        {
+            GameObject go = new GameObject("DFMP_DoorMismatchRequestTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                session.ConfirmSpawn();
+                var currentContext = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 208,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall"
+                };
+
+                Assert.AreEqual(DFMPDoorTransitionRejectionReason.ContextMismatch, DFMPSpawnProtocol.GetDoorTransitionRejectionReason(session, currentContext, true, CreateDoorTransitionRequest(true)));
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void SpawnProtocol_ValidatesAcknowledgementWithinAssignedMapPixel()
         {
             Assert.IsTrue(DFMPSpawnProtocol.IsWithinMapPixel(6792821, 9374554, 207, 213));
@@ -446,6 +541,20 @@ namespace DFMP.Tests
                     DungeonBlockIndex = 7,
                     DungeonBlockName = "S0000161.RDB"
                 }
+            };
+        }
+
+        static DFMPDoorTransitionRequest CreateDoorTransitionRequest(bool enterInterior)
+        {
+            return new DFMPDoorTransitionRequest
+            {
+                EnterInterior = enterInterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 41,
+                LocationId = "Daggerfall",
+                BuildingKey = 12345
             };
         }
     }

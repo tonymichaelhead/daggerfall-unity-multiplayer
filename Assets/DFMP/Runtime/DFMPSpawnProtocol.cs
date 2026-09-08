@@ -68,6 +68,28 @@ namespace DFMP.Runtime
         public int MapPixelY;
     }
 
+    public struct DFMPDoorTransitionRequest : Mirror.NetworkMessage
+    {
+        public bool EnterInterior;
+        public int MapPixelX;
+        public int MapPixelY;
+        public int RegionIndex;
+        public int LocationIndex;
+        public string LocationId;
+        public int BuildingKey;
+    }
+
+    public enum DFMPDoorTransitionRejectionReason
+    {
+        None,
+        MissingSession,
+        SpawnNotConfirmed,
+        InvalidMapPixel,
+        MissingLocation,
+        MissingBuildingKey,
+        ContextMismatch
+    }
+
     public enum DFMPTransitionAcknowledgeRejectionReason
     {
         None,
@@ -239,6 +261,49 @@ namespace DFMP.Runtime
                 WorldX = mapPixelX * WorldMapPixelDimension + WorldMapPixelDimension / 2,
                 WorldY = 0f,
                 WorldZ = (WorldMapHeightInPixels - 1 - mapPixelY) * WorldMapPixelDimension + WorldMapPixelDimension / 2
+            };
+        }
+
+        public static DFMPDoorTransitionRejectionReason GetDoorTransitionRejectionReason(DFMPPlayerSessionState sessionState, DFMPWorldContextKey currentContext, bool hasCurrentContext, DFMPDoorTransitionRequest request)
+        {
+            if (sessionState == null)
+                return DFMPDoorTransitionRejectionReason.MissingSession;
+            if (!sessionState.SpawnConfirmed)
+                return DFMPDoorTransitionRejectionReason.SpawnNotConfirmed;
+            if (!IsValidMapPixel(request.MapPixelX, request.MapPixelY))
+                return DFMPDoorTransitionRejectionReason.InvalidMapPixel;
+            if (string.IsNullOrWhiteSpace(request.LocationId))
+                return DFMPDoorTransitionRejectionReason.MissingLocation;
+            if (request.BuildingKey <= 0)
+                return DFMPDoorTransitionRejectionReason.MissingBuildingKey;
+            if (!hasCurrentContext)
+                return DFMPDoorTransitionRejectionReason.ContextMismatch;
+
+            if (request.EnterInterior)
+            {
+                if (currentContext.Kind != DFMPWorldContextKind.Exterior || currentContext.MapPixelX != request.MapPixelX || currentContext.MapPixelY != request.MapPixelY)
+                    return DFMPDoorTransitionRejectionReason.ContextMismatch;
+            }
+            else
+            {
+                if (currentContext.Kind != DFMPWorldContextKind.BuildingInterior || currentContext.BuildingKey != request.BuildingKey || currentContext.MapPixelX != request.MapPixelX || currentContext.MapPixelY != request.MapPixelY)
+                    return DFMPDoorTransitionRejectionReason.ContextMismatch;
+            }
+
+            return DFMPDoorTransitionRejectionReason.None;
+        }
+
+        public static DFMPWorldContextKey GetDoorTransitionAssignedContext(DFMPDoorTransitionRequest request)
+        {
+            return new DFMPWorldContextKey
+            {
+                Kind = request.EnterInterior ? DFMPWorldContextKind.BuildingInterior : DFMPWorldContextKind.Exterior,
+                MapPixelX = request.MapPixelX,
+                MapPixelY = request.MapPixelY,
+                RegionIndex = request.RegionIndex,
+                LocationIndex = request.LocationIndex,
+                LocationId = request.LocationId ?? string.Empty,
+                BuildingKey = request.EnterInterior ? request.BuildingKey : 0
             };
         }
 

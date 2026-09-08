@@ -14,5 +14,7 @@ namespace DFMP.Hooks
         // public static Action<ulong> OnWorldTimeChanged;
         // public static Func<bool> IsHeadlessDedicatedServer;
         public static Func<object, bool> TryHandleFastTravel;
+        public static Func<object, object, object, bool, bool, bool> TryHandleBuildingInteriorTransition;
+        public static Func<object, bool, bool> TryHandleBuildingExteriorTransition;
     }
 }

@@ -212,6 +212,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPSpawnAcknowledgement>(OnSpawnAcknowledgement);
             NetworkServer.RegisterHandler<DFMPTransitionAcknowledgement>(OnTransitionAcknowledgement);
             NetworkServer.RegisterHandler<DFMPFastTravelRequest>(OnFastTravelRequest);
+            NetworkServer.RegisterHandler<DFMPDoorTransitionRequest>(OnDoorTransitionRequest);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
@@ -414,7 +415,7 @@ namespace DFMP.Runtime
 
         public static bool TrySendTransitionAssignment(NetworkConnectionToClient conn, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
         {
-            if (conn == null || context.Kind != DFMPWorldContextKind.Exterior)
+            if (conn == null || (context.Kind != DFMPWorldContextKind.Exterior && (kind != DFMPTransitionKind.Door || context.Kind != DFMPWorldContextKind.BuildingInterior)))
                 return false;
 
             var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(nextTransitionAssignmentId++, conn.connectionId, kind, position, context, startMarkerName);
@@ -449,6 +450,33 @@ namespace DFMP.Runtime
             };
 
             return TrySendTransitionAssignment(conn, DFMPTransitionKind.FastTravel, DFMPSpawnProtocol.GetMapPixelCenter(mapPixelX, mapPixelY), context, "first");
+        }
+
+        public static bool TrySendDoorTransitionAssignment(NetworkConnectionToClient conn, DFMPDoorTransitionRequest request, out DFMPDoorTransitionRejectionReason rejectionReason)
+        {
+            rejectionReason = DFMPDoorTransitionRejectionReason.MissingSession;
+            if (conn == null)
+                return false;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPWorldContextKey currentContext;
+            bool hasCurrentContext = worldOccupancy.TryGetContext(conn.connectionId, out currentContext);
+            rejectionReason = DFMPSpawnProtocol.GetDoorTransitionRejectionReason(sessionState, currentContext, hasCurrentContext, request);
+            if (rejectionReason != DFMPDoorTransitionRejectionReason.None)
+                return false;
+
+            DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDoorTransitionAssignedContext(request);
+            return TrySendTransitionAssignment(
+                conn,
+                DFMPTransitionKind.Door,
+                new DFMPWorldPosition
+                {
+                    WorldX = sessionState.WorldX,
+                    WorldY = sessionState.WorldY,
+                    WorldZ = sessionState.WorldZ
+                },
+                assignedContext);
         }
 
         public static void MakeSessionStatesVisibleTo(NetworkConnectionToClient conn)
@@ -571,6 +599,21 @@ namespace DFMP.Runtime
             }
 
             Debug.Log($"[DFMP Transition] Accepted fast travel request: connectionId={conn.connectionId}, mapPixel={request.MapPixelX}/{request.MapPixelY}.");
+        }
+
+        private static void OnDoorTransitionRequest(NetworkConnectionToClient conn, DFMPDoorTransitionRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPDoorTransitionRejectionReason rejectionReason;
+            if (!TrySendDoorTransitionAssignment(conn, request, out rejectionReason))
+            {
+                Debug.LogWarning($"[DFMP Transition] Rejected door transition request: connectionId={conn.connectionId}, enterInterior={request.EnterInterior}, mapPixel={request.MapPixelX}/{request.MapPixelY}, buildingKey={request.BuildingKey}, reason={rejectionReason}.");
+                return;
+            }
+
+            Debug.Log($"[DFMP Transition] Accepted door transition request: connectionId={conn.connectionId}, enterInterior={request.EnterInterior}, mapPixel={request.MapPixelX}/{request.MapPixelY}, buildingKey={request.BuildingKey}.");
         }
 
         static void ConfirmSessionArrival(int connectionId, DFMPPlayerSessionState sessionState)
