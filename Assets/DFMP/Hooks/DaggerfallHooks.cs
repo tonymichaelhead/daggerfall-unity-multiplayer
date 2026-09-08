@@ -13,5 +13,6 @@ namespace DFMP.Hooks
         // public static Action<GameObject, object> OnEnemySpawned;
         // public static Action<ulong> OnWorldTimeChanged;
         // public static Func<bool> IsHeadlessDedicatedServer;
+        public static Func<object, bool> TryHandleFastTravel;
     }
 }

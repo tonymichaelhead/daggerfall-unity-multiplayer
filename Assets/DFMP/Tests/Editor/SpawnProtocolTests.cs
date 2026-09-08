@@ -63,6 +63,14 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void SpawnAssignmentController_ResetClearsPendingServerAssignmentFlag()
+        {
+            DFMPSpawnAssignmentController.Reset();
+
+            Assert.IsFalse(DFMPSpawnAssignmentController.HasPendingServerAssignment);
+        }
+
+        [Test]
         public void TransitionAssignmentState_ReceiveRequeueAndReset_TracksLifecycle()
         {
             var state = new DFMPTransitionAssignmentState();
@@ -245,6 +253,18 @@ namespace DFMP.Tests
             Assert.IsTrue(DFMPSpawnProtocol.IsWithinMapPixel(6792821, 9374554, 207, 213));
             Assert.IsFalse(DFMPSpawnProtocol.IsWithinMapPixel(6782975, 9374554, 207, 213));
             Assert.IsFalse(DFMPSpawnProtocol.IsWithinMapPixel(6792821, 9338879, 207, 213));
+        }
+
+        [Test]
+        public void SpawnProtocol_ValidatesMapPixelsAndComputesCenter()
+        {
+            Assert.IsTrue(DFMPSpawnProtocol.IsValidMapPixel(207, 213));
+            Assert.IsFalse(DFMPSpawnProtocol.IsValidMapPixel(0, 213));
+            Assert.IsFalse(DFMPSpawnProtocol.IsValidMapPixel(207, 499));
+
+            DFMPWorldPosition center = DFMPSpawnProtocol.GetMapPixelCenter(207, 213);
+
+            Assert.IsTrue(DFMPSpawnProtocol.IsWithinMapPixel(center.WorldX, center.WorldZ, 207, 213));
         }
 
         [Test]

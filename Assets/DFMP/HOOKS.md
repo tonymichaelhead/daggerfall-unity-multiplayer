@@ -15,7 +15,7 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 
 | ID | File | Method / Location | Purpose | Added Date |
 |---|---|---|---|---|
-| *(None yet - Milestone 0 aims for zero core hooks)* | | | | |
+| M6-FAST-TRAVEL-001 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallTravelPopUp.cs` | `performFastTravel()` before vanilla travel mutations | Allow DFMP to consume multiplayer fast travel before client-side gold, world, and time changes, then request a server-issued transition assignment. | 2026-09-08 |
 
 ---
 

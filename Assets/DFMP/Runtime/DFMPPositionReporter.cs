@@ -47,6 +47,9 @@ namespace DFMP.Runtime
             if (!NetworkClient.isConnected || Time.unscaledTime < nextReportTime)
                 return;
 
+            if (DFMPSpawnAssignmentController.HasPendingServerAssignment)
+                return;
+
             StreamingWorld streamingWorld = FindObjectOfType<StreamingWorld>();
             if (streamingWorld == null || !streamingWorld.IsReady || streamingWorld.LocalPlayerGPS == null)
                 return;

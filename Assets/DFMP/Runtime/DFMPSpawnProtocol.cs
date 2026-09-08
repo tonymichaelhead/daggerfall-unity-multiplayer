@@ -62,6 +62,12 @@ namespace DFMP.Runtime
         public DFMPWorldContextReport Context;
     }
 
+    public struct DFMPFastTravelRequest : Mirror.NetworkMessage
+    {
+        public int MapPixelX;
+        public int MapPixelY;
+    }
+
     public enum DFMPTransitionAcknowledgeRejectionReason
     {
         None,
@@ -218,6 +224,22 @@ namespace DFMP.Runtime
         {
             return worldX / WorldMapPixelDimension == mapPixelX &&
                 WorldMapHeightInPixels - 1 - (worldZ / WorldMapPixelDimension) == mapPixelY;
+        }
+
+        public static bool IsValidMapPixel(int mapPixelX, int mapPixelY)
+        {
+            return mapPixelX >= DFMPPositionProtocol.MinimumMapPixelX && mapPixelX <= DFMPPositionProtocol.MaximumMapPixelX &&
+                mapPixelY >= DFMPPositionProtocol.MinimumMapPixelY && mapPixelY <= DFMPPositionProtocol.MaximumMapPixelY;
+        }
+
+        public static DFMPWorldPosition GetMapPixelCenter(int mapPixelX, int mapPixelY)
+        {
+            return new DFMPWorldPosition
+            {
+                WorldX = mapPixelX * WorldMapPixelDimension + WorldMapPixelDimension / 2,
+                WorldY = 0f,
+                WorldZ = (WorldMapHeightInPixels - 1 - mapPixelY) * WorldMapPixelDimension + WorldMapPixelDimension / 2
+            };
         }
 
         public static bool TryConfirmSpawn(DFMPPlayerSessionState sessionState, DFMPSpawnAcknowledgement acknowledgement)

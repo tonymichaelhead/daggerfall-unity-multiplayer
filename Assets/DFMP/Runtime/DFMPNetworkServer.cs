@@ -211,6 +211,7 @@ namespace DFMP.Runtime
             Manager.StartServer();
             NetworkServer.RegisterHandler<DFMPSpawnAcknowledgement>(OnSpawnAcknowledgement);
             NetworkServer.RegisterHandler<DFMPTransitionAcknowledgement>(OnTransitionAcknowledgement);
+            NetworkServer.RegisterHandler<DFMPFastTravelRequest>(OnFastTravelRequest);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
@@ -431,6 +432,25 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static bool TrySendFastTravelTransitionAssignment(NetworkConnectionToClient conn, int mapPixelX, int mapPixelY)
+        {
+            if (conn == null || !DFMPSpawnProtocol.IsValidMapPixel(mapPixelX, mapPixelY))
+                return false;
+
+            DFMPPlayerSessionState sessionState;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState) || sessionState == null || !sessionState.SpawnConfirmed)
+                return false;
+
+            var context = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Exterior,
+                MapPixelX = mapPixelX,
+                MapPixelY = mapPixelY
+            };
+
+            return TrySendTransitionAssignment(conn, DFMPTransitionKind.FastTravel, DFMPSpawnProtocol.GetMapPixelCenter(mapPixelX, mapPixelY), context, "first");
+        }
+
         public static void MakeSessionStatesVisibleTo(NetworkConnectionToClient conn)
         {
             if (conn == null)
@@ -537,6 +557,20 @@ namespace DFMP.Runtime
             SetSessionWorldContext(conn.connectionId, sessionState, DFMPSpawnProtocol.GetAssignedContext(assignmentState.Assignment), $"transition-{assignmentState.Assignment.Kind}");
             ConfirmSessionArrival(conn.connectionId, sessionState);
             Debug.Log($"[DFMP Transition] Server confirmed transition: connectionId={conn.connectionId}, assignmentId={acknowledgement.AssignmentId}, kind={assignmentState.Assignment.Kind}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
+        }
+
+        private static void OnFastTravelRequest(NetworkConnectionToClient conn, DFMPFastTravelRequest request)
+        {
+            if (conn == null)
+                return;
+
+            if (!TrySendFastTravelTransitionAssignment(conn, request.MapPixelX, request.MapPixelY))
+            {
+                Debug.LogWarning($"[DFMP Transition] Rejected fast travel request: connectionId={conn.connectionId}, mapPixel={request.MapPixelX}/{request.MapPixelY}.");
+                return;
+            }
+
+            Debug.Log($"[DFMP Transition] Accepted fast travel request: connectionId={conn.connectionId}, mapPixel={request.MapPixelX}/{request.MapPixelY}.");
         }
 
         static void ConfirmSessionArrival(int connectionId, DFMPPlayerSessionState sessionState)

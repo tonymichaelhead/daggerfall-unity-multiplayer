@@ -32,12 +32,19 @@ namespace DFMP.Runtime
         const float FixedSpawnLocationWaitSeconds = 10f;
         const float GroundProbeHeight = 10f;
         const float GroundProbeDepth = 60f;
+        const float PostAssignmentReportSuppressionSeconds = 1f;
 
         static DFMPSpawnAssignmentController instance;
         public static int LocalConnectionId { get; private set; } = -1;
+        public static bool HasPendingServerAssignment
+        {
+            get { return instance != null && (instance.assignmentState.HasPendingAssignment || instance.transitionState.HasPendingAssignment || Time.unscaledTime < instance.reportSuppressionDeadline); }
+        }
+
         readonly DFMPSpawnAssignmentState assignmentState = new DFMPSpawnAssignmentState();
         readonly DFMPTransitionAssignmentState transitionState = new DFMPTransitionAssignmentState();
         float fixedSpawnWaitDeadline;
+        float reportSuppressionDeadline;
         bool sharedTestSpawnApplied;
         bool transitionApplied;
 
@@ -94,6 +101,7 @@ namespace DFMP.Runtime
             assignmentState.Receive(assignment);
             LocalConnectionId = assignment.ConnectionId;
             sharedTestSpawnApplied = false;
+            SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Session] Client received spawn assignment: mapPixel={assignment.MapPixelX}/{assignment.MapPixelY}.");
         }
 
@@ -103,7 +111,13 @@ namespace DFMP.Runtime
             if (assignment.ConnectionId >= 0)
                 LocalConnectionId = assignment.ConnectionId;
             transitionApplied = false;
+            SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Transition] Client received transition assignment: assignmentId={assignment.AssignmentId}, kind={assignment.Kind}, mapPixel={assignment.MapPixelX}/{assignment.MapPixelY}.");
+        }
+
+        void SuppressPositionReportsBriefly()
+        {
+            reportSuppressionDeadline = Time.unscaledTime + PostAssignmentReportSuppressionSeconds;
         }
 
         void OnStartGame(object sender, System.EventArgs e)
@@ -212,6 +226,7 @@ namespace DFMP.Runtime
                 WorldY = 0f,
                 WorldZ = streamingWorld.LocalPlayerGPS.WorldZ
             });
+            SuppressPositionReportsBriefly();
 
             Debug.Log($"[DFMP Session] Client acknowledged grounded spawn: world={streamingWorld.LocalPlayerGPS.WorldX}/0/{streamingWorld.LocalPlayerGPS.WorldZ}.");
         }
@@ -268,6 +283,7 @@ namespace DFMP.Runtime
                 return;
 
             NetworkClient.Send(acknowledgement);
+            SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Transition] Client acknowledged assigned transition: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");
         }
 

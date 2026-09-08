@@ -323,6 +323,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         // perform fast travel actions
         private void performFastTravel()
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleFastTravel != null && DFMP.Hooks.DaggerfallHooks.TryHandleFastTravel(this))
+                return;
+
             DeductFastTravelGold();
 
             RaiseOnPreFastTravelEvent();
