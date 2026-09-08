@@ -70,14 +70,17 @@ namespace DFMP.Runtime
             if (sessionState != null)
             {
                 var mapPixel = DaggerfallConnect.Arena2.MapsFile.WorldCoordToMapPixel(sessionState.WorldX, sessionState.WorldZ);
+                string startMarkerName;
+                bool hasStartMarker = DFMPNetworkServer.TryGetStartMarkerAssignment(conn.connectionId, out startMarkerName);
                 conn.Send(new DFMPSpawnAssignment
                 {
                     ConnectionId = conn.connectionId,
                     MapPixelX = mapPixel.X,
                     MapPixelY = mapPixel.Y,
-                    WorldX = sessionState.WorldX,
-                    WorldY = sessionState.WorldY,
-                    WorldZ = sessionState.WorldZ
+                    WorldX = hasStartMarker ? 0 : sessionState.WorldX,
+                    WorldY = hasStartMarker ? 0f : sessionState.WorldY,
+                    WorldZ = hasStartMarker ? 0 : sessionState.WorldZ,
+                    StartMarkerName = hasStartMarker ? startMarkerName : string.Empty
                 });
 
                 Debug.Log($"[DFMP Session] Server sent spawn assignment: connectionId={conn.connectionId}, mapPixel={mapPixel.X}/{mapPixel.Y}.");

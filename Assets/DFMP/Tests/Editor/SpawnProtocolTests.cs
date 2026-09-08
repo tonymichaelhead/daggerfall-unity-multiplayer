@@ -163,18 +163,47 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void StartingLocation_RejectsDeferredModesWithReason()
+        public void StartingLocation_RejectsNamedStartMarkerWithoutSelector()
         {
             var config = new DFMPServerStartingLocationConfig
             {
-                Mode = DFMPStartingLocationModes.NamedStartMarker,
-                MarkerName = "West Gate"
+                Mode = DFMPStartingLocationModes.NamedStartMarker
             };
 
             DFMPStartingLocationResolution resolution;
             string reason;
             Assert.IsFalse(DFMPSpawnProtocol.TryResolveStartingLocation(config, out resolution, out reason));
-            Assert.IsTrue(reason.Contains("marker identity"));
+            Assert.IsTrue(reason.Contains("requires a marker"));
+        }
+
+        [Test]
+        public void StartingLocation_SelectsDeterministicStartMarkerBySelector()
+        {
+            var markerPositions = new[]
+            {
+                new Vector3(3f, 0f, 3f),
+                new Vector3(-3f, 0f, -3f),
+                new Vector3(3f, 0f, -3f),
+                new Vector3(-3f, 0f, 3f)
+            };
+
+            int markerIndex;
+            Assert.IsTrue(DFMPSpawnProtocol.TrySelectStartMarker(markerPositions, "southwest", out markerIndex));
+            Assert.AreEqual(1, markerIndex);
+            Assert.IsTrue(DFMPSpawnProtocol.TrySelectStartMarker(markerPositions, "southeast", out markerIndex));
+            Assert.AreEqual(2, markerIndex);
+            Assert.IsTrue(DFMPSpawnProtocol.TrySelectStartMarker(markerPositions, "northwest", out markerIndex));
+            Assert.AreEqual(3, markerIndex);
+            Assert.IsTrue(DFMPSpawnProtocol.TrySelectStartMarker(markerPositions, "northeast", out markerIndex));
+            Assert.AreEqual(0, markerIndex);
+        }
+
+        [Test]
+        public void StartingLocation_RejectsUnknownStartMarkerSelector()
+        {
+            int markerIndex;
+            Assert.IsFalse(DFMPSpawnProtocol.TrySelectStartMarker(new[] { Vector3.zero }, "West Gate", out markerIndex));
+            Assert.AreEqual(-1, markerIndex);
         }
     }
 }

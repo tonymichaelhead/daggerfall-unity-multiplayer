@@ -17,6 +17,7 @@ namespace DFMP.Runtime
     {
         public DFMPWorldPosition Position;
         public DFMPWorldContextKey Context;
+        public string StartMarkerName;
     }
 
     public class DFMPSpawnAssignmentState
@@ -122,8 +123,17 @@ namespace DFMP.Runtime
 
             if (config.Mode == DFMPStartingLocationModes.NamedStartMarker)
             {
-                reason = "named start markers require the transition assignment protocol to carry marker identity";
-                return false;
+                if (string.IsNullOrWhiteSpace(config.MarkerName))
+                {
+                    reason = "named start marker mode requires a marker name or selector";
+                    return false;
+                }
+
+                if (!TryResolveLocationCenter(config.RegionName, config.LocationName, out resolution, out reason))
+                    return false;
+
+                resolution.StartMarkerName = config.MarkerName;
+                return true;
             }
 
             if (config.Mode == DFMPStartingLocationModes.Scripted)
@@ -133,6 +143,44 @@ namespace DFMP.Runtime
             }
 
             return TryResolveLocationCenter(config.RegionName, config.LocationName, out resolution, out reason);
+        }
+
+        public static bool TrySelectStartMarker(Vector3[] markerPositions, string markerName, out int markerIndex)
+        {
+            markerIndex = -1;
+            if (markerPositions == null || markerPositions.Length == 0)
+                return false;
+
+            string selector = string.IsNullOrWhiteSpace(markerName) ? "first" : markerName.Trim().ToLowerInvariant();
+            bool preferMaxX = selector == "southeast" || selector == "northeast" || selector == "east";
+            bool preferMaxZ = selector == "northwest" || selector == "northeast" || selector == "north";
+            bool preferMinX = selector == "first" || selector == "southwest" || selector == "northwest" || selector == "west";
+            bool preferMinZ = selector == "first" || selector == "southwest" || selector == "southeast" || selector == "south";
+
+            if (!preferMaxX && !preferMaxZ && !preferMinX && !preferMinZ)
+                return false;
+
+            for (int index = 0; index < markerPositions.Length; index++)
+            {
+                if (markerIndex < 0 || IsPreferredMarker(markerPositions[index], markerPositions[markerIndex], preferMaxX, preferMaxZ, preferMinX, preferMinZ))
+                    markerIndex = index;
+            }
+
+            return markerIndex >= 0;
+        }
+
+        static bool IsPreferredMarker(Vector3 candidate, Vector3 current, bool preferMaxX, bool preferMaxZ, bool preferMinX, bool preferMinZ)
+        {
+            if (preferMaxX && !Mathf.Approximately(candidate.x, current.x))
+                return candidate.x > current.x;
+            if (preferMinX && !Mathf.Approximately(candidate.x, current.x))
+                return candidate.x < current.x;
+            if (preferMaxZ && !Mathf.Approximately(candidate.z, current.z))
+                return candidate.z > current.z;
+            if (preferMinZ && !Mathf.Approximately(candidate.z, current.z))
+                return candidate.z < current.z;
+
+            return false;
         }
 
         public static bool TryResolveExplicitWorldCoordinates(DFMPServerStartingLocationConfig config, out DFMPStartingLocationResolution resolution, out string reason)

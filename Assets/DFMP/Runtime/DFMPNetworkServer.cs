@@ -33,6 +33,7 @@ namespace DFMP.Runtime
         static readonly Dictionary<int, DFMPJoinDecision> joinDecisions = new Dictionary<int, DFMPJoinDecision>();
         static readonly DFMPActiveAccountRegistry activeAccounts = new DFMPActiveAccountRegistry();
         static readonly DFMPWorldOccupancyRegistry worldOccupancy = new DFMPWorldOccupancyRegistry();
+        static readonly Dictionary<int, string> startMarkerAssignments = new Dictionary<int, string>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
@@ -62,6 +63,11 @@ namespace DFMP.Runtime
         public static int[] GetConnectionsInWorldContext(DFMPWorldContextKey context)
         {
             return worldOccupancy.GetConnectionsInContext(context);
+        }
+
+        public static bool TryGetStartMarkerAssignment(int connectionId, out string markerName)
+        {
+            return startMarkerAssignments.TryGetValue(connectionId, out markerName);
         }
 
         static void SaveCharacterRecord(int connectionId, DFMPPlayerSessionState sessionState)
@@ -262,7 +268,8 @@ namespace DFMP.Runtime
             int worldX;
             int worldZ;
             DFMPWorldContextKey initialContext;
-            GetInitialSpawn(out worldX, out worldZ, out initialContext);
+            string startMarkerName;
+            GetInitialSpawn(out worldX, out worldZ, out initialContext, out startMarkerName);
 
             DFMPJoinDecision savedJoinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out savedJoinDecision) &&
@@ -274,10 +281,15 @@ namespace DFMP.Runtime
                 initialContext = savedJoinDecision.CharacterRecord.Context != null
                     ? savedJoinDecision.CharacterRecord.Context.ToKey()
                     : CreateExteriorWorldContext(worldX, worldZ, "Daggerfall");
+                startMarkerName = string.Empty;
             }
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
             worldOccupancy.SetContext(conn.connectionId, initialContext);
+            if (!string.IsNullOrWhiteSpace(startMarkerName))
+                startMarkerAssignments[conn.connectionId] = startMarkerName;
+            else
+                startMarkerAssignments.Remove(conn.connectionId);
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)
@@ -319,11 +331,12 @@ namespace DFMP.Runtime
             }
         }
 
-        private static void GetInitialSpawn(out int worldX, out int worldZ, out DFMPWorldContextKey context)
+        private static void GetInitialSpawn(out int worldX, out int worldZ, out DFMPWorldContextKey context, out string startMarkerName)
         {
             worldX = 0;
             worldZ = 0;
             context = CreateExteriorWorldContext(0, 0, "Daggerfall");
+            startMarkerName = string.Empty;
 
             DFMPStartingLocationResolution resolution;
             string reason;
@@ -332,6 +345,7 @@ namespace DFMP.Runtime
                 worldX = resolution.Position.WorldX;
                 worldZ = resolution.Position.WorldZ;
                 context = resolution.Context;
+                startMarkerName = resolution.StartMarkerName;
                 Debug.Log($"[DFMP Session] Resolved configured spawn: mode={(Config != null && Config.StartingLocation != null ? Config.StartingLocation.Mode : DFMPStartingLocationModes.LocationCenter)}, mapPixel={context.MapPixelX}/{context.MapPixelY}, world={worldX}/{worldZ}.");
                 return;
             }
@@ -524,6 +538,7 @@ namespace DFMP.Runtime
             playerSessionStates.Remove(conn.connectionId);
             joinDecisions.Remove(conn.connectionId);
             worldOccupancy.Remove(conn.connectionId);
+            startMarkerAssignments.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
@@ -552,6 +567,7 @@ namespace DFMP.Runtime
             playerSessionStates.Clear();
             joinDecisions.Clear();
             worldOccupancy.Clear();
+            startMarkerAssignments.Clear();
             lastPositionReportTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();

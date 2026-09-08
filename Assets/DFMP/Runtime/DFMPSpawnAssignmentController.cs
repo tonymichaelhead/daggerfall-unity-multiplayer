@@ -17,6 +17,7 @@ namespace DFMP.Runtime
         public int WorldX;
         public float WorldY;
         public int WorldZ;
+        public string StartMarkerName;
     }
 
     public struct DFMPSpawnAcknowledgement : NetworkMessage
@@ -121,7 +122,8 @@ namespace DFMP.Runtime
             {
                 fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
                 sharedTestSpawnApplied = false;
-                if (assignmentState.Assignment.WorldX != 0 || assignmentState.Assignment.WorldZ != 0)
+                if (string.IsNullOrWhiteSpace(assignmentState.Assignment.StartMarkerName) &&
+                    (assignmentState.Assignment.WorldX != 0 || assignmentState.Assignment.WorldZ != 0))
                 {
                     streamingWorld.TeleportToWorldCoordinates(
                         assignmentState.Assignment.WorldX,
@@ -145,7 +147,12 @@ namespace DFMP.Runtime
 
                 if (assignmentState.Assignment.WorldX == 0 && assignmentState.Assignment.WorldZ == 0)
                 {
-                    if (!TryApplySharedTestSpawnPoint(streamingWorld) && Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
+                    if (!TryApplyAssignedStartMarker(streamingWorld) && Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
+                        return;
+                }
+                else if (!string.IsNullOrWhiteSpace(assignmentState.Assignment.StartMarkerName))
+                {
+                    if (!TryApplyAssignedStartMarker(streamingWorld) && Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
                         return;
                 }
                 else
@@ -171,8 +178,7 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Session] Client acknowledged grounded spawn: world={streamingWorld.LocalPlayerGPS.WorldX}/0/{streamingWorld.LocalPlayerGPS.WorldZ}.");
         }
 
-        // TEMPORARY (testing): every client lands on the same start marker instead of a random one.
-        bool TryGetSharedTestStartMarker(StreamingWorld streamingWorld, out Vector3 markerPosition)
+        bool TryGetAssignedStartMarker(StreamingWorld streamingWorld, out Vector3 markerPosition)
         {
             markerPosition = Vector3.zero;
 
@@ -184,6 +190,34 @@ namespace DFMP.Runtime
 
             GameObject[] startMarkers = location.StartMarkers;
             if (startMarkers == null || startMarkers.Length == 0)
+                return false;
+
+            string markerName = assignmentState.Assignment.StartMarkerName;
+            if (!string.IsNullOrWhiteSpace(markerName))
+            {
+                for (int index = 0; index < startMarkers.Length; index++)
+                {
+                    GameObject startMarker = startMarkers[index];
+                    if (startMarker != null && string.Equals(startMarker.name, markerName.Trim(), System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        markerPosition = startMarker.transform.position;
+                        return true;
+                    }
+                }
+            }
+
+            var markerPositions = new Vector3[startMarkers.Length];
+            for (int index = 0; index < startMarkers.Length; index++)
+                markerPositions[index] = startMarkers[index] != null ? startMarkers[index].transform.position : Vector3.zero;
+
+            int markerIndex;
+            if (DFMPSpawnProtocol.TrySelectStartMarker(markerPositions, markerName, out markerIndex) && markerIndex >= 0 && markerIndex < startMarkers.Length && startMarkers[markerIndex] != null)
+            {
+                markerPosition = startMarkers[markerIndex].transform.position;
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(markerName))
                 return false;
 
             // Sorting by coordinate keeps the choice identical on every client regardless of enumeration order.
@@ -204,10 +238,10 @@ namespace DFMP.Runtime
             return found;
         }
 
-        bool TryApplySharedTestSpawnPoint(StreamingWorld streamingWorld)
+        bool TryApplyAssignedStartMarker(StreamingWorld streamingWorld)
         {
             Vector3 markerPosition;
-            if (!TryGetSharedTestStartMarker(streamingWorld, out markerPosition))
+            if (!TryGetAssignedStartMarker(streamingWorld, out markerPosition))
                 return false;
 
             Transform playerTransform = streamingWorld.LocalPlayerGPS.transform;
