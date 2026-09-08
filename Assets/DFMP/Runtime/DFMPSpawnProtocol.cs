@@ -79,6 +79,16 @@ namespace DFMP.Runtime
         public int BuildingKey;
     }
 
+    public struct DFMPDungeonTransitionRequest : Mirror.NetworkMessage
+    {
+        public bool EnterDungeon;
+        public int MapPixelX;
+        public int MapPixelY;
+        public int RegionIndex;
+        public int LocationIndex;
+        public string LocationId;
+    }
+
     public enum DFMPDoorTransitionRejectionReason
     {
         None,
@@ -87,6 +97,16 @@ namespace DFMP.Runtime
         InvalidMapPixel,
         MissingLocation,
         MissingBuildingKey,
+        ContextMismatch
+    }
+
+    public enum DFMPDungeonTransitionRejectionReason
+    {
+        None,
+        MissingSession,
+        SpawnNotConfirmed,
+        InvalidMapPixel,
+        MissingLocation,
         ContextMismatch
     }
 
@@ -304,6 +324,46 @@ namespace DFMP.Runtime
                 LocationIndex = request.LocationIndex,
                 LocationId = request.LocationId ?? string.Empty,
                 BuildingKey = request.EnterInterior ? request.BuildingKey : 0
+            };
+        }
+
+        public static DFMPDungeonTransitionRejectionReason GetDungeonTransitionRejectionReason(DFMPPlayerSessionState sessionState, DFMPWorldContextKey currentContext, bool hasCurrentContext, DFMPDungeonTransitionRequest request)
+        {
+            if (sessionState == null)
+                return DFMPDungeonTransitionRejectionReason.MissingSession;
+            if (!sessionState.SpawnConfirmed)
+                return DFMPDungeonTransitionRejectionReason.SpawnNotConfirmed;
+            if (!IsValidMapPixel(request.MapPixelX, request.MapPixelY))
+                return DFMPDungeonTransitionRejectionReason.InvalidMapPixel;
+            if (string.IsNullOrWhiteSpace(request.LocationId))
+                return DFMPDungeonTransitionRejectionReason.MissingLocation;
+            if (!hasCurrentContext)
+                return DFMPDungeonTransitionRejectionReason.ContextMismatch;
+
+            if (request.EnterDungeon)
+            {
+                if (currentContext.Kind != DFMPWorldContextKind.Exterior || currentContext.MapPixelX != request.MapPixelX || currentContext.MapPixelY != request.MapPixelY)
+                    return DFMPDungeonTransitionRejectionReason.ContextMismatch;
+            }
+            else
+            {
+                if (currentContext.Kind != DFMPWorldContextKind.Dungeon || currentContext.MapPixelX != request.MapPixelX || currentContext.MapPixelY != request.MapPixelY)
+                    return DFMPDungeonTransitionRejectionReason.ContextMismatch;
+            }
+
+            return DFMPDungeonTransitionRejectionReason.None;
+        }
+
+        public static DFMPWorldContextKey GetDungeonTransitionAssignedContext(DFMPDungeonTransitionRequest request)
+        {
+            return new DFMPWorldContextKey
+            {
+                Kind = request.EnterDungeon ? DFMPWorldContextKind.Dungeon : DFMPWorldContextKind.Exterior,
+                MapPixelX = request.MapPixelX,
+                MapPixelY = request.MapPixelY,
+                RegionIndex = request.RegionIndex,
+                LocationIndex = request.LocationIndex,
+                LocationId = request.LocationId ?? string.Empty
             };
         }
 

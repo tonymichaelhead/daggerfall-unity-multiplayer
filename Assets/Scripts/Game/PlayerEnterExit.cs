@@ -900,6 +900,9 @@ namespace DaggerfallWorkshop.Game
         /// <param name="door">Exterior door player clicked on.</param>
         public void TransitionDungeonInterior(Transform doorOwner, StaticDoor door, DFLocation location, bool doFade = false)
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleDungeonInteriorTransition != null && DFMP.Hooks.DaggerfallHooks.TryHandleDungeonInteriorTransition(this, doorOwner, door, location, doFade))
+                return;
+
             // Ensure we have component references
             if (!ReferenceComponents())
                 return;
@@ -1155,6 +1158,9 @@ namespace DaggerfallWorkshop.Game
         public void TransitionDungeonExterior(bool doFade = false)
         {
             if (!ReferenceComponents() || !dungeon || !isPlayerInsideDungeon)
+                return;
+
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleDungeonExteriorTransition != null && DFMP.Hooks.DaggerfallHooks.TryHandleDungeonExteriorTransition(this, doFade))
                 return;
 
             // Redirect to coroutine verion for fade support

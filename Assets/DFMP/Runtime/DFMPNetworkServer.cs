@@ -213,6 +213,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPTransitionAcknowledgement>(OnTransitionAcknowledgement);
             NetworkServer.RegisterHandler<DFMPFastTravelRequest>(OnFastTravelRequest);
             NetworkServer.RegisterHandler<DFMPDoorTransitionRequest>(OnDoorTransitionRequest);
+            NetworkServer.RegisterHandler<DFMPDungeonTransitionRequest>(OnDungeonTransitionRequest);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
@@ -415,7 +416,7 @@ namespace DFMP.Runtime
 
         public static bool TrySendTransitionAssignment(NetworkConnectionToClient conn, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
         {
-            if (conn == null || (context.Kind != DFMPWorldContextKind.Exterior && (kind != DFMPTransitionKind.Door || context.Kind != DFMPWorldContextKind.BuildingInterior)))
+            if (conn == null || !CanAssignContext(kind, context.Kind))
                 return false;
 
             var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(nextTransitionAssignmentId++, conn.connectionId, kind, position, context, startMarkerName);
@@ -431,6 +432,15 @@ namespace DFMP.Runtime
             conn.Send(assignment);
             Debug.Log($"[DFMP Transition] Server sent transition assignment: connectionId={conn.connectionId}, assignmentId={assignment.AssignmentId}, kind={assignment.Kind}, mapPixel={assignment.MapPixelX}/{assignment.MapPixelY}.");
             return true;
+        }
+
+        static bool CanAssignContext(DFMPTransitionKind kind, DFMPWorldContextKind contextKind)
+        {
+            if (contextKind == DFMPWorldContextKind.Exterior)
+                return true;
+            if (kind == DFMPTransitionKind.Door && contextKind == DFMPWorldContextKind.BuildingInterior)
+                return true;
+            return kind == DFMPTransitionKind.DungeonEntry && contextKind == DFMPWorldContextKind.Dungeon;
         }
 
         public static bool TrySendFastTravelTransitionAssignment(NetworkConnectionToClient conn, int mapPixelX, int mapPixelY)
@@ -470,6 +480,33 @@ namespace DFMP.Runtime
             return TrySendTransitionAssignment(
                 conn,
                 DFMPTransitionKind.Door,
+                new DFMPWorldPosition
+                {
+                    WorldX = sessionState.WorldX,
+                    WorldY = sessionState.WorldY,
+                    WorldZ = sessionState.WorldZ
+                },
+                assignedContext);
+        }
+
+        public static bool TrySendDungeonTransitionAssignment(NetworkConnectionToClient conn, DFMPDungeonTransitionRequest request, out DFMPDungeonTransitionRejectionReason rejectionReason)
+        {
+            rejectionReason = DFMPDungeonTransitionRejectionReason.MissingSession;
+            if (conn == null)
+                return false;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPWorldContextKey currentContext;
+            bool hasCurrentContext = worldOccupancy.TryGetContext(conn.connectionId, out currentContext);
+            rejectionReason = DFMPSpawnProtocol.GetDungeonTransitionRejectionReason(sessionState, currentContext, hasCurrentContext, request);
+            if (rejectionReason != DFMPDungeonTransitionRejectionReason.None)
+                return false;
+
+            DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDungeonTransitionAssignedContext(request);
+            return TrySendTransitionAssignment(
+                conn,
+                request.EnterDungeon ? DFMPTransitionKind.DungeonEntry : DFMPTransitionKind.DungeonExit,
                 new DFMPWorldPosition
                 {
                     WorldX = sessionState.WorldX,
@@ -614,6 +651,21 @@ namespace DFMP.Runtime
             }
 
             Debug.Log($"[DFMP Transition] Accepted door transition request: connectionId={conn.connectionId}, enterInterior={request.EnterInterior}, mapPixel={request.MapPixelX}/{request.MapPixelY}, buildingKey={request.BuildingKey}.");
+        }
+
+        private static void OnDungeonTransitionRequest(NetworkConnectionToClient conn, DFMPDungeonTransitionRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPDungeonTransitionRejectionReason rejectionReason;
+            if (!TrySendDungeonTransitionAssignment(conn, request, out rejectionReason))
+            {
+                Debug.LogWarning($"[DFMP Transition] Rejected dungeon transition request: connectionId={conn.connectionId}, enterDungeon={request.EnterDungeon}, mapPixel={request.MapPixelX}/{request.MapPixelY}, location='{request.LocationId}', reason={rejectionReason}.");
+                return;
+            }
+
+            Debug.Log($"[DFMP Transition] Accepted dungeon transition request: connectionId={conn.connectionId}, enterDungeon={request.EnterDungeon}, mapPixel={request.MapPixelX}/{request.MapPixelY}, location='{request.LocationId}'.");
         }
 
         static void ConfirmSessionArrival(int connectionId, DFMPPlayerSessionState sessionState)

@@ -16,5 +16,7 @@ namespace DFMP.Hooks
         public static Func<object, bool> TryHandleFastTravel;
         public static Func<object, object, object, bool, bool, bool> TryHandleBuildingInteriorTransition;
         public static Func<object, bool, bool> TryHandleBuildingExteriorTransition;
+        public static Func<object, object, object, object, bool, bool> TryHandleDungeonInteriorTransition;
+        public static Func<object, bool, bool> TryHandleDungeonExteriorTransition;
     }
 }

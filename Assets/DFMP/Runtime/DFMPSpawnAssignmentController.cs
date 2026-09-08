@@ -1,3 +1,4 @@
+using DaggerfallConnect;
 using DaggerfallConnect.Arena2;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
@@ -55,6 +56,13 @@ namespace DFMP.Runtime
         PlayerEnterExit pendingDoorPlayerEnterExit;
         Transform pendingDoorOwner;
         StaticDoor pendingDoor;
+        bool hasPendingDungeonTransition;
+        bool pendingDungeonEnter;
+        bool pendingDungeonDoFade;
+        PlayerEnterExit pendingDungeonPlayerEnterExit;
+        Transform pendingDungeonDoorOwner;
+        StaticDoor pendingDungeonDoor;
+        DFLocation pendingDungeonLocation;
 
         public static void RegisterClientHandler()
         {
@@ -62,6 +70,8 @@ namespace DFMP.Runtime
             NetworkClient.RegisterHandler<DFMPTransitionAssignment>(OnTransitionAssignment);
             DaggerfallHooks.TryHandleBuildingInteriorTransition = TryHandleBuildingInteriorTransition;
             DaggerfallHooks.TryHandleBuildingExteriorTransition = TryHandleBuildingExteriorTransition;
+            DaggerfallHooks.TryHandleDungeonInteriorTransition = TryHandleDungeonInteriorTransition;
+            DaggerfallHooks.TryHandleDungeonExteriorTransition = TryHandleDungeonExteriorTransition;
             EnsureInstance();
         }
 
@@ -73,6 +83,16 @@ namespace DFMP.Runtime
         static bool TryHandleBuildingExteriorTransition(object playerEnterExitObject, bool doFade)
         {
             return EnsureInstance().TryHandleBuildingExteriorTransitionInstance(playerEnterExitObject, doFade);
+        }
+
+        static bool TryHandleDungeonInteriorTransition(object playerEnterExitObject, object doorOwnerObject, object doorObject, object locationObject, bool doFade)
+        {
+            return EnsureInstance().TryHandleDungeonInteriorTransitionInstance(playerEnterExitObject, doorOwnerObject, doorObject, locationObject, doFade);
+        }
+
+        static bool TryHandleDungeonExteriorTransition(object playerEnterExitObject, bool doFade)
+        {
+            return EnsureInstance().TryHandleDungeonExteriorTransitionInstance(playerEnterExitObject, doFade);
         }
 
         static void OnSpawnAssignment(DFMPSpawnAssignment assignment)
@@ -139,7 +159,7 @@ namespace DFMP.Runtime
         {
             if (doorHookBypass || start || !NetworkClient.isConnected || !NetworkClient.ready)
                 return false;
-            if (hasPendingDoorTransition || transitionState.HasPendingAssignment)
+            if (hasPendingDoorTransition || hasPendingDungeonTransition || transitionState.HasPendingAssignment)
                 return true;
 
             var playerEnterExit = playerEnterExitObject as PlayerEnterExit;
@@ -168,7 +188,7 @@ namespace DFMP.Runtime
         {
             if (doorHookBypass || !NetworkClient.isConnected || !NetworkClient.ready)
                 return false;
-            if (hasPendingDoorTransition || transitionState.HasPendingAssignment)
+            if (hasPendingDoorTransition || hasPendingDungeonTransition || transitionState.HasPendingAssignment)
                 return true;
 
             var playerEnterExit = playerEnterExitObject as PlayerEnterExit;
@@ -188,6 +208,66 @@ namespace DFMP.Runtime
             SuppressPositionReportsBriefly();
             NetworkClient.Send(request);
             Debug.Log($"[DFMP Transition] Client requested server building exit: mapPixel={request.MapPixelX}/{request.MapPixelY}, buildingKey={request.BuildingKey}.");
+            return true;
+        }
+
+        bool TryHandleDungeonInteriorTransitionInstance(object playerEnterExitObject, object doorOwnerObject, object doorObject, object locationObject, bool doFade)
+        {
+            if (doorHookBypass || !NetworkClient.isConnected || !NetworkClient.ready)
+                return false;
+            if (hasPendingDoorTransition || hasPendingDungeonTransition || transitionState.HasPendingAssignment)
+                return true;
+
+            var playerEnterExit = playerEnterExitObject as PlayerEnterExit;
+            var doorOwner = doorOwnerObject as Transform;
+            if (playerEnterExit == null || !(doorObject is StaticDoor) || !(locationObject is DFLocation))
+                return false;
+
+            StaticDoor door = (StaticDoor)doorObject;
+            DFLocation location = (DFLocation)locationObject;
+            DFMPDungeonTransitionRequest request;
+            if (!TryBuildDungeonTransitionRequest(location, true, out request))
+                return false;
+
+            pendingDungeonPlayerEnterExit = playerEnterExit;
+            pendingDungeonDoorOwner = doorOwner;
+            pendingDungeonDoor = door;
+            pendingDungeonLocation = location;
+            pendingDungeonEnter = true;
+            pendingDungeonDoFade = doFade;
+            hasPendingDungeonTransition = true;
+            SuppressPositionReportsBriefly();
+            NetworkClient.Send(request);
+            Debug.Log($"[DFMP Transition] Client requested server dungeon entry: mapPixel={request.MapPixelX}/{request.MapPixelY}, location='{request.LocationId}'.");
+            return true;
+        }
+
+        bool TryHandleDungeonExteriorTransitionInstance(object playerEnterExitObject, bool doFade)
+        {
+            if (doorHookBypass || !NetworkClient.isConnected || !NetworkClient.ready)
+                return false;
+            if (hasPendingDoorTransition || hasPendingDungeonTransition || transitionState.HasPendingAssignment)
+                return true;
+
+            var playerEnterExit = playerEnterExitObject as PlayerEnterExit;
+            if (playerEnterExit == null || !playerEnterExit.IsPlayerInsideDungeon || playerEnterExit.Dungeon == null)
+                return false;
+
+            DFLocation location = playerEnterExit.Dungeon.Summary.LocationData;
+            DFMPDungeonTransitionRequest request;
+            if (!TryBuildDungeonTransitionRequest(location, false, out request))
+                return false;
+
+            pendingDungeonPlayerEnterExit = playerEnterExit;
+            pendingDungeonDoorOwner = null;
+            pendingDungeonDoor = default(StaticDoor);
+            pendingDungeonLocation = location;
+            pendingDungeonEnter = false;
+            pendingDungeonDoFade = doFade;
+            hasPendingDungeonTransition = true;
+            SuppressPositionReportsBriefly();
+            NetworkClient.Send(request);
+            Debug.Log($"[DFMP Transition] Client requested server dungeon exit: mapPixel={request.MapPixelX}/{request.MapPixelY}, location='{request.LocationId}'.");
             return true;
         }
 
@@ -211,6 +291,28 @@ namespace DFMP.Runtime
                 LocationIndex = playerGPS.CurrentLocationIndex,
                 LocationId = playerGPS.CurrentLocation.Name,
                 BuildingKey = buildingKey
+            };
+            return true;
+        }
+
+        bool TryBuildDungeonTransitionRequest(DFLocation location, bool enterDungeon, out DFMPDungeonTransitionRequest request)
+        {
+            request = new DFMPDungeonTransitionRequest();
+            if (!location.Loaded || !location.HasDungeon)
+                return false;
+
+            DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
+            if (!DFMPSpawnProtocol.IsValidMapPixel(mapPixel.X, mapPixel.Y))
+                return false;
+
+            request = new DFMPDungeonTransitionRequest
+            {
+                EnterDungeon = enterDungeon,
+                MapPixelX = mapPixel.X,
+                MapPixelY = mapPixel.Y,
+                RegionIndex = location.RegionIndex,
+                LocationIndex = location.LocationIndex,
+                LocationId = location.Name
             };
             return true;
         }
@@ -339,6 +441,12 @@ namespace DFMP.Runtime
                 return;
             }
 
+            if ((transitionState.Assignment.Kind == DFMPTransitionKind.DungeonEntry || transitionState.Assignment.Kind == DFMPTransitionKind.DungeonExit) && hasPendingDungeonTransition)
+            {
+                UpdateDungeonTransitionAssignment(streamingWorld);
+                return;
+            }
+
             if (transitionState.TryRequestTeleport())
             {
                 fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
@@ -438,6 +546,51 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Transition] Client acknowledged assigned door transition: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");
         }
 
+        void UpdateDungeonTransitionAssignment(StreamingWorld streamingWorld)
+        {
+            if (transitionState.TryRequestTeleport())
+            {
+                transitionApplied = false;
+                SuppressPositionReportsBriefly();
+                doorHookBypass = true;
+                try
+                {
+                    if (pendingDungeonEnter)
+                        pendingDungeonPlayerEnterExit.TransitionDungeonInterior(pendingDungeonDoorOwner, pendingDungeonDoor, pendingDungeonLocation, pendingDungeonDoFade);
+                    else
+                        pendingDungeonPlayerEnterExit.TransitionDungeonExterior(pendingDungeonDoFade);
+                }
+                finally
+                {
+                    doorHookBypass = false;
+                }
+
+                transitionApplied = true;
+                Debug.Log($"[DFMP Transition] Client executed assigned dungeon transition: assignmentId={transitionState.Assignment.AssignmentId}, kind={transitionState.Assignment.Kind}, location='{transitionState.Assignment.LocationId}'.");
+                return;
+            }
+
+            if (!transitionApplied || streamingWorld.IsRepositioningPlayer)
+                return;
+
+            var acknowledgement = new DFMPTransitionAcknowledgement
+            {
+                AssignmentId = transitionState.Assignment.AssignmentId,
+                WorldX = streamingWorld.LocalPlayerGPS.WorldX,
+                WorldY = 0f,
+                WorldZ = streamingWorld.LocalPlayerGPS.WorldZ,
+                Context = DFMPSpawnProtocol.GetAssignedContextReport(transitionState.Assignment)
+            };
+
+            if (!transitionState.TryAcknowledge(acknowledgement, false))
+                return;
+
+            NetworkClient.Send(acknowledgement);
+            ClearPendingDungeonTransition();
+            SuppressPositionReportsBriefly();
+            Debug.Log($"[DFMP Transition] Client acknowledged assigned dungeon transition: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");
+        }
+
         void ClearPendingDoorTransition()
         {
             hasPendingDoorTransition = false;
@@ -446,6 +599,17 @@ namespace DFMP.Runtime
             pendingDoor = default(StaticDoor);
             pendingDoorEnterInterior = false;
             pendingDoorDoFade = false;
+        }
+
+        void ClearPendingDungeonTransition()
+        {
+            hasPendingDungeonTransition = false;
+            pendingDungeonPlayerEnterExit = null;
+            pendingDungeonDoorOwner = null;
+            pendingDungeonDoor = default(StaticDoor);
+            pendingDungeonLocation = default(DFLocation);
+            pendingDungeonEnter = false;
+            pendingDungeonDoFade = false;
         }
 
         bool TryGetAssignedStartMarker(StreamingWorld streamingWorld, int mapPixelX, int mapPixelY, string markerName, out Vector3 markerPosition)

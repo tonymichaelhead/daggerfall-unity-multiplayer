@@ -343,6 +343,98 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonTransition_ExteriorEntryAssignsDungeonContext()
+        {
+            GameObject go = new GameObject("DFMP_DungeonEntryRequestTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                session.ConfirmSpawn();
+                var currentContext = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall Dungeon"
+                };
+                var request = CreateDungeonTransitionRequest(true);
+
+                Assert.AreEqual(DFMPDungeonTransitionRejectionReason.None, DFMPSpawnProtocol.GetDungeonTransitionRejectionReason(session, currentContext, true, request));
+
+                DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDungeonTransitionAssignedContext(request);
+                Assert.AreEqual(DFMPWorldContextKind.Dungeon, assignedContext.Kind);
+                Assert.AreEqual(207, assignedContext.MapPixelX);
+                Assert.AreEqual(213, assignedContext.MapPixelY);
+                Assert.AreEqual("Daggerfall Dungeon", assignedContext.LocationId);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DungeonTransition_DungeonExitAssignsExteriorContext()
+        {
+            GameObject go = new GameObject("DFMP_DungeonExitRequestTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                session.ConfirmSpawn();
+                var currentContext = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall Dungeon"
+                };
+                var request = CreateDungeonTransitionRequest(false);
+
+                Assert.AreEqual(DFMPDungeonTransitionRejectionReason.None, DFMPSpawnProtocol.GetDungeonTransitionRejectionReason(session, currentContext, true, request));
+
+                DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDungeonTransitionAssignedContext(request);
+                Assert.AreEqual(DFMPWorldContextKind.Exterior, assignedContext.Kind);
+                Assert.AreEqual(207, assignedContext.MapPixelX);
+                Assert.AreEqual(213, assignedContext.MapPixelY);
+                Assert.AreEqual("Daggerfall Dungeon", assignedContext.LocationId);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DungeonTransition_RejectsContextMismatch()
+        {
+            GameObject go = new GameObject("DFMP_DungeonMismatchRequestTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                session.ConfirmSpawn();
+                var currentContext = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.BuildingInterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall"
+                };
+
+                Assert.AreEqual(DFMPDungeonTransitionRejectionReason.ContextMismatch, DFMPSpawnProtocol.GetDungeonTransitionRejectionReason(session, currentContext, true, CreateDungeonTransitionRequest(true)));
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void SpawnProtocol_ValidatesAcknowledgementWithinAssignedMapPixel()
         {
             Assert.IsTrue(DFMPSpawnProtocol.IsWithinMapPixel(6792821, 9374554, 207, 213));
@@ -555,6 +647,19 @@ namespace DFMP.Tests
                 LocationIndex = 41,
                 LocationId = "Daggerfall",
                 BuildingKey = 12345
+            };
+        }
+
+        static DFMPDungeonTransitionRequest CreateDungeonTransitionRequest(bool enterDungeon)
+        {
+            return new DFMPDungeonTransitionRequest
+            {
+                EnterDungeon = enterDungeon,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 41,
+                LocationId = "Daggerfall Dungeon"
             };
         }
     }

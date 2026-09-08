@@ -235,6 +235,14 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void TimeState_ClampsPlayerTrackedMinutesOnlyOnRollback()
+        {
+            Assert.IsTrue(DFMPTimeState.ShouldClampPlayerLastGameMinutes(523875, 523546));
+            Assert.IsFalse(DFMPTimeState.ShouldClampPlayerLastGameMinutes(523546, 523546));
+            Assert.IsFalse(DFMPTimeState.ShouldClampPlayerLastGameMinutes(523545, 523546));
+        }
+
+        [Test]
         public void PlayerSessionState_Initialize_SetsServerOwnedWorldCoordinates()
         {
             GameObject go = new GameObject("DFMP_PlayerSessionStateTest");

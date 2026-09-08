@@ -1,4 +1,5 @@
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Game;
 using Mirror;
 using UnityEngine;
 
@@ -91,9 +92,31 @@ namespace DFMP.Runtime
             };
 
             snapshot.ApplyToWorldTime(worldTime);
+            uint previousPlayerMinutes;
+            if (TryClampPlayerLastGameMinutes(classicMinutes, out previousPlayerMinutes))
+                Debug.Log($"[DFMP Time] Client corrected player tracked time after server rollback: lastGameMinutes={previousPlayerMinutes}, classicMinutes={classicMinutes}.");
             clientApplyPending = false;
 
             Debug.Log($"[DFMP Time] Client applied time: classicMinutes={classicMinutes}, timeScale={timeScale:F2}.");
+        }
+
+        public static bool ShouldClampPlayerLastGameMinutes(uint playerLastGameMinutes, uint serverClassicMinutes)
+        {
+            return playerLastGameMinutes > serverClassicMinutes;
+        }
+
+        static bool TryClampPlayerLastGameMinutes(uint serverClassicMinutes, out uint previousPlayerMinutes)
+        {
+            previousPlayerMinutes = 0;
+            if (GameManager.Instance == null || GameManager.Instance.PlayerEntity == null)
+                return false;
+
+            previousPlayerMinutes = GameManager.Instance.PlayerEntity.LastGameMinutes;
+            if (!ShouldClampPlayerLastGameMinutes(previousPlayerMinutes, serverClassicMinutes))
+                return false;
+
+            GameManager.Instance.PlayerEntity.LastGameMinutes = serverClassicMinutes;
+            return true;
         }
 
         void OnClassicMinutesChanged(uint oldValue, uint newValue)
