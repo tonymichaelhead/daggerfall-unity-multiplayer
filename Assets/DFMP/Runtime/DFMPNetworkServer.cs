@@ -190,6 +190,8 @@ namespace DFMP.Runtime
             Transport.MaximizeSocketBuffers = true;
             Transport.statisticsLog = false;
 
+            networkGo.AddComponent<DFMPWorldInterestManagement>();
+
             Manager = networkGo.AddComponent<DFMPNetworkManager>();
             Manager.dontDestroyOnLoad = true;
             Manager.runInBackground = true;

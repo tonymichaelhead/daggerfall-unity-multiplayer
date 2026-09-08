@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using DFMP.Runtime;
+using Mirror;
 using UnityEngine;
 
 namespace DFMP.Tests
@@ -421,6 +422,89 @@ namespace DFMP.Tests
             {
                 DFMPEventBus.Instance.DungeonBlockEntered -= dungeonHandler;
                 Object.DestroyImmediate(go);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void WorldInterestManagement_AllowsGlobalTimeStateForReadyObservers()
+        {
+            GameObject interestGo = new GameObject("DFMP_InterestManagementTest");
+            GameObject timeGo = new GameObject("DFMP_TimeIdentityTest");
+            try
+            {
+                var interest = interestGo.AddComponent<DFMPWorldInterestManagement>();
+                var timeIdentity = timeGo.AddComponent<NetworkIdentity>();
+                timeGo.AddComponent<DFMPTimeState>();
+                var readyConnection = new NetworkConnectionToClient(80);
+                readyConnection.isReady = true;
+                var notReadyConnection = new NetworkConnectionToClient(81);
+
+                Assert.IsTrue(interest.ShouldObserve(timeIdentity, readyConnection));
+                Assert.IsFalse(interest.ShouldObserve(timeIdentity, notReadyConnection));
+            }
+            finally
+            {
+                Object.DestroyImmediate(timeGo);
+                Object.DestroyImmediate(interestGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void WorldInterestManagement_AllowsOnlyCoLocatedSessionObservers()
+        {
+            GameObject interestGo = new GameObject("DFMP_InterestManagementTest");
+            GameObject sessionGo = new GameObject("DFMP_SessionIdentityTest");
+            GameObject ownerGo = new GameObject("DFMP_OwnerSessionTest");
+            GameObject observerGo = new GameObject("DFMP_ObserverSessionTest");
+            try
+            {
+                var interest = interestGo.AddComponent<DFMPWorldInterestManagement>();
+                var sessionIdentity = sessionGo.AddComponent<NetworkIdentity>();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(82, 6799360, 0f, 9388032);
+                var ownerSession = ownerGo.AddComponent<DFMPPlayerSessionState>();
+                ownerSession.Initialize(82, 6799360, 0f, 9388032);
+                var observerSession = observerGo.AddComponent<DFMPPlayerSessionState>();
+                observerSession.Initialize(83, 6799360, 0f, 9388032);
+                var ownerConnection = new NetworkConnectionToClient(82);
+                ownerConnection.isReady = true;
+                var observerConnection = new NetworkConnectionToClient(83);
+                observerConnection.isReady = true;
+                var distantConnection = new NetworkConnectionToClient(84);
+                distantConnection.isReady = true;
+                var city = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall"
+                };
+                var dungeon = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    LocationId = "Daggerfall Dungeon",
+                    DungeonBlockIndex = 7,
+                    DungeonBlockName = "S0000161.RDB"
+                };
+
+                DFMPNetworkServer.SetSessionWorldContext(82, ownerSession, city, "test");
+                DFMPNetworkServer.SetSessionWorldContext(83, observerSession, city, "test");
+                DFMPNetworkServer.SetSessionWorldContext(84, null, dungeon, "test");
+
+                Assert.IsTrue(interest.ShouldObserve(sessionIdentity, ownerConnection));
+                Assert.IsTrue(interest.ShouldObserve(sessionIdentity, observerConnection));
+                Assert.IsFalse(interest.ShouldObserve(sessionIdentity, distantConnection));
+            }
+            finally
+            {
+                Object.DestroyImmediate(observerGo);
+                Object.DestroyImmediate(ownerGo);
+                Object.DestroyImmediate(sessionGo);
+                Object.DestroyImmediate(interestGo);
                 DFMPNetworkServer.Stop();
             }
         }
