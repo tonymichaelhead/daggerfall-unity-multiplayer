@@ -42,6 +42,28 @@ namespace DFMP.Runtime
             get { return NetworkServer.active && Transport != null && Transport.ServerActive(); }
         }
 
+        public static DFMPWorldContextKey CreateExteriorWorldContext(int worldX, int worldZ, string locationId)
+        {
+            var mapPixel = MapsFile.WorldCoordToMapPixel(worldX, worldZ);
+            return new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Exterior,
+                MapPixelX = mapPixel.X,
+                MapPixelY = mapPixel.Y,
+                LocationId = locationId
+            };
+        }
+
+        public static bool TryGetSessionWorldContext(int connectionId, out DFMPWorldContextKey context)
+        {
+            return worldOccupancy.TryGetContext(connectionId, out context);
+        }
+
+        public static int[] GetConnectionsInWorldContext(DFMPWorldContextKey context)
+        {
+            return worldOccupancy.GetConnectionsInContext(context);
+        }
+
         static void SaveCharacterRecord(int connectionId, DFMPPlayerSessionState sessionState)
         {
             if (CharacterStore == null || sessionState == null)
@@ -247,14 +269,7 @@ namespace DFMP.Runtime
             }
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
-            var mapPixel = MapsFile.WorldCoordToMapPixel(worldX, worldZ);
-            worldOccupancy.SetContext(conn.connectionId, new DFMPWorldContextKey
-            {
-                Kind = DFMPWorldContextKind.Exterior,
-                MapPixelX = mapPixel.X,
-                MapPixelY = mapPixel.Y,
-                LocationId = "Daggerfall"
-            });
+            worldOccupancy.SetContext(conn.connectionId, CreateExteriorWorldContext(worldX, worldZ, "Daggerfall"));
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)

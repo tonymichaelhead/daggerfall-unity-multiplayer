@@ -81,6 +81,16 @@ namespace DFMP.Runtime
             return contextByConnection.TryGetValue(connectionId, out context);
         }
 
+        public int ConnectionCount
+        {
+            get { return contextByConnection.Count; }
+        }
+
+        public int ContextCount
+        {
+            get { return connectionsByContext.Count; }
+        }
+
         public bool AreCoLocated(int firstConnectionId, int secondConnectionId)
         {
             DFMPWorldContextKey firstContext;
