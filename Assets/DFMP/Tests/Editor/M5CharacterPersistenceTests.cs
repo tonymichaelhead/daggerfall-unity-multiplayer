@@ -47,6 +47,8 @@ namespace DFMP.Tests
             Assert.AreEqual("account-a", restored.AccountId);
             Assert.AreEqual("world-a", restored.ServerWorldId);
             Assert.AreEqual("Alyx", restored.CharacterName);
+            Assert.NotNull(restored.Context);
+            Assert.AreEqual("Exterior", restored.Context.Kind);
             Assert.AreEqual(10, restored.Health);
             Assert.AreEqual(0, restored.Gold);
             Assert.AreEqual(1, restored.Inventory.Length);
@@ -209,6 +211,53 @@ namespace DFMP.Tests
             Assert.NotNull(migrated.Skills);
             Assert.NotNull(migrated.Inventory);
             Assert.NotNull(migrated.Equipment);
+            Assert.NotNull(migrated.Context);
+            Assert.AreEqual("Exterior", migrated.Context.Kind);
+        }
+
+        [Test]
+        public void CharacterRecord_MigratesLegacyWorldContextFields()
+        {
+            const string legacyJson = "{\"SchemaVersion\":3,\"CharacterName\":\"Legacy\",\"WorldContext\":\"Dungeon\",\"MapPixelX\":207,\"MapPixelY\":213}";
+
+            var migrated = DFMPCharacterRecord.FromJson(legacyJson, "account-context", "world-b");
+
+            Assert.NotNull(migrated.Context);
+            Assert.AreEqual(DFMPCharacterRecord.CurrentSchemaVersion, migrated.SchemaVersion);
+            Assert.AreEqual("Dungeon", migrated.WorldContext);
+            Assert.AreEqual("Dungeon", migrated.Context.Kind);
+            Assert.AreEqual(207, migrated.Context.MapPixelX);
+            Assert.AreEqual(213, migrated.Context.MapPixelY);
+        }
+
+        [Test]
+        public void CharacterRecord_RoundTripsStructuredWorldContext()
+        {
+            var original = DFMPCharacterRecord.CreateNew("account-context", "world-b", "Context Tester");
+            original.Context = new DFMPWorldContextRecord
+            {
+                Kind = "BuildingInterior",
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 41,
+                LocationId = "Daggerfall",
+                BuildingKey = 12345,
+                InstanceId = "shared"
+            };
+
+            var restored = DFMPCharacterRecord.FromJson(original.ToJson(), "account-context", "world-b");
+
+            Assert.NotNull(restored.Context);
+            Assert.AreEqual("BuildingInterior", restored.WorldContext);
+            Assert.AreEqual("BuildingInterior", restored.Context.Kind);
+            Assert.AreEqual(207, restored.MapPixelX);
+            Assert.AreEqual(213, restored.MapPixelY);
+            Assert.AreEqual(3, restored.Context.RegionIndex);
+            Assert.AreEqual(41, restored.Context.LocationIndex);
+            Assert.AreEqual("Daggerfall", restored.Context.LocationId);
+            Assert.AreEqual(12345, restored.Context.BuildingKey);
+            Assert.AreEqual("shared", restored.Context.InstanceId);
         }
 
         [Test]

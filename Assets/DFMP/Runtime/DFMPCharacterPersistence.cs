@@ -115,15 +115,28 @@ namespace DFMP.Runtime
             if (record == null || sessionState == null)
                 return;
 
+            var mapPixel = MapsFile.WorldCoordToMapPixel(sessionState.WorldX, sessionState.WorldZ);
+            ApplySessionState(record, sessionState, new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Exterior,
+                MapPixelX = mapPixel.X,
+                MapPixelY = mapPixel.Y
+            });
+        }
+
+        public static void ApplySessionState(DFMPCharacterRecord record, DFMPPlayerSessionState sessionState, DFMPWorldContextKey context)
+        {
+            if (record == null || sessionState == null)
+                return;
+
             record.CharacterName = DFMPPositionProtocol.SanitizeDisplayName(sessionState.DisplayName);
             record.WorldX = sessionState.WorldX;
             record.WorldY = sessionState.WorldY;
             record.WorldZ = sessionState.WorldZ;
-            record.WorldContext = "Exterior";
-
-            var mapPixel = MapsFile.WorldCoordToMapPixel(sessionState.WorldX, sessionState.WorldZ);
-            record.MapPixelX = mapPixel.X;
-            record.MapPixelY = mapPixel.Y;
+            record.Context = DFMPWorldContextRecord.FromKey(context);
+            record.WorldContext = record.Context.Kind;
+            record.MapPixelX = record.Context.MapPixelX;
+            record.MapPixelY = record.Context.MapPixelY;
             record.Race = DFMPPositionProtocol.GetPlayerRace(sessionState.Race);
             record.Gender = DFMPPositionProtocol.GetDisplayGender(sessionState.Gender);
             record.OutfitVariant = DFMPPositionProtocol.GetOutfitVariant(sessionState.OutfitVariant);

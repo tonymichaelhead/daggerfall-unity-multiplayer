@@ -50,6 +50,71 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void ContextKey_DistinguishesBuildingAndDungeonBlockIdentity()
+        {
+            var building = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.BuildingInterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 41,
+                LocationId = "Daggerfall",
+                BuildingKey = 12345
+            };
+            var otherBuilding = building;
+            otherBuilding.BuildingKey = 12346;
+            var dungeonBlock = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Dungeon,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 42,
+                LocationId = "Daggerfall Dungeon",
+                DungeonBlockIndex = 7,
+                DungeonBlockName = "S0000161.RDB",
+                InstanceId = "shared"
+            };
+            var otherDungeonBlock = dungeonBlock;
+            otherDungeonBlock.DungeonBlockIndex = 8;
+
+            Assert.AreNotEqual(building, otherBuilding);
+            Assert.AreNotEqual(dungeonBlock, otherDungeonBlock);
+        }
+
+        [Test]
+        public void ContextRecord_RoundTripsCanonicalKey()
+        {
+            var key = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Dungeon,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 42,
+                LocationId = " Daggerfall Dungeon ",
+                DungeonBlockIndex = 7,
+                DungeonBlockName = " S0000161.RDB ",
+                InstanceId = " shared "
+            };
+
+            DFMPWorldContextRecord record = DFMPWorldContextRecord.FromKey(key);
+            DFMPWorldContextKey restored = record.ToKey();
+
+            Assert.AreEqual(DFMPWorldContextKind.Dungeon.ToString(), record.Kind);
+            Assert.AreEqual("Daggerfall Dungeon", record.LocationId);
+            Assert.AreEqual("S0000161.RDB", record.DungeonBlockName);
+            Assert.AreEqual("shared", record.InstanceId);
+            Assert.AreEqual(DFMPWorldContextKind.Dungeon, restored.Kind);
+            Assert.AreEqual(207, restored.MapPixelX);
+            Assert.AreEqual(213, restored.MapPixelY);
+            Assert.AreEqual(3, restored.RegionIndex);
+            Assert.AreEqual(42, restored.LocationIndex);
+            Assert.AreEqual(7, restored.DungeonBlockIndex);
+        }
+
+        [Test]
         public void OccupancyRegistry_MovesConnectionsBetweenContexts()
         {
             var registry = new DFMPWorldOccupancyRegistry();

@@ -73,7 +73,11 @@ namespace DFMP.Runtime
             if (!joinDecisions.TryGetValue(connectionId, out joinDecision) || joinDecision.CharacterRecord == null)
                 return;
 
-            DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
+            DFMPWorldContextKey context;
+            if (worldOccupancy.TryGetContext(connectionId, out context))
+                DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState, context);
+            else
+                DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
             CharacterStore.Save(joinDecision.CharacterRecord);
             Debug.Log($"[DFMP Character] Saved character record: connectionId={connectionId}, account='{joinDecision.AccountId}', world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
         }
@@ -421,7 +425,11 @@ namespace DFMP.Runtime
                 joinDecision.Kind != DFMPJoinDecisionKind.Rejected && joinDecision.CharacterRecord != null)
             {
                 DFMPCharacterPersistence.ApplyIdentityReport(joinDecision.CharacterRecord, report);
-                DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
+                DFMPWorldContextKey context;
+                if (worldOccupancy.TryGetContext(conn.connectionId, out context))
+                    DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState, context);
+                else
+                    DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
                 CharacterStore.Save(joinDecision.CharacterRecord);
             }
         }

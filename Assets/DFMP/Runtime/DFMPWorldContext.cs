@@ -16,7 +16,12 @@ namespace DFMP.Runtime
         public DFMPWorldContextKind Kind;
         public int MapPixelX;
         public int MapPixelY;
+        public int RegionIndex;
+        public int LocationIndex;
         public string LocationId;
+        public int BuildingKey;
+        public int DungeonBlockIndex;
+        public string DungeonBlockName;
         public string InstanceId;
 
         public bool Equals(DFMPWorldContextKey other)
@@ -24,7 +29,12 @@ namespace DFMP.Runtime
             return Kind == other.Kind &&
                 MapPixelX == other.MapPixelX &&
                 MapPixelY == other.MapPixelY &&
+                RegionIndex == other.RegionIndex &&
+                LocationIndex == other.LocationIndex &&
+                BuildingKey == other.BuildingKey &&
+                DungeonBlockIndex == other.DungeonBlockIndex &&
                 string.Equals(LocationId ?? string.Empty, other.LocationId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(DungeonBlockName ?? string.Empty, other.DungeonBlockName ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(InstanceId ?? string.Empty, other.InstanceId ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -40,7 +50,12 @@ namespace DFMP.Runtime
                 int hash = (int)Kind;
                 hash = (hash * 397) ^ MapPixelX;
                 hash = (hash * 397) ^ MapPixelY;
+                hash = (hash * 397) ^ RegionIndex;
+                hash = (hash * 397) ^ LocationIndex;
                 hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(LocationId ?? string.Empty);
+                hash = (hash * 397) ^ BuildingKey;
+                hash = (hash * 397) ^ DungeonBlockIndex;
+                hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(DungeonBlockName ?? string.Empty);
                 hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(InstanceId ?? string.Empty);
                 return hash;
             }
@@ -48,7 +63,109 @@ namespace DFMP.Runtime
 
         public override string ToString()
         {
-            return $"{Kind}:{MapPixelX}/{MapPixelY}:{LocationId ?? string.Empty}:{InstanceId ?? string.Empty}";
+            return $"{Kind}:{MapPixelX}/{MapPixelY}:{RegionIndex}/{LocationIndex}:{LocationId ?? string.Empty}:{BuildingKey}:{DungeonBlockIndex}:{DungeonBlockName ?? string.Empty}:{InstanceId ?? string.Empty}";
+        }
+    }
+
+    [Serializable]
+    public class DFMPWorldContextRecord
+    {
+        public string Kind = DFMPWorldContextKind.Exterior.ToString();
+        public int MapPixelX;
+        public int MapPixelY;
+        public int RegionIndex;
+        public int LocationIndex;
+        public string LocationId = string.Empty;
+        public int BuildingKey;
+        public int DungeonBlockIndex;
+        public string DungeonBlockName = string.Empty;
+        public string InstanceId = string.Empty;
+
+        public void Normalize()
+        {
+            Kind = ParseKind(Kind).ToString();
+            RegionIndex = Math.Max(0, RegionIndex);
+            LocationIndex = Math.Max(0, LocationIndex);
+            LocationId = string.IsNullOrWhiteSpace(LocationId) ? string.Empty : LocationId.Trim();
+            BuildingKey = Math.Max(0, BuildingKey);
+            DungeonBlockIndex = Math.Max(0, DungeonBlockIndex);
+            DungeonBlockName = string.IsNullOrWhiteSpace(DungeonBlockName) ? string.Empty : DungeonBlockName.Trim();
+            InstanceId = string.IsNullOrWhiteSpace(InstanceId) ? string.Empty : InstanceId.Trim();
+        }
+
+        public bool IsDefaultExterior()
+        {
+            return ParseKind(Kind) == DFMPWorldContextKind.Exterior &&
+                MapPixelX == 0 &&
+                MapPixelY == 0 &&
+                RegionIndex <= 0 &&
+                LocationIndex <= 0 &&
+                string.IsNullOrWhiteSpace(LocationId) &&
+                BuildingKey == 0 &&
+                DungeonBlockIndex <= 0 &&
+                string.IsNullOrWhiteSpace(DungeonBlockName) &&
+                string.IsNullOrWhiteSpace(InstanceId);
+        }
+
+        public DFMPWorldContextKey ToKey()
+        {
+            Normalize();
+            return new DFMPWorldContextKey
+            {
+                Kind = ParseKind(Kind),
+                MapPixelX = MapPixelX,
+                MapPixelY = MapPixelY,
+                RegionIndex = RegionIndex,
+                LocationIndex = LocationIndex,
+                LocationId = LocationId,
+                BuildingKey = BuildingKey,
+                DungeonBlockIndex = DungeonBlockIndex,
+                DungeonBlockName = DungeonBlockName,
+                InstanceId = InstanceId
+            };
+        }
+
+        public static DFMPWorldContextRecord FromKey(DFMPWorldContextKey key)
+        {
+            var record = new DFMPWorldContextRecord
+            {
+                Kind = key.Kind.ToString(),
+                MapPixelX = key.MapPixelX,
+                MapPixelY = key.MapPixelY,
+                RegionIndex = key.RegionIndex,
+                LocationIndex = key.LocationIndex,
+                LocationId = key.LocationId ?? string.Empty,
+                BuildingKey = key.BuildingKey,
+                DungeonBlockIndex = key.DungeonBlockIndex,
+                DungeonBlockName = key.DungeonBlockName ?? string.Empty,
+                InstanceId = key.InstanceId ?? string.Empty
+            };
+            record.Normalize();
+            return record;
+        }
+
+        public static DFMPWorldContextRecord FromLegacy(string worldContext, int mapPixelX, int mapPixelY)
+        {
+            var record = new DFMPWorldContextRecord
+            {
+                Kind = ParseKind(worldContext).ToString(),
+                MapPixelX = mapPixelX,
+                MapPixelY = mapPixelY
+            };
+            record.Normalize();
+            return record;
+        }
+
+        static DFMPWorldContextKind ParseKind(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return DFMPWorldContextKind.Exterior;
+
+            DFMPWorldContextKind kind;
+            if (Enum.TryParse(value.Trim(), true, out kind))
+                return kind;
+
+            return DFMPWorldContextKind.Exterior;
         }
     }
 

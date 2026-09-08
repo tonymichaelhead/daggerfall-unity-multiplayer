@@ -6,7 +6,7 @@ namespace DFMP.Runtime
     [Serializable]
     public class DFMPCharacterRecord
     {
-        public const int CurrentSchemaVersion = 3;
+        public const int CurrentSchemaVersion = 4;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public string AccountId = string.Empty;
@@ -19,6 +19,7 @@ namespace DFMP.Runtime
         public int MapPixelX;
         public int MapPixelY;
         public string WorldContext = "Exterior";
+        public DFMPWorldContextRecord Context = new DFMPWorldContextRecord();
 
         public int Health = 1;
         public int MaxHealth = 1;
@@ -50,6 +51,13 @@ namespace DFMP.Runtime
             ServerWorldId = serverWorldId ?? string.Empty;
             CharacterName = string.IsNullOrWhiteSpace(CharacterName) ? "Player" : CharacterName.Trim();
             WorldContext = string.IsNullOrWhiteSpace(WorldContext) ? "Exterior" : WorldContext.Trim();
+            if (Context == null || Context.IsDefaultExterior() && (MapPixelX != 0 || MapPixelY != 0 || !string.Equals(WorldContext, "Exterior", StringComparison.OrdinalIgnoreCase)))
+                Context = DFMPWorldContextRecord.FromLegacy(WorldContext, MapPixelX, MapPixelY);
+
+            Context.Normalize();
+            WorldContext = Context.Kind;
+            MapPixelX = Context.MapPixelX;
+            MapPixelY = Context.MapPixelY;
             Level = Mathf.Max(1, Level);
             MaxHealth = Mathf.Max(1, MaxHealth);
             Health = Mathf.Clamp(Health, 0, MaxHealth);
