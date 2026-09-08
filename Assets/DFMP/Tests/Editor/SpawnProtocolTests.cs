@@ -63,6 +63,89 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void TransitionAssignmentState_ReceiveRequeueAndReset_TracksLifecycle()
+        {
+            var state = new DFMPTransitionAssignmentState();
+            var assignment = CreateDungeonTransitionAssignment(42);
+
+            state.Receive(assignment);
+
+            Assert.IsTrue(state.HasAssignment);
+            Assert.IsTrue(state.HasPendingAssignment);
+            Assert.IsFalse(state.TeleportRequested);
+            Assert.AreEqual(42, state.Assignment.AssignmentId);
+
+            Assert.IsTrue(state.TryRequestTeleport());
+            Assert.IsFalse(state.TryRequestTeleport());
+
+            state.Requeue();
+            Assert.IsTrue(state.HasPendingAssignment);
+            Assert.IsFalse(state.TeleportRequested);
+
+            state.Reset();
+            Assert.IsFalse(state.HasAssignment);
+            Assert.IsFalse(state.HasPendingAssignment);
+            Assert.IsFalse(state.TeleportRequested);
+        }
+
+        [Test]
+        public void TransitionAssignmentState_RejectsInvalidAcknowledgements()
+        {
+            var state = new DFMPTransitionAssignmentState();
+            var assignment = CreateDungeonTransitionAssignment(42);
+            var acknowledgement = CreateDungeonTransitionAcknowledgement(42, 6792821, 9374554);
+
+            Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.MissingAssignment, state.GetAcknowledgeRejectionReason(acknowledgement, false));
+
+            state.Receive(assignment);
+            Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.TeleportNotRequested, state.GetAcknowledgeRejectionReason(acknowledgement, false));
+
+            state.TryRequestTeleport();
+            acknowledgement.AssignmentId = 43;
+            Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.AssignmentMismatch, state.GetAcknowledgeRejectionReason(acknowledgement, false));
+
+            acknowledgement.AssignmentId = 42;
+            Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.Repositioning, state.GetAcknowledgeRejectionReason(acknowledgement, true));
+
+            acknowledgement.WorldX = 6782975;
+            Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.OutsideAssignedMapPixel, state.GetAcknowledgeRejectionReason(acknowledgement, false));
+
+            acknowledgement.WorldX = 6792821;
+            acknowledgement.Context.DungeonBlockIndex = 8;
+            Assert.AreEqual(DFMPTransitionAcknowledgeRejectionReason.ContextMismatch, state.GetAcknowledgeRejectionReason(acknowledgement, false));
+        }
+
+        [Test]
+        public void TransitionAssignmentState_AcknowledgesMatchingTransition()
+        {
+            var state = new DFMPTransitionAssignmentState();
+            state.Receive(CreateDungeonTransitionAssignment(42));
+            state.TryRequestTeleport();
+
+            Assert.IsTrue(state.TryAcknowledge(CreateDungeonTransitionAcknowledgement(42, 6792821, 9374554), false));
+            Assert.IsTrue(state.HasAssignment);
+            Assert.IsFalse(state.HasPendingAssignment);
+            Assert.IsFalse(state.TeleportRequested);
+        }
+
+        [Test]
+        public void TransitionAssignment_CarriesCanonicalContext()
+        {
+            var assignment = CreateDungeonTransitionAssignment(42);
+
+            DFMPWorldContextKey context = DFMPSpawnProtocol.GetAssignedContext(assignment);
+
+            Assert.AreEqual(DFMPWorldContextKind.Dungeon, context.Kind);
+            Assert.AreEqual(207, context.MapPixelX);
+            Assert.AreEqual(213, context.MapPixelY);
+            Assert.AreEqual(3, context.RegionIndex);
+            Assert.AreEqual(41, context.LocationIndex);
+            Assert.AreEqual("Daggerfall Dungeon", context.LocationId);
+            Assert.AreEqual(7, context.DungeonBlockIndex);
+            Assert.AreEqual("S0000161.RDB", context.DungeonBlockName);
+        }
+
+        [Test]
         public void SpawnProtocol_ValidatesAcknowledgementWithinAssignedMapPixel()
         {
             Assert.IsTrue(DFMPSpawnProtocol.IsWithinMapPixel(6792821, 9374554, 207, 213));
@@ -204,6 +287,52 @@ namespace DFMP.Tests
             int markerIndex;
             Assert.IsFalse(DFMPSpawnProtocol.TrySelectStartMarker(new[] { Vector3.zero }, "West Gate", out markerIndex));
             Assert.AreEqual(-1, markerIndex);
+        }
+
+        static DFMPTransitionAssignment CreateDungeonTransitionAssignment(int assignmentId)
+        {
+            return DFMPSpawnProtocol.CreateTransitionAssignment(
+                assignmentId,
+                DFMPTransitionKind.DungeonEntry,
+                new DFMPWorldPosition
+                {
+                    WorldX = 6792821,
+                    WorldY = 12.5f,
+                    WorldZ = 9374554
+                },
+                new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    RegionIndex = 3,
+                    LocationIndex = 41,
+                    LocationId = "Daggerfall Dungeon",
+                    DungeonBlockIndex = 7,
+                    DungeonBlockName = "S0000161.RDB"
+                });
+        }
+
+        static DFMPTransitionAcknowledgement CreateDungeonTransitionAcknowledgement(int assignmentId, int worldX, int worldZ)
+        {
+            return new DFMPTransitionAcknowledgement
+            {
+                AssignmentId = assignmentId,
+                WorldX = worldX,
+                WorldY = 12.5f,
+                WorldZ = worldZ,
+                Context = new DFMPWorldContextReport
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    RegionIndex = 3,
+                    LocationIndex = 41,
+                    LocationId = "Daggerfall Dungeon",
+                    DungeonBlockIndex = 7,
+                    DungeonBlockName = "S0000161.RDB"
+                }
+            };
         }
     }
 }

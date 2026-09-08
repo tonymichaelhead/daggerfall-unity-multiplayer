@@ -20,6 +20,132 @@ namespace DFMP.Runtime
         public string StartMarkerName;
     }
 
+    public enum DFMPTransitionKind
+    {
+        InitialSpawn,
+        FastTravel,
+        Door,
+        DungeonEntry,
+        DungeonExit,
+        DeathRespawn,
+        Reconnect,
+        SaveLoad
+    }
+
+    public struct DFMPTransitionAssignment : Mirror.NetworkMessage
+    {
+        public int AssignmentId;
+        public DFMPTransitionKind Kind;
+        public int MapPixelX;
+        public int MapPixelY;
+        public int WorldX;
+        public float WorldY;
+        public int WorldZ;
+        public string StartMarkerName;
+        public DFMPWorldContextKind ContextKind;
+        public int RegionIndex;
+        public int LocationIndex;
+        public string LocationId;
+        public int BuildingKey;
+        public int DungeonBlockIndex;
+        public string DungeonBlockName;
+        public string InstanceId;
+    }
+
+    public struct DFMPTransitionAcknowledgement : Mirror.NetworkMessage
+    {
+        public int AssignmentId;
+        public int WorldX;
+        public float WorldY;
+        public int WorldZ;
+        public DFMPWorldContextReport Context;
+    }
+
+    public enum DFMPTransitionAcknowledgeRejectionReason
+    {
+        None,
+        MissingAssignment,
+        AssignmentMismatch,
+        TeleportNotRequested,
+        Repositioning,
+        OutsideAssignedMapPixel,
+        ContextMismatch
+    }
+
+    public class DFMPTransitionAssignmentState
+    {
+        public DFMPTransitionAssignment Assignment { get; private set; }
+        public bool HasAssignment { get; private set; }
+        public bool HasPendingAssignment { get; private set; }
+        public bool TeleportRequested { get; private set; }
+
+        public void Receive(DFMPTransitionAssignment assignment)
+        {
+            Assignment = assignment;
+            HasAssignment = true;
+            HasPendingAssignment = true;
+            TeleportRequested = false;
+        }
+
+        public void Requeue()
+        {
+            if (!HasAssignment)
+                return;
+
+            HasPendingAssignment = true;
+            TeleportRequested = false;
+        }
+
+        public bool TryRequestTeleport()
+        {
+            if (!HasPendingAssignment || TeleportRequested)
+                return false;
+
+            TeleportRequested = true;
+            return true;
+        }
+
+        public DFMPTransitionAcknowledgeRejectionReason GetAcknowledgeRejectionReason(DFMPTransitionAcknowledgement acknowledgement, bool repositioning)
+        {
+            if (!HasPendingAssignment)
+                return DFMPTransitionAcknowledgeRejectionReason.MissingAssignment;
+            if (acknowledgement.AssignmentId != Assignment.AssignmentId)
+                return DFMPTransitionAcknowledgeRejectionReason.AssignmentMismatch;
+            if (!TeleportRequested)
+                return DFMPTransitionAcknowledgeRejectionReason.TeleportNotRequested;
+            if (repositioning)
+                return DFMPTransitionAcknowledgeRejectionReason.Repositioning;
+            if (!DFMPSpawnProtocol.IsWithinMapPixel(acknowledgement.WorldX, acknowledgement.WorldZ, Assignment.MapPixelX, Assignment.MapPixelY))
+                return DFMPTransitionAcknowledgeRejectionReason.OutsideAssignedMapPixel;
+
+            DFMPWorldContextKey expectedContext = DFMPSpawnProtocol.GetAssignedContext(Assignment);
+            DFMPWorldContextKey acknowledgedContext;
+            DFMPWorldContextProtocol.TryCreateKey(acknowledgement.Context, out acknowledgedContext);
+            if (!expectedContext.Equals(acknowledgedContext))
+                return DFMPTransitionAcknowledgeRejectionReason.ContextMismatch;
+
+            return DFMPTransitionAcknowledgeRejectionReason.None;
+        }
+
+        public bool TryAcknowledge(DFMPTransitionAcknowledgement acknowledgement, bool repositioning)
+        {
+            if (GetAcknowledgeRejectionReason(acknowledgement, repositioning) != DFMPTransitionAcknowledgeRejectionReason.None)
+                return false;
+
+            HasPendingAssignment = false;
+            TeleportRequested = false;
+            return true;
+        }
+
+        public void Reset()
+        {
+            Assignment = default(DFMPTransitionAssignment);
+            HasAssignment = false;
+            HasPendingAssignment = false;
+            TeleportRequested = false;
+        }
+    }
+
     public class DFMPSpawnAssignmentState
     {
         public DFMPSpawnAssignment Assignment { get; private set; }
@@ -143,6 +269,48 @@ namespace DFMP.Runtime
             }
 
             return TryResolveLocationCenter(config.RegionName, config.LocationName, out resolution, out reason);
+        }
+
+        public static DFMPTransitionAssignment CreateTransitionAssignment(int assignmentId, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
+        {
+            return new DFMPTransitionAssignment
+            {
+                AssignmentId = assignmentId,
+                Kind = kind,
+                MapPixelX = context.MapPixelX,
+                MapPixelY = context.MapPixelY,
+                WorldX = position.WorldX,
+                WorldY = position.WorldY,
+                WorldZ = position.WorldZ,
+                StartMarkerName = startMarkerName ?? string.Empty,
+                ContextKind = context.Kind,
+                RegionIndex = context.RegionIndex,
+                LocationIndex = context.LocationIndex,
+                LocationId = context.LocationId ?? string.Empty,
+                BuildingKey = context.BuildingKey,
+                DungeonBlockIndex = context.DungeonBlockIndex,
+                DungeonBlockName = context.DungeonBlockName ?? string.Empty,
+                InstanceId = context.InstanceId ?? string.Empty
+            };
+        }
+
+        public static DFMPWorldContextKey GetAssignedContext(DFMPTransitionAssignment assignment)
+        {
+            var record = new DFMPWorldContextRecord
+            {
+                Kind = assignment.ContextKind.ToString(),
+                MapPixelX = assignment.MapPixelX,
+                MapPixelY = assignment.MapPixelY,
+                RegionIndex = assignment.RegionIndex,
+                LocationIndex = assignment.LocationIndex,
+                LocationId = assignment.LocationId ?? string.Empty,
+                BuildingKey = assignment.BuildingKey,
+                DungeonBlockIndex = assignment.DungeonBlockIndex,
+                DungeonBlockName = assignment.DungeonBlockName ?? string.Empty,
+                InstanceId = assignment.InstanceId ?? string.Empty
+            };
+
+            return record.ToKey();
         }
 
         public static bool TrySelectStartMarker(Vector3[] markerPositions, string markerName, out int markerIndex)
