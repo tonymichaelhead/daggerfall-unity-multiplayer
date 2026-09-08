@@ -122,7 +122,10 @@ namespace DFMP.Runtime
             }
 
             if (DFMPClientJoinFlowController.Instance != null)
+            {
+                Debug.Log($"[DFMP Join] Received inventory snapshot: bytes={message.InventoryJson.Length}.");
                 DFMPClientJoinFlowController.Instance.ApplyCharacterSnapshot(message);
+            }
         }
 
         static string GetDefaultAccountId()

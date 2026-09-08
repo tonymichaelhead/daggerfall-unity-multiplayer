@@ -59,9 +59,11 @@ namespace DFMP.Runtime
             LastCharacterSnapshot = snapshot;
         }
 
-        public bool ShouldReportLocalIdentity(bool serverIdentityApplied)
+        public bool ShouldReportLocalIdentity()
         {
-            return !serverIdentityApplied && State != DFMPClientJoinState.ReturningPlayerRestore;
+            // A returning player must stay silent until the server snapshot is applied (InGame),
+            // otherwise the first report overwrites the stored character with local startup state.
+            return State == DFMPClientJoinState.FirstJoinCharacterCreation || State == DFMPClientJoinState.InGame;
         }
 
         public static bool ShouldLoadGameScene(DFMPJoinResultMessage result, int activeSceneIndex)
@@ -158,7 +160,7 @@ namespace DFMP.Runtime
 
         public bool ShouldReportLocalIdentity()
         {
-            return Flow.ShouldReportLocalIdentity(ServerIdentityApplied);
+            return Flow.ShouldReportLocalIdentity();
         }
 
         public static bool IsMultiplayerIntroQuest(string questName)
@@ -184,6 +186,35 @@ namespace DFMP.Runtime
             for (int index = 0; index < snapshot.Skills.Length; index++)
                 playerEntity.Skills.SetPermanentSkillValue(index, (short)Mathf.Clamp(snapshot.Skills[index], 0, 100));
             playerEntity.GoldPieces = snapshot.Gold;
+            DFMPCharacterItemRecord[] inventory;
+            DFMPCharacterEquipmentRecord[] equipment;
+            string inventoryReason = string.Empty;
+            if (!string.IsNullOrWhiteSpace(snapshot.InventoryJson) &&
+                DFMPInventorySnapshotCodec.TryDecode(snapshot.InventoryJson, out inventory, out equipment, out inventoryReason))
+            {
+                // Clear first so starting equipment cannot keep referencing items the deserialize wipes out.
+                playerEntity.ItemEquipTable.Clear();
+                playerEntity.Items.DeserializeItems(DFMPCharacterPersistence.RestoreItems(inventory));
+                playerEntity.ItemEquipTable.DeserializeEquipTable(
+                    DFMPCharacterPersistence.RestoreEquipment(equipment),
+                    playerEntity.Items);
+
+                int equippedCount = 0;
+                ulong[] restoredSlots = playerEntity.ItemEquipTable.SerializeEquipTable();
+                for (int slotIndex = 0; slotIndex < restoredSlots.Length; slotIndex++)
+                {
+                    if (restoredSlots[slotIndex] != 0)
+                        equippedCount++;
+                }
+
+                Debug.Log($"[DFMP Join] Restored inventory snapshot: requestedItems={inventory.Length}, actualItems={playerEntity.Items.Count}, requestedEquipment={equipment.Length}, equippedItems={equippedCount}.");
+                if (DaggerfallUI.Instance != null && DaggerfallUI.Instance.PaperDollRenderer != null)
+                    DaggerfallUI.Instance.PaperDollRenderer.Refresh();
+            }
+            else if (!string.IsNullOrWhiteSpace(snapshot.InventoryJson))
+            {
+                Debug.LogWarning($"[DFMP Join] Inventory snapshot rejected during restore: reason={inventoryReason}.");
+            }
             ServerIdentityApplied = true;
             hasPendingSnapshot = false;
             Flow.MarkInGame();

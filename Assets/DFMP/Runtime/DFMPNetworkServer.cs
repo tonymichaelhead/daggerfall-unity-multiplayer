@@ -403,7 +403,7 @@ namespace DFMP.Runtime
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) &&
-                joinDecision.Kind == DFMPJoinDecisionKind.FirstJoin && joinDecision.CharacterRecord != null)
+                joinDecision.Kind != DFMPJoinDecisionKind.Rejected && joinDecision.CharacterRecord != null)
             {
                 DFMPCharacterPersistence.ApplyIdentityReport(joinDecision.CharacterRecord, report);
                 DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);

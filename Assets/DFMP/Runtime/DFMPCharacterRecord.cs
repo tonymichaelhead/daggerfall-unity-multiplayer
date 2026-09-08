@@ -36,8 +36,8 @@ namespace DFMP.Runtime
         public int Gold;
         public int[] Attributes = new int[8];
         public int[] Skills = new int[35];
-        public string[] Inventory = new string[0];
-        public string[] Equipment = new string[0];
+        public DFMPCharacterItemRecord[] Inventory = new DFMPCharacterItemRecord[0];
+        public DFMPCharacterEquipmentRecord[] Equipment = new DFMPCharacterEquipmentRecord[0];
 
         public void Normalize(string accountId, string serverWorldId)
         {
@@ -57,8 +57,19 @@ namespace DFMP.Runtime
             Gold = Mathf.Max(0, Gold);
             Attributes = Attributes ?? new int[8];
             Skills = Skills ?? new int[35];
-            Inventory = Inventory ?? new string[0];
-            Equipment = Equipment ?? new string[0];
+            Inventory = Inventory ?? new DFMPCharacterItemRecord[0];
+            Equipment = Equipment ?? new DFMPCharacterEquipmentRecord[0];
+            for (int index = 0; index < Inventory.Length; index++)
+            {
+                if (Inventory[index] != null)
+                    Inventory[index].Normalize();
+            }
+
+            for (int index = 0; index < Equipment.Length; index++)
+            {
+                if (Equipment[index] != null)
+                    Equipment[index].EquipSlot = Mathf.Max(0, Equipment[index].EquipSlot);
+            }
         }
 
         public static DFMPCharacterRecord CreateNew(string accountId, string serverWorldId, string characterName)

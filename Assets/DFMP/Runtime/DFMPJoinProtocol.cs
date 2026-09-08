@@ -36,6 +36,8 @@ namespace DFMP.Runtime
         public int[] Skills;
         public int Gold;
         public int Experience;
+        public string InventoryJson;
+        public string EquipmentJson;
     }
 
     public static class DFMPCharacterSnapshotProtocol
@@ -60,7 +62,8 @@ namespace DFMP.Runtime
                 Attributes = record.Attributes ?? new int[0],
                 Skills = record.Skills ?? new int[0],
                 Gold = record.Gold,
-                Experience = record.Experience
+                Experience = record.Experience,
+                InventoryJson = DFMPInventorySnapshotCodec.Encode(record.Inventory, record.Equipment)
             };
         }
 

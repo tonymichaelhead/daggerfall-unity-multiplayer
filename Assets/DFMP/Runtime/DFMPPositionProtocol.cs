@@ -27,6 +27,8 @@ namespace DFMP.Runtime
         public int Gold;
         public int[] Attributes;
         public int[] Skills;
+        public string InventoryJson;
+        public string EquipmentJson;
     }
 
     public enum DFMPPositionRejectionReason

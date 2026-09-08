@@ -1,5 +1,6 @@
 using System.IO;
 using NUnit.Framework;
+using DaggerfallWorkshop.Game.Serialization;
 using DFMP.Runtime;
 
 namespace DFMP.Tests
@@ -30,8 +31,14 @@ namespace DFMP.Tests
             original.Health = 99;
             original.MaxHealth = 10;
             original.Gold = -1;
-            original.Inventory = new[] { "iron-sword" };
-            original.Equipment = new[] { "leather" };
+            original.Inventory = new[]
+            {
+                new DFMPCharacterItemRecord { ItemId = 42, ItemGroup = 5, TemplateIndex = 7, StackCount = 2, ShortName = "iron-sword" }
+            };
+            original.Equipment = new[]
+            {
+                new DFMPCharacterEquipmentRecord { EquipSlot = 3, ItemId = 42 }
+            };
 
             var restored = DFMPCharacterRecord.FromJson(original.ToJson(), "account-a", "world-a");
 
@@ -42,8 +49,148 @@ namespace DFMP.Tests
             Assert.AreEqual("Alyx", restored.CharacterName);
             Assert.AreEqual(10, restored.Health);
             Assert.AreEqual(0, restored.Gold);
-            CollectionAssert.AreEqual(new[] { "iron-sword" }, restored.Inventory);
-            CollectionAssert.AreEqual(new[] { "leather" }, restored.Equipment);
+            Assert.AreEqual(1, restored.Inventory.Length);
+            Assert.AreEqual(42u, restored.Inventory[0].ItemId);
+            Assert.AreEqual(2, restored.Inventory[0].StackCount);
+            Assert.AreEqual("iron-sword", restored.Inventory[0].ShortName);
+            Assert.AreEqual(1, restored.Equipment.Length);
+            Assert.AreEqual(3, restored.Equipment[0].EquipSlot);
+            Assert.AreEqual(42u, restored.Equipment[0].ItemId);
+        }
+
+        [Test]
+        public void CharacterItemRecord_ConvertsItemDataWithoutLosingCoreFields()
+        {
+            var itemData = new ItemData_v1
+            {
+                uid = 42,
+                itemGroup = DaggerfallWorkshop.Game.Items.ItemGroups.Weapons,
+                groupIndex = 7,
+                stackCount = 2,
+                hits1 = 11,
+                hits2 = 22,
+                enchantmentPoints = 3,
+                shortName = "iron sword",
+                nativeMaterialValue = 4,
+                currentVariant = 1,
+                legacyMagic = new[] { 5, 6 }
+            };
+
+            var record = DFMPCharacterItemRecord.FromItemData(itemData);
+            var restored = record.ToItemData();
+
+            Assert.AreEqual(42u, record.ItemId);
+            Assert.AreEqual(itemData.itemGroup, restored.itemGroup);
+            Assert.AreEqual(7, restored.groupIndex);
+            Assert.AreEqual(2, restored.stackCount);
+            Assert.AreEqual(11, restored.hits1);
+            Assert.AreEqual(22, restored.hits2);
+            Assert.AreEqual(3, restored.enchantmentPoints);
+            Assert.AreEqual("iron sword", restored.shortName);
+            CollectionAssert.AreEqual(new[] { 5, 6 }, restored.legacyMagic);
+        }
+
+        [Test]
+        public void CharacterItemRecord_LeavesLegacyMagicNullWhenItemIsUnenchanted()
+        {
+            var itemData = new ItemData_v1
+            {
+                uid = 42,
+                itemGroup = DaggerfallWorkshop.Game.Items.ItemGroups.MensClothing,
+                groupIndex = 7,
+                stackCount = 1,
+                legacyMagic = null
+            };
+
+            var restored = DFMPCharacterItemRecord.FromItemData(itemData).ToItemData();
+
+            // DFU indexes legacyMagic[0] without a length check, so an empty array crashes item info panels.
+            Assert.IsNull(restored.legacyMagic);
+        }
+
+        [Test]
+        public void CharacterItemRecord_RoundTripsFieldsNeededForIconsAndValue()
+        {
+            var itemData = new ItemData_v1
+            {
+                uid = 42,
+                itemGroup = DaggerfallWorkshop.Game.Items.ItemGroups.MensClothing,
+                groupIndex = 7,
+                stackCount = 1,
+                weightInKg = 1.5f,
+                drawOrder = 4,
+                value1 = 120,
+                value2 = 0x00020003,
+                hits3 = 0x0102,
+                isQuestItem = true,
+                poisonType = DaggerfallWorkshop.Game.Items.Poisons.Moonseed,
+                potionRecipe = 9,
+                artifactIndexBitfield = 3,
+                timeForItemToDisappear = 777u,
+                timeHealthLeechLastUsed = 888u
+            };
+
+            var restored = DFMPCharacterItemRecord.FromItemData(itemData).ToItemData();
+
+            Assert.AreEqual(1.5f, restored.weightInKg);
+            Assert.AreEqual(4, restored.drawOrder);
+            Assert.AreEqual(120, restored.value1);
+            Assert.AreEqual(0x00020003, restored.value2);
+            Assert.AreEqual(0x0102, restored.hits3);
+            Assert.IsTrue(restored.isQuestItem);
+            Assert.AreEqual(DaggerfallWorkshop.Game.Items.Poisons.Moonseed, restored.poisonType);
+            Assert.AreEqual(9, restored.potionRecipe);
+            Assert.AreEqual(3, restored.artifactIndexBitfield);
+            Assert.AreEqual(777u, restored.timeForItemToDisappear);
+            Assert.AreEqual(888u, restored.timeHealthLeechLastUsed);
+        }
+
+        [Test]
+        public void CharacterPersistence_RoundTripsItemAndEquipmentArrays()
+        {
+            var itemData = new[]
+            {
+                new ItemData_v1 { uid = 42, itemGroup = DaggerfallWorkshop.Game.Items.ItemGroups.Weapons, groupIndex = 7, stackCount = 2 },
+                new ItemData_v1 { uid = 43, itemGroup = DaggerfallWorkshop.Game.Items.ItemGroups.Armor, groupIndex = 3, stackCount = 1 }
+            };
+            var equipmentIds = new ulong[] { 0, 42, 0, 43 };
+
+            var itemRecords = DFMPCharacterPersistence.CaptureItems(itemData);
+            var restoredItems = DFMPCharacterPersistence.RestoreItems(itemRecords);
+            var equipmentRecords = DFMPCharacterPersistence.CaptureEquipment(equipmentIds);
+            var restoredEquipment = DFMPCharacterPersistence.RestoreEquipment(equipmentRecords);
+
+            Assert.AreEqual(2, restoredItems.Length);
+            Assert.AreEqual(42u, restoredItems[0].uid);
+            Assert.AreEqual(2, restoredItems[0].stackCount);
+            Assert.AreEqual(27, restoredEquipment.Length);
+            Assert.AreEqual(42u, restoredEquipment[1]);
+            Assert.AreEqual(43u, restoredEquipment[3]);
+        }
+
+        [Test]
+        public void InventorySnapshotCodec_RoundTripsAndRejectsOversizedPayloads()
+        {
+            var inventory = new[]
+            {
+                new DFMPCharacterItemRecord { ItemId = 42, ItemGroup = 5, TemplateIndex = 7, StackCount = 2 }
+            };
+            var equipment = new[]
+            {
+                new DFMPCharacterEquipmentRecord { EquipSlot = 3, ItemId = 42 }
+            };
+
+            string json = DFMPInventorySnapshotCodec.Encode(inventory, equipment);
+            DFMPCharacterItemRecord[] decodedInventory;
+            DFMPCharacterEquipmentRecord[] decodedEquipment;
+            string reason;
+
+            Assert.IsTrue(DFMPInventorySnapshotCodec.TryDecode(json, out decodedInventory, out decodedEquipment, out reason));
+            Assert.AreEqual(42u, decodedInventory[0].ItemId);
+            Assert.AreEqual(3, decodedEquipment[0].EquipSlot);
+
+            Assert.IsFalse(DFMPInventorySnapshotCodec.TryDecode(new string('x', DFMPInventorySnapshotCodec.MaximumJsonLength + 1), out decodedInventory, out decodedEquipment, out reason));
+            Assert.IsTrue(reason.Contains("maximum size"));
         }
 
         [Test]
@@ -171,6 +318,20 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void InventorySignature_ChangesWhenEquipmentOrItemsChange()
+        {
+            var equipTable = new ulong[27];
+            int baseline = DFMPPositionReporter.GetInventorySignature(10, 456, equipTable);
+
+            Assert.AreEqual(baseline, DFMPPositionReporter.GetInventorySignature(10, 456, new ulong[27]));
+
+            equipTable[19] = 33554442;
+            Assert.AreNotEqual(baseline, DFMPPositionReporter.GetInventorySignature(10, 456, equipTable));
+            Assert.AreNotEqual(baseline, DFMPPositionReporter.GetInventorySignature(11, 456, new ulong[27]));
+            Assert.AreNotEqual(baseline, DFMPPositionReporter.GetInventorySignature(10, 457, new ulong[27]));
+        }
+
+        [Test]
         public void ClientJoinFlow_MapsJoinResultsToExpectedStates()
         {
             var flow = new DFMPClientJoinFlow();
@@ -180,14 +341,18 @@ namespace DFMP.Tests
 
             flow.ApplyJoinResult(new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.FirstJoin });
             Assert.AreEqual(DFMPClientJoinState.FirstJoinCharacterCreation, flow.State);
+            Assert.IsTrue(flow.ShouldReportLocalIdentity());
 
             flow.ApplyJoinResult(new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.ReturningPlayer });
             Assert.AreEqual(DFMPClientJoinState.ReturningPlayerRestore, flow.State);
-            Assert.IsFalse(flow.ShouldReportLocalIdentity(false));
+            Assert.IsFalse(flow.ShouldReportLocalIdentity());
+
+            flow.MarkInGame();
+            Assert.IsTrue(flow.ShouldReportLocalIdentity());
 
             flow.ApplyJoinResult(new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.Rejected });
             Assert.AreEqual(DFMPClientJoinState.Rejected, flow.State);
-            Assert.IsTrue(flow.ShouldReportLocalIdentity(false));
+            Assert.IsFalse(flow.ShouldReportLocalIdentity());
         }
 
         [Test]
