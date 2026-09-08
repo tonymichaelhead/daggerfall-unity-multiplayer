@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using DFMP.Runtime;
+using UnityEngine;
 
 namespace DFMP.Tests
 {
@@ -220,6 +221,110 @@ namespace DFMP.Tests
             Assert.AreEqual(213, context.MapPixelY);
             Assert.AreEqual("Daggerfall", context.LocationId);
             Assert.IsTrue(string.IsNullOrEmpty(context.InstanceId));
+        }
+
+        [Test]
+        public void ContextProtocol_RejectsInvalidReports()
+        {
+            Assert.AreEqual(
+                DFMPWorldContextRejectionReason.MissingSession,
+                DFMPWorldContextProtocol.GetRejectionReason(null, new DFMPWorldContextReport()));
+
+            GameObject go = new GameObject("DFMP_ContextValidationTest");
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6799360, 0f, 9388032);
+                var report = new DFMPWorldContextReport
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213
+                };
+
+                Assert.AreEqual(DFMPWorldContextRejectionReason.SpawnNotConfirmed, DFMPWorldContextProtocol.GetRejectionReason(session, report));
+                session.ConfirmSpawn();
+
+                report.MapPixelX = -1;
+                Assert.AreEqual(DFMPWorldContextRejectionReason.InvalidMapPixel, DFMPWorldContextProtocol.GetRejectionReason(session, report));
+
+                report.MapPixelX = 207;
+                report.Kind = DFMPWorldContextKind.BuildingInterior;
+                report.LocationId = "Daggerfall";
+                report.BuildingKey = 0;
+                Assert.AreEqual(DFMPWorldContextRejectionReason.MissingBuildingKey, DFMPWorldContextProtocol.GetRejectionReason(session, report));
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void ContextProtocol_CreatesCanonicalKeyFromReport()
+        {
+            var report = new DFMPWorldContextReport
+            {
+                Kind = DFMPWorldContextKind.BuildingInterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 41,
+                LocationId = " Daggerfall ",
+                BuildingKey = 12345,
+                InstanceId = " shared "
+            };
+
+            DFMPWorldContextKey key;
+            Assert.IsTrue(DFMPWorldContextProtocol.TryCreateKey(report, out key));
+            Assert.AreEqual(DFMPWorldContextKind.BuildingInterior, key.Kind);
+            Assert.AreEqual(207, key.MapPixelX);
+            Assert.AreEqual(213, key.MapPixelY);
+            Assert.AreEqual(3, key.RegionIndex);
+            Assert.AreEqual(41, key.LocationIndex);
+            Assert.AreEqual("Daggerfall", key.LocationId);
+            Assert.AreEqual(12345, key.BuildingKey);
+            Assert.AreEqual("shared", key.InstanceId);
+        }
+
+        [Test]
+        public void NetworkServer_TryApplyWorldContextReport_UpdatesOccupancy()
+        {
+            GameObject go = new GameObject("DFMP_ContextApplyTest");
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(70, 6799360, 0f, 9388032);
+                session.ConfirmSpawn();
+                var report = new DFMPWorldContextReport
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    RegionIndex = 3,
+                    LocationIndex = 42,
+                    LocationId = "Daggerfall Dungeon",
+                    DungeonBlockIndex = 7,
+                    DungeonBlockName = "S0000161.RDB",
+                    InstanceId = "shared"
+                };
+
+                DFMPWorldContextRejectionReason reason;
+                Assert.IsTrue(DFMPNetworkServer.TryApplyWorldContextReport(70, session, report, out reason));
+                Assert.AreEqual(DFMPWorldContextRejectionReason.None, reason);
+
+                DFMPWorldContextKey context;
+                Assert.IsTrue(DFMPNetworkServer.TryGetSessionWorldContext(70, out context));
+                Assert.AreEqual(DFMPWorldContextKind.Dungeon, context.Kind);
+                Assert.AreEqual("Daggerfall Dungeon", context.LocationId);
+                Assert.AreEqual(7, context.DungeonBlockIndex);
+                Assert.AreEqual("S0000161.RDB", context.DungeonBlockName);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+                DFMPNetworkServer.Stop();
+            }
         }
     }
 }

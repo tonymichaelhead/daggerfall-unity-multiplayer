@@ -70,6 +70,27 @@ namespace DFMP.Runtime
             return startMarkerAssignments.TryGetValue(connectionId, out markerName);
         }
 
+        public static bool TryApplyWorldContextReport(int connectionId, DFMPPlayerSessionState sessionState, DFMPWorldContextReport report, out DFMPWorldContextRejectionReason rejectionReason)
+        {
+            rejectionReason = DFMPWorldContextProtocol.GetRejectionReason(sessionState, report);
+            if (rejectionReason != DFMPWorldContextRejectionReason.None)
+                return false;
+
+            DFMPWorldContextKey context;
+            DFMPWorldContextProtocol.TryCreateKey(report, out context);
+            worldOccupancy.SetContext(connectionId, context);
+            return true;
+        }
+
+        static bool IsWorldContextChanged(int connectionId, DFMPWorldContextReport report)
+        {
+            DFMPWorldContextKey previousContext;
+            DFMPWorldContextKey nextContext;
+            return !worldOccupancy.TryGetContext(connectionId, out previousContext) ||
+                !DFMPWorldContextProtocol.TryCreateKey(report, out nextContext) ||
+                !previousContext.Equals(nextContext);
+        }
+
         static void SaveCharacterRecord(int connectionId, DFMPPlayerSessionState sessionState)
         {
             if (CharacterStore == null || sessionState == null)
@@ -147,6 +168,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPSpawnAcknowledgement>(OnSpawnAcknowledgement);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
+            NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
             NetworkServer.RegisterHandler<DFMPChatMessage>(OnChatMessage);
             NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
             SpawnTimeState();
@@ -472,6 +494,29 @@ namespace DFMP.Runtime
                 else
                     DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
                 CharacterStore.Save(joinDecision.CharacterRecord);
+            }
+        }
+
+        private static void OnWorldContextReport(NetworkConnectionToClient conn, DFMPWorldContextReport report)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPWorldContextRejectionReason rejectionReason;
+            bool changed = IsWorldContextChanged(conn.connectionId, report);
+            if (!TryApplyWorldContextReport(conn.connectionId, sessionState, report, out rejectionReason))
+            {
+                Debug.LogWarning($"[DFMP Context] Rejected context report: connectionId={conn.connectionId}, reason={rejectionReason}.");
+                return;
+            }
+
+            if (changed)
+            {
+                DFMPWorldContextKey context;
+                worldOccupancy.TryGetContext(conn.connectionId, out context);
+                Debug.Log($"[DFMP Context] Updated session context: connectionId={conn.connectionId}, context={context}.");
             }
         }
 

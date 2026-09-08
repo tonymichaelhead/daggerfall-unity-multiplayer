@@ -33,6 +33,20 @@ namespace DFMP.Runtime
         public string EquipmentJson;
     }
 
+    public struct DFMPWorldContextReport : Mirror.NetworkMessage
+    {
+        public DFMPWorldContextKind Kind;
+        public int MapPixelX;
+        public int MapPixelY;
+        public int RegionIndex;
+        public int LocationIndex;
+        public string LocationId;
+        public int BuildingKey;
+        public int DungeonBlockIndex;
+        public string DungeonBlockName;
+        public string InstanceId;
+    }
+
     public enum DFMPPositionRejectionReason
     {
         None,
@@ -41,6 +55,17 @@ namespace DFMP.Runtime
         TooSoon,
         InvalidWorldPosition,
         ExcessiveDisplacement
+    }
+
+    public enum DFMPWorldContextRejectionReason
+    {
+        None,
+        MissingSession,
+        SpawnNotConfirmed,
+        InvalidKind,
+        InvalidMapPixel,
+        MissingLocation,
+        MissingBuildingKey
     }
 
     public static class DFMPPositionProtocol
@@ -160,6 +185,66 @@ namespace DFMP.Runtime
             long deltaZ = (long)currentWorldZ - previousWorldZ;
             long threshold = MovementThreshold;
             return deltaX * deltaX + deltaZ * deltaZ > threshold * threshold;
+        }
+    }
+
+    public static class DFMPWorldContextProtocol
+    {
+        public static DFMPWorldContextRejectionReason GetRejectionReason(DFMPPlayerSessionState sessionState, DFMPWorldContextReport report)
+        {
+            if (sessionState == null)
+                return DFMPWorldContextRejectionReason.MissingSession;
+            if (!sessionState.SpawnConfirmed)
+                return DFMPWorldContextRejectionReason.SpawnNotConfirmed;
+            if (report.Kind != DFMPWorldContextKind.Exterior && report.Kind != DFMPWorldContextKind.BuildingInterior && report.Kind != DFMPWorldContextKind.Dungeon)
+                return DFMPWorldContextRejectionReason.InvalidKind;
+            if (report.MapPixelX < DFMPPositionProtocol.MinimumMapPixelX || report.MapPixelX > DFMPPositionProtocol.MaximumMapPixelX ||
+                report.MapPixelY < DFMPPositionProtocol.MinimumMapPixelY || report.MapPixelY > DFMPPositionProtocol.MaximumMapPixelY)
+                return DFMPWorldContextRejectionReason.InvalidMapPixel;
+            if ((report.Kind == DFMPWorldContextKind.BuildingInterior || report.Kind == DFMPWorldContextKind.Dungeon) && string.IsNullOrWhiteSpace(report.LocationId))
+                return DFMPWorldContextRejectionReason.MissingLocation;
+            if (report.Kind == DFMPWorldContextKind.BuildingInterior && report.BuildingKey <= 0)
+                return DFMPWorldContextRejectionReason.MissingBuildingKey;
+
+            return DFMPWorldContextRejectionReason.None;
+        }
+
+        public static bool TryCreateKey(DFMPWorldContextReport report, out DFMPWorldContextKey key)
+        {
+            key = new DFMPWorldContextKey();
+            var record = new DFMPWorldContextRecord
+            {
+                Kind = report.Kind.ToString(),
+                MapPixelX = report.MapPixelX,
+                MapPixelY = report.MapPixelY,
+                RegionIndex = report.RegionIndex,
+                LocationIndex = report.LocationIndex,
+                LocationId = report.LocationId ?? string.Empty,
+                BuildingKey = report.BuildingKey,
+                DungeonBlockIndex = report.DungeonBlockIndex,
+                DungeonBlockName = report.DungeonBlockName ?? string.Empty,
+                InstanceId = report.InstanceId ?? string.Empty
+            };
+            key = record.ToKey();
+            return true;
+        }
+
+        public static int GetSignature(DFMPWorldContextReport report)
+        {
+            unchecked
+            {
+                int signature = (int)report.Kind;
+                signature = signature * 397 ^ report.MapPixelX;
+                signature = signature * 397 ^ report.MapPixelY;
+                signature = signature * 397 ^ report.RegionIndex;
+                signature = signature * 397 ^ report.LocationIndex;
+                signature = signature * 397 ^ (report.LocationId ?? string.Empty).ToLowerInvariant().GetHashCode();
+                signature = signature * 397 ^ report.BuildingKey;
+                signature = signature * 397 ^ report.DungeonBlockIndex;
+                signature = signature * 397 ^ (report.DungeonBlockName ?? string.Empty).ToLowerInvariant().GetHashCode();
+                signature = signature * 397 ^ (report.InstanceId ?? string.Empty).ToLowerInvariant().GetHashCode();
+                return signature;
+            }
         }
     }
 }

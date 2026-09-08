@@ -1,5 +1,6 @@
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;
+using DaggerfallConnect;
 using Mirror;
 using UnityEngine;
 
@@ -14,6 +15,7 @@ namespace DFMP.Runtime
         float nextReportTime;
         float nextIdentityReportTime;
         float nextChangeReportTime;
+        int lastContextSignature;
         int lastInventorySignature;
 
         public static void EnsureInstance()
@@ -51,6 +53,7 @@ namespace DFMP.Runtime
 
             nextReportTime = Time.unscaledTime + DFMPPositionProtocol.MinimumReportInterval;
             SendIdentityReport();
+            SendWorldContextReport(streamingWorld);
             NetworkClient.Send(new DFMPPlayerPositionReport
             {
                 WorldX = streamingWorld.LocalPlayerGPS.WorldX,
@@ -114,6 +117,73 @@ namespace DFMP.Runtime
                     DFMPCharacterPersistence.CaptureEquipment(equipTable)),
                 EquipmentJson = string.Empty
             });
+        }
+
+        void SendWorldContextReport(StreamingWorld streamingWorld)
+        {
+            DFMPWorldContextReport report;
+            if (!TryBuildWorldContextReport(streamingWorld, out report))
+                return;
+
+            int signature = DFMPWorldContextProtocol.GetSignature(report);
+            if (signature == lastContextSignature)
+                return;
+
+            lastContextSignature = signature;
+            NetworkClient.Send(report);
+        }
+
+        public static bool TryBuildWorldContextReport(StreamingWorld streamingWorld, out DFMPWorldContextReport report)
+        {
+            report = new DFMPWorldContextReport();
+            if (streamingWorld == null || streamingWorld.LocalPlayerGPS == null)
+                return false;
+
+            PlayerGPS playerGPS = streamingWorld.LocalPlayerGPS;
+            var mapPixel = playerGPS.CurrentMapPixel;
+            report.Kind = DFMPWorldContextKind.Exterior;
+            report.MapPixelX = mapPixel.X;
+            report.MapPixelY = mapPixel.Y;
+            report.RegionIndex = playerGPS.CurrentRegionIndex;
+
+            if (playerGPS.HasCurrentLocation)
+            {
+                report.LocationIndex = playerGPS.CurrentLocationIndex;
+                report.LocationId = playerGPS.CurrentLocation.Name;
+            }
+
+            PlayerEnterExit playerEnterExit = GameManager.Instance != null ? GameManager.Instance.PlayerEnterExit : null;
+            if (playerEnterExit == null || !playerEnterExit.IsPlayerInside)
+                return true;
+
+            if (playerEnterExit.IsPlayerInsideBuilding)
+            {
+                report.Kind = DFMPWorldContextKind.BuildingInterior;
+                report.BuildingKey = playerEnterExit.BuildingDiscoveryData.buildingKey;
+                return true;
+            }
+
+            if (playerEnterExit.IsPlayerInsideDungeon && playerEnterExit.Dungeon != null)
+            {
+                report.Kind = DFMPWorldContextKind.Dungeon;
+                var dungeonSummary = playerEnterExit.Dungeon.Summary;
+                if (dungeonSummary.LocationData.Loaded)
+                {
+                    report.RegionIndex = dungeonSummary.LocationData.RegionIndex;
+                    report.LocationIndex = dungeonSummary.LocationData.LocationIndex;
+                }
+
+                report.LocationId = dungeonSummary.LocationName;
+                int blockIndex = playerEnterExit.Dungeon.GetPlayerBlockIndex(playerEnterExit.transform.position);
+                report.DungeonBlockIndex = blockIndex < 0 ? 0 : blockIndex;
+                DFLocation.DungeonBlock blockData;
+                if (blockIndex >= 0 && playerEnterExit.Dungeon.GetBlockData(blockIndex, out blockData))
+                    report.DungeonBlockName = blockData.BlockName;
+
+                return true;
+            }
+
+            return true;
         }
 
         public static int GetInventorySignature(int itemCount, int gold, ulong[] equipTable)
