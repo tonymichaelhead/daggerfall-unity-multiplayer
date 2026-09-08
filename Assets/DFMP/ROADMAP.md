@@ -14,7 +14,7 @@ The near-term target is a playable public beta for roughly 8-16 concurrent playe
 | M2 | Server-owned player session state holds canonical Daggerfall coordinates and identity. | Done |
 | M3 | Players see each other move as named, grounded avatars in the shared exterior world. | Done |
 | M4 | Global text chat, expanded server configuration, and a server-side event bus. | Done |
-| M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Planned |
+| M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Done |
 | M6 | World context, location occupancy, interest management, and safe transitions. | Planned |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Planned |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Planned |
@@ -152,13 +152,15 @@ Verification:
 
 ### M5: Identity, Whitelist, and Character Persistence
 
-Status: Planned.
+Status: Complete.
 
 Players create a character on first join and return to it on later sessions.
 
 - Stable account identity per player, established at connect time.
 - Optional whitelist gating connections for private and invite-only servers.
 - Server stores each character as a **structured record** with explicit fields for identity, position and world context, vitals, attributes and skills, inventory and equipment, and progression. It is deliberately not an opaque DFU save blob, so individual fields can be validated as authority tightens.
+- Progression is stored as Daggerfall models it. There are no experience points; level derives from the starting and current level-up skill sums, so the record persists the starting sum and the client recomputes the current sum from restored skills.
+- The character's class is persisted as a serialized `DFCareer`, which covers custom classes as well as the standard eighteen. Without it a returning client falls back to DFU's default Mage career, which silently drives the wrong level-up skill set, magicka pool, tolerances, and class advantages.
 - The record carries a schema version with a defined migration path, so beta characters survive later milestones that add fields.
 
 #### Join Flow

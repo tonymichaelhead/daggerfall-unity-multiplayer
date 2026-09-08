@@ -212,6 +212,78 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void CharacterRecord_DropsSchemaV1ExperienceAndDefersSkillSumToClient()
+        {
+            const string schemaV1Json = "{\"SchemaVersion\":1,\"CharacterName\":\"Veteran\",\"Level\":7," +
+                "\"Health\":37,\"MaxHealth\":80,\"Experience\":7890,\"Gold\":456}";
+
+            var migrated = DFMPCharacterRecord.FromJson(schemaV1Json, "account-v1", "world-b");
+
+            Assert.AreEqual(DFMPCharacterRecord.CurrentSchemaVersion, migrated.SchemaVersion);
+            Assert.AreEqual(7, migrated.Level);
+            Assert.AreEqual(456, migrated.Gold);
+            // Zero signals the client to re-estimate rather than trusting a stale sum.
+            Assert.AreEqual(0, migrated.StartingLevelUpSkillSum);
+            Assert.AreEqual(string.Empty, migrated.CareerJson);
+            Assert.IsFalse(migrated.ToJson().Contains("Experience"));
+        }
+
+        [Test]
+        public void CareerCodec_RoundTripsCustomClassAndRejectsBadPayloads()
+        {
+            var custom = new DaggerfallConnect.DFCareer
+            {
+                Name = "Bladesinger",
+                HitPointsPerLevel = 18,
+                SpellPointMultiplierValue = 1.5f,
+                AdvancementMultiplier = 0.4f,
+                PrimarySkill1 = DaggerfallConnect.DFCareer.Skills.LongBlade,
+                MajorSkill1 = DaggerfallConnect.DFCareer.Skills.Destruction,
+                MinorSkill1 = DaggerfallConnect.DFCareer.Skills.Stealth,
+                SpellAbsorption = DaggerfallConnect.DFCareer.SpellAbsorptionFlags.InDarkness,
+                AcuteHearing = true
+            };
+
+            DaggerfallConnect.DFCareer decoded;
+            string reason;
+            Assert.IsTrue(DFMPCareerCodec.TryDecode(DFMPCareerCodec.Encode(custom), out decoded, out reason));
+
+            Assert.AreEqual("Bladesinger", decoded.Name);
+            Assert.AreEqual(18, decoded.HitPointsPerLevel);
+            Assert.AreEqual(1.5f, decoded.SpellPointMultiplierValue);
+            Assert.AreEqual(DaggerfallConnect.DFCareer.Skills.LongBlade, decoded.PrimarySkill1);
+            Assert.AreEqual(DaggerfallConnect.DFCareer.Skills.Destruction, decoded.MajorSkill1);
+            Assert.AreEqual(DaggerfallConnect.DFCareer.Skills.Stealth, decoded.MinorSkill1);
+            Assert.AreEqual(DaggerfallConnect.DFCareer.SpellAbsorptionFlags.InDarkness, decoded.SpellAbsorption);
+            Assert.IsTrue(decoded.AcuteHearing);
+
+            Assert.IsFalse(DFMPCareerCodec.TryDecode(string.Empty, out decoded, out reason));
+            Assert.IsFalse(DFMPCareerCodec.TryDecode(new string('x', DFMPCareerCodec.MaximumJsonLength + 1), out decoded, out reason));
+            Assert.IsTrue(reason.Contains("maximum size"));
+
+            // A nameless career would silently replace the class with a blank one.
+            Assert.IsFalse(DFMPCareerCodec.TryDecode("{\"Name\":\"\"}", out decoded, out reason));
+        }
+
+        [Test]
+        public void CareerCodec_ClampsImplausibleClassPower()
+        {
+            var exploit = new DaggerfallConnect.DFCareer
+            {
+                Name = "Exploit",
+                SpellPointMultiplierValue = 9999f,
+                HitPointsPerLevel = 9999
+            };
+
+            DaggerfallConnect.DFCareer decoded;
+            string reason;
+            Assert.IsTrue(DFMPCareerCodec.TryDecode(DFMPCareerCodec.Encode(exploit), out decoded, out reason));
+
+            Assert.AreEqual(DFMPCareerCodec.MaximumSpellPointMultiplier, decoded.SpellPointMultiplierValue);
+            Assert.AreEqual(DFMPCareerCodec.MaximumHitPointsPerLevel, decoded.HitPointsPerLevel);
+        }
+
+        [Test]
         public void FileCharacterStore_SavesLoadsAndSeparatesWorlds()
         {
             var store = new DFMPFileCharacterStore(temporaryDirectory);
@@ -386,7 +458,8 @@ namespace DFMP.Tests
             record.Attributes[0] = 91;
             record.Skills[0] = 73;
             record.Gold = 456;
-            record.Experience = 7890;
+            record.StartingLevelUpSkillSum = 145;
+            record.CareerJson = DFMPCareerCodec.Encode(new DaggerfallConnect.DFCareer { Name = "Bladesinger" });
 
             DFMPCharacterSnapshotMessage snapshot = DFMPCharacterSnapshotProtocol.FromRecord(record);
 
@@ -406,7 +479,8 @@ namespace DFMP.Tests
             Assert.AreEqual(91, snapshot.Attributes[0]);
             Assert.AreEqual(73, snapshot.Skills[0]);
             Assert.AreEqual(456, snapshot.Gold);
-            Assert.AreEqual(7890, snapshot.Experience);
+            Assert.AreEqual(145, snapshot.StartingLevelUpSkillSum);
+            Assert.IsTrue(snapshot.CareerJson.Contains("Bladesinger"));
             Assert.IsTrue(DFMPCharacterSnapshotProtocol.IsValid(snapshot));
 
             snapshot.FaceVariant = 10;
@@ -499,6 +573,8 @@ namespace DFMP.Tests
                     Fatigue = 75,
                     MaxFatigue = 100,
                     Gold = 456,
+                    StartingLevelUpSkillSum = 145,
+                    CareerJson = DFMPCareerCodec.Encode(new DaggerfallConnect.DFCareer { Name = "Bladesinger", HitPointsPerLevel = 18 }),
                     Attributes = new[] { 91, 82, 73, 64, 55, 46, 37, 28 },
                     Skills = new[] { 73, 62, 51, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9 }
                 };
@@ -512,6 +588,8 @@ namespace DFMP.Tests
                 Assert.AreEqual(4, record.Level);
                 Assert.AreEqual(17, record.Health);
                 Assert.AreEqual(456, record.Gold);
+                Assert.AreEqual(145, record.StartingLevelUpSkillSum);
+                Assert.IsTrue(record.CareerJson.Contains("Bladesinger"));
                 Assert.AreEqual(91, record.Attributes[0]);
                 Assert.AreEqual(73, record.Skills[0]);
             }

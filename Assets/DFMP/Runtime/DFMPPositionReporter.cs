@@ -105,6 +105,8 @@ namespace DFMP.Runtime
                 Fatigue = playerEntity.CurrentFatigue,
                 MaxFatigue = playerEntity.MaxFatigue,
                 Gold = playerEntity.GoldPieces,
+                StartingLevelUpSkillSum = playerEntity.StartingLevelUpSkillSum,
+                CareerJson = DFMPCareerCodec.Encode(playerEntity.Career),
                 Attributes = attributes,
                 Skills = skills,
                 InventoryJson = DFMPInventorySnapshotCodec.Encode(

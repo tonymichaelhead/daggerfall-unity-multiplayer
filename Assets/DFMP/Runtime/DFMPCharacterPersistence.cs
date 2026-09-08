@@ -83,6 +83,15 @@ namespace DFMP.Runtime
             record.MaxFatigue = Mathf.Max(1, report.MaxFatigue);
             record.Fatigue = Mathf.Clamp(report.Fatigue, 0, record.MaxFatigue);
             record.Gold = Mathf.Max(0, report.Gold);
+            record.StartingLevelUpSkillSum = Mathf.Max(0, report.StartingLevelUpSkillSum);
+
+            DaggerfallConnect.DFCareer reportedCareer;
+            string careerReason;
+            if (DFMPCareerCodec.TryDecode(report.CareerJson, out reportedCareer, out careerReason))
+                record.CareerJson = DFMPCareerCodec.Encode(reportedCareer);
+            else if (!string.IsNullOrWhiteSpace(report.CareerJson))
+                Debug.LogWarning($"[DFMP Character] Career report rejected: reason={careerReason}.");
+
             for (int index = 0; index < 8; index++)
                 record.Attributes[index] = Mathf.Clamp(report.Attributes[index], 0, 100);
             for (int index = 0; index < 35; index++)

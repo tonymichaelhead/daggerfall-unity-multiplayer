@@ -6,7 +6,7 @@ namespace DFMP.Runtime
     [Serializable]
     public class DFMPCharacterRecord
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 3;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public string AccountId = string.Empty;
@@ -29,10 +29,14 @@ namespace DFMP.Runtime
 
         public int Race;
         public int Gender;
+        // Serialized DFCareer. Drives level-up skills, magicka, tolerances, and class advantages.
+        public string CareerJson = string.Empty;
         public int OutfitVariant;
         public int FaceVariant;
         public int Level = 1;
-        public int Experience;
+        // Daggerfall has no experience points; level derives from this plus the current skill sum.
+        // Zero means unknown (schema v1 record) and the client re-estimates it from DFU.
+        public int StartingLevelUpSkillSum;
         public int Gold;
         public int[] Attributes = new int[8];
         public int[] Skills = new int[35];
@@ -53,7 +57,8 @@ namespace DFMP.Runtime
             SpellPoints = Mathf.Clamp(SpellPoints, 0, MaxSpellPoints);
             MaxFatigue = Mathf.Max(1, MaxFatigue);
             Fatigue = Mathf.Clamp(Fatigue, 0, MaxFatigue);
-            Experience = Mathf.Max(0, Experience);
+            StartingLevelUpSkillSum = Mathf.Max(0, StartingLevelUpSkillSum);
+            CareerJson = CareerJson ?? string.Empty;
             Gold = Mathf.Max(0, Gold);
             Attributes = Attributes ?? new int[8];
             Skills = Skills ?? new int[35];

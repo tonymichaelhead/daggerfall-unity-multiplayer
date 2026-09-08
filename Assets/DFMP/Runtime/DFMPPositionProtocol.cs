@@ -25,6 +25,8 @@ namespace DFMP.Runtime
         public int Fatigue;
         public int MaxFatigue;
         public int Gold;
+        public int StartingLevelUpSkillSum;
+        public string CareerJson;
         public int[] Attributes;
         public int[] Skills;
         public string InventoryJson;

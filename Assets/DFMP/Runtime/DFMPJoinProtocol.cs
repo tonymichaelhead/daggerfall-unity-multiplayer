@@ -35,7 +35,8 @@ namespace DFMP.Runtime
         public int[] Attributes;
         public int[] Skills;
         public int Gold;
-        public int Experience;
+        public int StartingLevelUpSkillSum;
+        public string CareerJson;
         public string InventoryJson;
         public string EquipmentJson;
     }
@@ -62,7 +63,8 @@ namespace DFMP.Runtime
                 Attributes = record.Attributes ?? new int[0],
                 Skills = record.Skills ?? new int[0],
                 Gold = record.Gold,
-                Experience = record.Experience,
+                StartingLevelUpSkillSum = record.StartingLevelUpSkillSum,
+                CareerJson = record.CareerJson ?? string.Empty,
                 InventoryJson = DFMPInventorySnapshotCodec.Encode(record.Inventory, record.Equipment)
             };
         }
@@ -81,7 +83,7 @@ namespace DFMP.Runtime
                 snapshot.MaxFatigue >= 1 && snapshot.Fatigue >= 0 && snapshot.Fatigue <= snapshot.MaxFatigue &&
                 snapshot.Attributes != null && snapshot.Attributes.Length == 8 &&
                 snapshot.Skills != null && snapshot.Skills.Length == 35 &&
-                snapshot.Gold >= 0 && snapshot.Experience >= 0;
+                snapshot.Gold >= 0 && snapshot.StartingLevelUpSkillSum >= 0;
         }
     }
 

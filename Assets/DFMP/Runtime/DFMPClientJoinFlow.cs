@@ -176,6 +176,7 @@ namespace DFMP.Runtime
             playerEntity.BirthRaceTemplate = DaggerfallWorkshop.Game.Player.CharacterDocument.GetRaceTemplate((Races)snapshot.Race);
             playerEntity.Gender = (Genders)snapshot.Gender;
             playerEntity.FaceIndex = snapshot.FaceVariant;
+            ApplyCareer(playerEntity, snapshot.CareerJson);
             playerEntity.Level = snapshot.Level;
             playerEntity.MaxHealth = snapshot.MaxHealth;
             playerEntity.CurrentHealth = snapshot.Health;
@@ -186,6 +187,7 @@ namespace DFMP.Runtime
             for (int index = 0; index < snapshot.Skills.Length; index++)
                 playerEntity.Skills.SetPermanentSkillValue(index, (short)Mathf.Clamp(snapshot.Skills[index], 0, 100));
             playerEntity.GoldPieces = snapshot.Gold;
+            ApplyProgression(playerEntity, snapshot.StartingLevelUpSkillSum);
             DFMPCharacterItemRecord[] inventory;
             DFMPCharacterEquipmentRecord[] equipment;
             string inventoryReason = string.Empty;
@@ -218,7 +220,34 @@ namespace DFMP.Runtime
             ServerIdentityApplied = true;
             hasPendingSnapshot = false;
             Flow.MarkInGame();
-            Debug.Log($"[DFMP Join] Applied server character snapshot: name='{snapshot.CharacterName}', race={snapshot.Race}, gender={snapshot.Gender}, face={snapshot.FaceVariant}, level={snapshot.Level}, health={snapshot.Health}/{snapshot.MaxHealth}, spellPoints={snapshot.SpellPoints}/{snapshot.MaxSpellPoints}, fatigue={snapshot.Fatigue}/{snapshot.MaxFatigue}.");
+            Debug.Log($"[DFMP Join] Applied server character snapshot: name='{snapshot.CharacterName}', race={snapshot.Race}, gender={snapshot.Gender}, face={snapshot.FaceVariant}, level={snapshot.Level}, health={snapshot.Health}/{snapshot.MaxHealth}, spellPoints={snapshot.SpellPoints}/{snapshot.MaxSpellPoints}, fatigue={snapshot.Fatigue}/{snapshot.MaxFatigue}, startingSkillSum={playerEntity.StartingLevelUpSkillSum}, currentSkillSum={playerEntity.CurrentLevelUpSkillSum}.");
+        }
+
+        static void ApplyCareer(DaggerfallWorkshop.Game.Entity.PlayerEntity playerEntity, string careerJson)
+        {
+            // Without this the client keeps DFU's default Mage career, which drives the wrong
+            // level-up skill set, magicka pool, tolerances, and class advantages.
+            DaggerfallConnect.DFCareer career;
+            string reason;
+            if (DFMPCareerCodec.TryDecode(careerJson, out career, out reason))
+            {
+                playerEntity.Career = career;
+                Debug.Log($"[DFMP Join] Restored character class: name='{career.Name}', spellPointMultiplier={career.SpellPointMultiplierValue}, hitPointsPerLevel={career.HitPointsPerLevel}.");
+                return;
+            }
+
+            Debug.LogWarning($"[DFMP Join] Character class not restored, keeping local default '{playerEntity.Career?.Name}': reason={reason}.");
+        }
+
+        static void ApplyProgression(DaggerfallWorkshop.Game.Entity.PlayerEntity playerEntity, int startingLevelUpSkillSum)
+        {
+            // Zero means a pre-v2 record with no stored sum; DFU's own estimator recovers it from level and skills.
+            if (startingLevelUpSkillSum > 0)
+                playerEntity.StartingLevelUpSkillSum = startingLevelUpSkillSum;
+
+            playerEntity.SetCurrentLevelUpSkillSum();
+            if (startingLevelUpSkillSum <= 0)
+                playerEntity.EstimateStartingLevelUpSkillSum();
         }
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
