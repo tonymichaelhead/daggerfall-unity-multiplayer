@@ -610,6 +610,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         void DoRestForAWhile(bool alreadyWarned)
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleRestAdvance != null && DFMP.Hooks.DaggerfallHooks.TryHandleRestAdvance(nameof(RestModes.TimedRest)))
+                return;
+
             if (CanRest(alreadyWarned))
             {
                 DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(uiManager, this);
@@ -627,6 +630,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         void DoRestUntilHealed(bool alreadyWarned)
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleRestAdvance != null && DFMP.Hooks.DaggerfallHooks.TryHandleRestAdvance(nameof(RestModes.FullRest)))
+                return;
+
             if (CanRest(alreadyWarned))
             {
                 waitTimer = Time.realtimeSinceStartup;
@@ -693,6 +699,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void LoiterButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
             DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleRestAdvance != null && DFMP.Hooks.DaggerfallHooks.TryHandleRestAdvance(nameof(RestModes.Loiter)))
+                return;
+
             DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(uiManager, this);
             mb.SetTextBoxLabel(TextManager.Instance.GetLocalizedText("loiterHowManyHours"));
             mb.TextPanelDistanceX = 5;
