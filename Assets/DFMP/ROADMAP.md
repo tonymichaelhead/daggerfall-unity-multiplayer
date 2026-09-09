@@ -1,10 +1,22 @@
 # DFMP Roadmap
 
-DFMP is a customizable multiplayer framework for Daggerfall Unity. Server owners host dedicated servers, tune behavior through configuration, and eventually extend it through a scripting layer. Players join those servers with a matching client build.
+DFMP is a multiplayer framework for Daggerfall Unity. Players join a dedicated server using a matching client build.
 
-The near-term target is a playable public beta for roughly 8-16 concurrent players, built so that growth toward ~100 players does not require an architectural rewrite.
+Development is split into three phases with different definitions of "done".
+
+**Phase 1 — Private Beta.** Everything needed to run one author-operated, whitelisted server that Discord testers can join and actually play on. The gameplay loop must be complete and stable: identity and login, character persistence, chat, a shared world, combat, and dungeon enemies. The build is not handed to other server owners in this phase, so a deep configuration surface, server-side scripting, a launcher, and public documentation are deliberately out of scope.
+
+**Phase 2 — Public Release.** Everything needed for someone else to run their own DFMP server without the author's help: server-side scripting, a full configuration surface, admin and moderation tooling, client distribution and a launcher, operational hardening, and documentation.
+
+**Phase 3 — Post-Release Expansion.** Perpetual, demand-driven work with no exit criteria: server-driven mod provisioning, proximity and voice chat, deeper shared world state, scale and trust hardening, and ecosystem features. Priority here comes from what live servers ask for, not from this document.
+
+Phase 1 answers *"is this fun and stable enough to play with my friends?"*. Phase 2 answers *"can anyone else run this without me?"*. Phase 3 answers *"what do real servers need next?"*.
+
+Target scale in both phases is roughly 8-16 concurrent players, built so growth toward ~100 does not require an architectural rewrite.
 
 ## At a Glance
+
+### Phase 1 — Private Beta (author-hosted, whitelisted)
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -13,26 +25,50 @@ The near-term target is a playable public beta for roughly 8-16 concurrent playe
 | M1 | Server-owned game time replicates to clients instead of living on a player prefab. | Done |
 | M2 | Server-owned player session state holds canonical Daggerfall coordinates and identity. | Done |
 | M3 | Players see each other move as named, grounded avatars in the shared exterior world. | Done |
-| M4 | Global text chat, expanded server configuration, and a server-side event bus. | Done |
+| M4 | Global text chat, baseline server configuration, and a server-side event bus. | Done |
 | M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Done |
 | M6 | World context, location occupancy, interest management, and safe transitions. | Planned |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Planned |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Planned |
 | M8 | Server-owned dungeon enemies with rosters, replication, AI, and kill credit. | Planned |
-| — | **Public beta release.** | Planned |
-| M9+ | Shared economy options, proximity and voice chat, shared quests, scripting layer. | Future |
+| M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
+| — | **Phase 1 exit: private beta server live for Discord testers.** | Planned |
 
-## MVP Definition
+### Phase 2 — Public Release (other people host their own servers)
 
-The public beta target is a single complete loop:
+| # | Milestone | Status |
+| --- | --- | --- |
+| R1 | Full server configuration surface, validation, and documented defaults. | Planned |
+| R2 | Server-side scripting layer bound to the event bus. | Planned |
+| R3 | Admin, moderation, and chat command tooling. | Planned |
+| R4 | Client distribution and launcher. | Planned |
+| R5 | Operational hardening: backups, restart recovery, logging, metrics. | Planned |
+| R6 | Documentation and release packaging. | Planned |
+| — | **Phase 2 exit: public release for third-party server owners.** | Planned |
+
+### Phase 3 — Post-Release Expansion (perpetual, demand-driven)
+
+| # | Milestone | Status |
+| --- | --- | --- |
+| P-MOD | Server-supplied mod manifest with automatic client download, enable, and configuration. | Future |
+| P-VOICE | Proximity text chat, spatialized proximity voice, and party channels. | Future |
+| P-WORLD | Shared quests, shared world state and economy, ambient NPC sync. | Future |
+| P-SCALE | SQL persistence, strict authority and anti-cheat, 100+ player scaling. | Future |
+| P-COMMUNITY | Server browser, expanded scripting API, script sharing, friends and invites. | Future |
+
+## Phase 1 Gameplay Target
+
+Phase 1 is complete when a tester can run this loop end to end on the author's server:
 
 > Join a server, create a character, spawn in Daggerfall city, see and chat with other players, enter a dungeon together, fight the same enemies, optionally fight each other when PvP is enabled, log off, and return later with the same character.
 
 Systems are divided by a single rule: **replicate state when a desync between two co-located players would break immersion or be exploitable. Otherwise keep it personal to each client and document it.**
 
-Server-owned in MVP: player presence and movement, global chat, game time and weather, character persistence, vitals, combat damage, PvP policy, dungeon enemies, location occupancy, and door state.
+Server-owned in Phase 1: player presence and movement, global chat, game time and weather, character persistence, vitals, combat damage, PvP policy, dungeon enemies, location occupancy, and door state.
 
-Personal (client-local) in MVP: wandering town citizens, static NPCs and shopkeepers, shop inventories and guild services, loot, and quests. Daggerfall's world geometry, dungeon layouts, and static flats are deterministic from game data, so they are never replicated.
+Personal (client-local) in Phase 1: wandering town citizens, static NPCs and shopkeepers, shop inventories and guild services, loot, and quests. Daggerfall's world geometry, dungeon layouts, and static flats are deterministic from game data, so they are never replicated.
+
+Explicitly deferred to Phase 2, even though it would be tempting to build early: server-side scripting, an exhaustive configuration surface, in-game admin and moderation commands, a launcher and auto-updater, and player-facing documentation. Phase 1 configuration stays at whatever the author needs to run one server, and operational tasks may be manual.
 
 ## Architectural Rules
 
@@ -43,11 +79,12 @@ Personal (client-local) in MVP: wandering town citizens, static NPCs and shopkee
 - Client reports are inputs. The server validates and writes replicated state.
 - Native Daggerfall world coordinates are authoritative. Unity scene positions are local presentation data because floating origin can rebase them.
 - Interest management keys on Daggerfall location identity and map pixels, never Unity transform distance.
-- Server-tunable behavior belongs in `dfmp-server.json` from the moment it is implemented.
+- Server-tunable behavior belongs in `dfmp-server.json` from the moment it is implemented. Phase 1 only has to expose the values the author needs; R1 exposes the rest, so values must be read from a single configuration object rather than scattered constants.
 - Server-side gameplay events are raised on a single event bus so a future scripting layer binds to it rather than being retrofitted into finished systems.
+- Phase 1 may defer Phase 2 features, but must not make them expensive. Deferring polish is fine; hard-coding an assumption that R1-R6 would have to unwind is not.
 - `Assets/DFMP/Runtime/` must not depend on edits to upstream DFU source, so the same assembly could ship inside this build or inside a mod bundle without redesign.
 
-## Completed
+## Phase 1 Milestones: Foundation (Complete)
 
 ### M0: Headless Dedicated Server Boot
 
@@ -127,9 +164,9 @@ Verification:
 - Focused EditMode tests for spawn, position, appearance, and remote-presentation rules.
 - Two-client graphical exterior smoke test.
 
-## Upcoming
+## Phase 1 Milestones: M4 Onward
 
-### M4: Global Chat, Server Configuration, and Event Bus
+### M4: Global Chat, Baseline Server Configuration, and Event Bus
 
 Status: Complete.
 
@@ -139,8 +176,8 @@ One global MMO-style text channel, plus the configuration and event surfaces tha
 - Server validates message size, characters, sender session, and rate limit.
 - Server broadcasts accepted messages to all ready clients.
 - Client UI displays a scrolling global-channel history with sender display names.
-- Expand `dfmp-server.json` into a structured server configuration document covering server identity, connection limits, chat rate limits, and world rules.
-- Introduce a server-side event bus raising `PlayerConnected`, `PlayerDisconnected`, `PlayerSpawned`, `ChatMessageReceived`, and `LocationEntered`. No scripting engine is bound in this milestone; the bus exists so later systems publish through it by default.
+- Expand `dfmp-server.json` into a structured server configuration document covering server identity, connection limits, chat rate limits, and world rules. This is the baseline surface only; the exhaustive, documented configuration surface for third-party owners is R1.
+- Introduce a server-side event bus raising `PlayerConnected`, `PlayerDisconnected`, `PlayerSpawned`, `ChatMessageReceived`, and `LocationEntered`. No scripting engine is bound in this milestone; the bus exists so later systems publish through it by default and R2 can bind to it rather than retrofitting finished systems.
 
 Out of scope: private messages, party or proximity channels, chat history persistence, moderation roles, and chat commands.
 
@@ -264,7 +301,27 @@ Verification:
 - EditMode tests for roster seeding, spawn and despawn lifecycle, authority boundaries, and kill credit.
 - Two-client graphical dungeon smoke test confirming both players see and fight the same enemies.
 
-### Quest Policy for MVP
+### M9: Beta Server Launch Readiness
+
+Status: Planned.
+
+The smallest amount of non-gameplay work required to actually put testers on the author's server. Everything here is intentionally minimal, because the polished versions are Phase 2.
+
+- Tester client build: a versioned, zipped portable client that testers download directly, with the server address supplied by a config file or command-line argument. No launcher, no auto-update, no server browser.
+- Client and server version handshake, so a mismatched tester build is rejected at connect with a readable reason instead of desyncing.
+- Whitelist administered by hand, out of band via Discord, using the M5 whitelist store.
+- Manual operations are acceptable: file-copy character backups, restart by hand, read logs on disk.
+- Beta stability pass: run the server continuously for a multi-day soak, watch for leaks, unbounded growth in session or roster state, and reconnect edge cases.
+- A short tester-facing setup note and a bug reporting channel. This is not the Phase 2 documentation set.
+
+Out of scope: launcher, auto-update, server browser, mod provisioning, in-game admin commands, metrics dashboards.
+
+Verification:
+
+- A tester who has never run DFMP can install the client, connect, create a character, play, disconnect, and return to the same character.
+- Multi-day soak run with no unbounded resource growth and no manual intervention required to keep the server up.
+
+### Quest Policy for Phase 1
 
 Quests remain **personal per player** rather than shared or disabled. Full quest-state synchronization is explicitly out of scope; the reference fork's approach demonstrated that it does not decompose cleanly.
 
@@ -273,22 +330,64 @@ Quests remain **personal per player** rather than shared or disabled. Full quest
 - Quest deadlines are suppressed by default for beta. The server disables quest timeout actions rather than editing upstream quest scripts, keeping the change configurable and rebasable.
 - Configuration exposes a quest mode of `personal` or `disabled`, plus flags for quest-foe replication and deadline enforcement. A `shared` mode is reserved for a future milestone.
 
-## Future Work
+## Phase 2 Milestones: Public Release
 
-Beyond the public beta, in rough priority order:
+Phase 2 turns a server the author can run into a product other people can run. Nothing here changes the core gameplay loop; it changes who is capable of operating it.
 
-- Additional chat channels, including proximity chat, and later proximity voice chat.
-- Server scripting layer bound to the M4 event bus, with an event and command API for server owners.
-- Shared quest progression for parties, building on the personal quest model.
-- Shared and persistent world state options: doors, containers, loot mode selection, and shared economy.
-- SQL-backed character and world persistence (SQLite, then PostgreSQL) behind the M5 store interface, plus restart recovery and administrative tooling.
-- Strict authority: full server-side combat validation, inventory and equipment authority, trade, and anti-cheat.
-- Scaling work toward 100+ concurrent players, including replication budgeting and load testing.
-- Optional citizen and ambient NPC synchronization, only if it proves to matter in practice.
+Phase 2 does not begin until Phase 1 has been running a live beta long enough to know which knobs owners will actually want. Guessing the configuration and scripting surface before the beta produces the wrong surface.
 
-### M7: Client Distribution and Launcher
+### R1: Full Server Configuration Surface
 
-Status: Planned. Not started.
+Status: Planned.
+
+- Promote every hard-coded Phase 1 constant that a server owner would reasonably want to change into `dfmp-server.json`, organized into coherent sections: identity and listing, connection and whitelist, chat, world and time, rest and travel, PvP and combat, enemies and loot, quests, and persistence.
+- Schema versioning and migration for the config document itself, matching the approach used for character records.
+- Startup validation that rejects malformed values with a specific, actionable message and exits, rather than silently falling back to defaults.
+- Config reload for the subset of values that are safe to change on a running server, with the rest clearly marked restart-only.
+- A documented, fully commented reference config shipped with the build.
+
+Verification:
+
+- EditMode tests for parsing, defaults, invalid-value handling, migration, and reload safety classification.
+- A server started from the shipped reference config runs without warnings.
+
+### R2: Server-Side Scripting Layer
+
+Status: Planned.
+
+The M4 event bus exists precisely so this milestone is a binding exercise rather than a rewrite.
+
+- An embedded scripting runtime loading scripts from a server-side scripts folder.
+- Event API: scripts subscribe to bus events (`PlayerConnected`, `PlayerSpawned`, `ChatMessageReceived`, `LocationEntered`, `PlayerDamaged`, `PlayerDied`, `PlayerRespawned`, `EnemySpawned`, `EnemyDied`, `LootGenerated`).
+- Command API: scripts act on the world through a narrow, validated surface (send chat, teleport a player, adjust vitals, spawn or despawn enemies, grant items or gold, kick or ban, read and write per-character script data).
+- Handlers may veto or modify eligible events, with the veto points defined explicitly rather than every event being interceptable.
+- Sandboxing and error isolation: a faulty script is disabled with a logged error and never takes the server down. Execution time budgets prevent a script from stalling the tick.
+- Per-character and per-server script key-value storage persisted through the M5 store interface.
+- Hot reload of scripts on a running server.
+
+Verification:
+
+- EditMode tests for event dispatch, veto semantics, command validation, error isolation, and time budgeting.
+- A sample script set shipped as documentation-by-example, exercised in a smoke test.
+
+### R3: Admin, Moderation, and Chat Commands
+
+Status: Planned.
+
+- Role and permission model: owner, admin, moderator, player, with permissions granted per command.
+- In-game chat command framework, with commands registerable by both the core and R2 scripts.
+- Core moderation commands: kick, ban, unban, mute, whitelist add and remove, teleport, and player lookup.
+- Audit log of moderation actions, keyed to account identity.
+- Additional chat channels beyond the single global channel, at minimum a staff channel and private messages.
+
+Verification:
+
+- EditMode tests for permission resolution, command parsing, and moderation state transitions.
+- Smoke test confirms an unprivileged player cannot invoke privileged commands.
+
+### R4: Client Distribution and Launcher
+
+Status: Planned.
 
 Ship DFMP as a separate client application that reuses the player's existing Daggerfall data instead of replacing or modifying their Daggerfall Unity install. The DFMP client is a sibling of DFU in the same way DFU is a sibling of classic Daggerfall: another engine binary reading the same `arena2` data.
 
@@ -297,7 +396,7 @@ Ship DFMP as a separate client application that reuses the player's existing Dag
 - Mod bundles are already install-local because `ModDirectory` defaults to `StreamingAssets/Mods`, so the DFMP client has its own mod folder independent of the player's DFU install.
 - Net effect: separate settings, saves, keybinds, mod list, and mod configs. The only shared resource is the read-only `arena2` game data.
 - Players do not inherit their existing DFU mods or keybinds. Keybind import is a possible later launcher convenience. Mod inheritance is explicitly not wanted.
-- Server dictates the allowed mod set and the launcher provisions the client's mod folder to match, without touching the player's single-player setup.
+- Server dictates the allowed mod set and the launcher provisions the client's mod folder to match, without touching the player's single-player setup. R4 only has to detect a mismatch and tell the player what is required; fully automatic download, enable, and configuration is P-MOD.
 - Launcher owns client version management and update integrity.
 - Launcher provides a server list and launches the client with connect arguments.
 - No game files are copied, moved, or patched. The player's vanilla DFU install keeps working side by side.
@@ -307,6 +406,97 @@ Verification:
 - Launch a DFMP client against an unmodified Daggerfall install and confirm DFU's persistent data folder is untouched.
 - Confirm the DFMP client resolves settings, saves, and mods from its own portable paths while a vanilla DFU install is present.
 - Confirm launcher-supplied connect arguments reach the client bootstrap and establish a session.
+
+### R5: Operational Hardening
+
+Status: Planned.
+
+The work that separates "the author babysits it" from "a stranger runs it on a rented box".
+
+- Scheduled character and world state backups with retention, plus a documented restore path.
+- Crash and restart recovery: clean shutdown persistence, and recovery of in-flight state after an unclean stop.
+- Structured server logging with levels and rotation, so log files do not grow without bound.
+- Operational metrics: player count, tick time, bandwidth, replication volume, and rejection counts, exposed for basic monitoring.
+- Server-side rate limiting and abuse protection on every client-submitted message type.
+- Documented deployment shapes for Windows and Linux servers, including running as a service.
+
+Verification:
+
+- Kill and restart a loaded server, confirming characters and world state survive.
+- Restore from a backup into a clean deployment.
+
+### R6: Documentation and Release Packaging
+
+Status: Planned.
+
+- Server owner guide: install, configure, run, whitelist, moderate, back up, and update.
+- Scripting reference for the R2 event and command API, with worked examples.
+- Player guide: obtaining the client, connecting, and known differences from single-player DFU.
+- Contributor documentation covering the three-layer architecture, the hook policy, and the rebase workflow.
+- Versioned release artifacts for server, client, and launcher, with a changelog and a compatibility statement tying client and server versions together.
+
+Verification:
+
+- A person who has never seen the project stands up a working server from the documentation alone, without asking the author a question.
+
+## Phase 3 Milestones: Post-Release Expansion
+
+Phase 3 is perpetual. It has no exit criteria and no fixed order, because after public release the priority order should be driven by what live servers and their players actually ask for rather than by a plan written before launch.
+
+Items graduate from this list into scheduled work when there is real demand, and items may be dropped outright if the beta and release show nobody wants them. Anything here that would change core authority boundaries must respect the same architectural rules as Phase 1 and Phase 2.
+
+### P-MOD: Server-Driven Mod Provisioning
+
+Status: Future. Strongest candidate to be scheduled first.
+
+R4 establishes that the server dictates the allowed mod set and the launcher matches it. This milestone makes that fully automatic, so joining a modded server never requires a player to hunt down downloads, match versions, or fix load order by hand.
+
+- Server publishes a **mod manifest**: an ordered list of required and optional mods, each with an identifier, version, content hash, load order position, and mod-specific settings.
+- Client compares the manifest against its local mod cache and resolves the difference before connecting.
+- Missing or outdated mods are downloaded automatically, verified against the manifest hash, and installed into the client's own portable mod folder. The player's separate single-player DFU install is never touched.
+- Client applies the server's load order and per-mod settings for the duration of that session, then restores its own configuration when connecting elsewhere. Per-server mod profiles mean a player can move between differently modded servers without manual reconfiguration.
+- Content is served either from the game server itself or from an owner-configured content host, since shipping large mod payloads over the game transport is a poor default.
+- Mods are validated for multiplayer compatibility, and mods known to conflict with server authority are rejected with a clear reason rather than silently desyncing.
+- Mods that affect gameplay state must be classified as server-relevant or purely cosmetic. Cosmetic mods stay a client choice; server-relevant mods are enforced from the manifest.
+- Cache management, integrity re-verification, and reclaiming space from unused mod profiles.
+
+Open questions to settle before scheduling: hosting and bandwidth cost for owners, redistribution permission from mod authors, and how far a mod may alter gameplay before the server must simulate it rather than trust it.
+
+### P-VOICE: Proximity and Voice Chat
+
+Status: Future.
+
+- Proximity text chat scoped by distance and world context, building on the M6 occupancy and interest data rather than Unity transform distance.
+- Proximity voice chat with spatialized falloff, push-to-talk and voice activation, and per-player mute.
+- Party and guild voice channels independent of position.
+- Server-side voice policy: enable or disable, quality and bandwidth ceilings, and moderation controls including server mute.
+
+### P-WORLD: Deeper Shared World State
+
+Status: Future.
+
+- Shared quest progression for parties, building on the personal quest model rather than replacing it.
+- Shared and persistent world state options: doors, containers, loot mode selection, and a shared economy with server-owned shop inventories and prices.
+- Optional citizen and ambient NPC synchronization, only if it proves to matter in practice.
+- Server-owned weather and seasonal events beyond the Phase 1 time and weather baseline.
+
+### P-SCALE: Scale, Storage, and Trust
+
+Status: Future.
+
+- SQL-backed character and world persistence (SQLite, then PostgreSQL) behind the M5 store interface, plus administrative tooling.
+- Strict authority: full server-side combat validation, inventory and equipment authority, validated trade, and anti-cheat.
+- Scaling work toward 100+ concurrent players, including replication budgeting, tick profiling, and load testing.
+- Multi-server deployments sharing an account identity and character store.
+
+### P-COMMUNITY: Ecosystem
+
+Status: Future.
+
+- Public server browser and listing service.
+- Richer scripting API surface driven by what server owners hit the limits of in R2.
+- A script and plugin sharing ecosystem, so owners exchange systems rather than each rebuilding them.
+- Player-facing quality of life: friends lists, invites, and joining a friend's session directly.
 
 ### Optional: Mod-Packaged Client (Not Planned)
 
