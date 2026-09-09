@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using DaggerfallConnect;
@@ -81,6 +80,7 @@ namespace DFMP.Runtime
 
         DFMPCharacterSnapshotMessage pendingSnapshot;
         bool hasPendingSnapshot;
+        bool introQuestSuppressionStarted;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Initialize()
@@ -125,10 +125,13 @@ namespace DFMP.Runtime
         private void OnDestroy()
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            StartGameBehaviour.OnStartGame -= OnStartGameBehaviourStarted;
         }
 
         public void MarkConnecting()
         {
+            StartGameBehaviour.OnStartGame -= OnStartGameBehaviourStarted;
+            introQuestSuppressionStarted = false;
             Flow.MarkConnecting();
         }
 
@@ -143,12 +146,11 @@ namespace DFMP.Runtime
             {
                 DaggerfallUnity.Settings.ShowOptionsAtStart = false;
                 SceneManager.LoadScene(SceneControl.GameSceneIndex);
+                return;
             }
-            else if (result.Decision == DFMPJoinDecisionKind.ReturningPlayer &&
-                SceneManager.GetActiveScene().buildIndex == SceneControl.GameSceneIndex)
-            {
-                ConfigureReturningPlayerStartup();
-            }
+
+            // Joining from the server list means the game scene is already loaded and OnSceneLoaded will never fire.
+            BeginMultiplayerStartup();
         }
 
         public void ApplyCharacterSnapshot(DFMPCharacterSnapshotMessage snapshot)
@@ -257,39 +259,48 @@ namespace DFMP.Runtime
                  Flow.State == DFMPClientJoinState.ReturningPlayerRestore))
             {
                 Debug.Log($"[DFMP Join] Multiplayer game scene loaded: state={Flow.State}.");
-
-                if (Flow.State == DFMPClientJoinState.ReturningPlayerRestore)
-                    ConfigureReturningPlayerStartup();
-
-                if (!Flow.EnableBeginnerTutorial)
-                    StartCoroutine(SuppressBeginnerTutorialAfterStartup());
+                BeginMultiplayerStartup();
             }
         }
 
-        IEnumerator SuppressBeginnerTutorialAfterStartup()
+        void BeginMultiplayerStartup()
         {
-            StartGameBehaviour startGameBehaviour = null;
-            while (startGameBehaviour == null || startGameBehaviour.LastStartMethod != StartGameBehaviour.StartMethods.NewCharacter)
-            {
-                startGameBehaviour = FindObjectOfType<StartGameBehaviour>();
-                yield return null;
-            }
+            if (Flow.State == DFMPClientJoinState.ReturningPlayerRestore)
+                ConfigureReturningPlayerStartup();
 
-            if (QuestMachine.Instance != null)
+            if (Flow.EnableBeginnerTutorial || introQuestSuppressionStarted)
+                return;
+
+            introQuestSuppressionStarted = true;
+            // OnStartGame fires at the end of StartNewCharacter, so the intro quests are removed
+            // in the same frame they start and before QuestMachine can tick their popups.
+            StartGameBehaviour.OnStartGame += OnStartGameBehaviourStarted;
+        }
+
+        void OnStartGameBehaviourStarted(object sender, System.EventArgs args)
+        {
+            StartGameBehaviour.OnStartGame -= OnStartGameBehaviourStarted;
+            introQuestSuppressionStarted = false;
+            RemoveIntroQuests();
+        }
+
+        static void RemoveIntroQuests()
+        {
+            if (QuestMachine.Instance == null)
+                return;
+
+            int removedQuestCount = 0;
+            foreach (ulong questUid in QuestMachine.Instance.GetAllActiveQuests())
             {
-                int removedQuestCount = 0;
-                foreach (ulong questUid in QuestMachine.Instance.GetAllActiveQuests())
+                Quest quest = QuestMachine.Instance.GetQuest(questUid);
+                if (quest != null && IsMultiplayerIntroQuest(quest.QuestName))
                 {
-                    Quest quest = QuestMachine.Instance.GetQuest(questUid);
-                    if (quest != null && IsMultiplayerIntroQuest(quest.QuestName))
-                    {
-                        if (QuestMachine.Instance.RemoveQuest(questUid))
-                            removedQuestCount++;
-                    }
+                    if (QuestMachine.Instance.RemoveQuest(questUid))
+                        removedQuestCount++;
                 }
-
-                Debug.Log($"[DFMP Join] Multiplayer intro quests disabled by server: removedQuestCount={removedQuestCount}.");
             }
+
+            Debug.Log($"[DFMP Join] Multiplayer intro quests disabled by server: removedQuestCount={removedQuestCount}.");
         }
 
         void ConfigureReturningPlayerStartup()
