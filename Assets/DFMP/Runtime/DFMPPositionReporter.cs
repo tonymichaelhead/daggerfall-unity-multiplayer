@@ -52,6 +52,9 @@ namespace DFMP.Runtime
             if (DFMPSpawnAssignmentController.HasPendingServerAssignment)
                 return;
 
+            if (!IsLocalPlayerAvailable())
+                return;
+
             ReportPlayerAction();
 
             if (Time.unscaledTime < nextReportTime)
@@ -83,6 +86,12 @@ namespace DFMP.Runtime
                         controllerHeight,
                         controllerSkinWidth)
             }, Channels.Unreliable);
+        }
+
+        static bool IsLocalPlayerAvailable()
+        {
+            // GameManager's cached getters throw instead of returning null while the startup scene is active.
+            return GameManager.HasInstance && GameObject.FindGameObjectWithTag("Player") != null;
         }
 
         void ReportPlayerAction()
