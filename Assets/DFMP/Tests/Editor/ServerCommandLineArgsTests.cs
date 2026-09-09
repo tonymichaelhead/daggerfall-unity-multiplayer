@@ -17,6 +17,7 @@ namespace DFMP.Tests
             Assert.IsFalse(def.IsDedicatedServer);
             Assert.IsFalse(def.IsClient);
             Assert.AreEqual("127.0.0.1", def.Address);
+            Assert.IsFalse(def.HasExplicitAddress);
             Assert.AreEqual(7777, def.Port);
             Assert.AreEqual(30, def.TickRate);
             Assert.AreEqual(16, def.MaxConnections);
@@ -69,6 +70,28 @@ namespace DFMP.Tests
             Assert.IsTrue(result.IsClient);
             Assert.IsFalse(result.IsDedicatedServer);
             Assert.AreEqual("127.0.0.1", result.Address);
+            Assert.IsFalse(result.HasExplicitAddress);
+        }
+
+        [Test]
+        public void Parse_ClientWithAccountButNoAddress_DoesNotMarkExplicitAddress()
+        {
+            string[] args = new string[] { "-client", "-account", "local:alice" };
+            var result = ServerCommandLineArgs.Parse(args, false);
+
+            Assert.IsTrue(result.IsClient);
+            Assert.AreEqual("local:alice", result.AccountId);
+            Assert.IsFalse(result.HasExplicitAddress);
+        }
+
+        [Test]
+        public void Parse_HostAlias_MarksExplicitAddress()
+        {
+            string[] args = new string[] { "-client", "--host", "10.0.0.5" };
+            var result = ServerCommandLineArgs.Parse(args, false);
+
+            Assert.AreEqual("10.0.0.5", result.Address);
+            Assert.IsTrue(result.HasExplicitAddress);
         }
 
         [Test]
@@ -80,6 +103,7 @@ namespace DFMP.Tests
             Assert.IsTrue(result.IsClient);
             Assert.IsFalse(result.IsDedicatedServer);
             Assert.AreEqual("192.168.1.10", result.Address);
+            Assert.IsTrue(result.HasExplicitAddress);
             Assert.AreEqual(8888, result.Port);
         }
 

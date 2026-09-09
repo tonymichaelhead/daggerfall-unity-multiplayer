@@ -298,7 +298,7 @@ namespace DFMP.Runtime
             CloseWindow();
 
             // Start client networking
-            DFMPNetworkClient.Start(host, port, 30);
+            DFMPNetworkClient.Start(host, port, DFMPClientBootstrap.ClientTickRate, DFMPClientBootstrap.AccountId);
         }
 
         private void RefreshButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)

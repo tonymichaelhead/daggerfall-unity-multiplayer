@@ -11,6 +11,9 @@ namespace DFMP.Runtime
         public static int ClientTickRate { get; private set; } = 30;
         public static string AccountId { get; private set; }
 
+        /// <summary>False when launched as a client without an address, so the player boots into Daggerfall and picks a server from the server list.</summary>
+        public static bool AutoConnect { get; private set; }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EarlyInitialize()
         {
@@ -24,6 +27,7 @@ namespace DFMP.Runtime
             ServerPort = config.Port;
             ClientTickRate = config.TickRate;
             AccountId = config.AccountId;
+            AutoConnect = config.HasExplicitAddress;
             DFMPLogRouter.Initialize(DFMPLogRole.Client);
 
             ApplyClientRuntimeSettings(ClientTickRate);
@@ -32,11 +36,17 @@ namespace DFMP.Runtime
             DontDestroyOnLoad(bootstrapGo);
             bootstrapGo.AddComponent<DFMPClientBootstrap>();
 
-            Debug.Log($"[DFMP Client] Bootstrapped: Address={ServerAddress}, Port={ServerPort}, TickRate={ClientTickRate}, LogFile='{DFMPLogRouter.LogFilePath}'");
+            Debug.Log($"[DFMP Client] Bootstrapped: Address={ServerAddress}, Port={ServerPort}, TickRate={ClientTickRate}, AutoConnect={AutoConnect}, LogFile='{DFMPLogRouter.LogFilePath}'");
         }
 
         private void Start()
         {
+            if (!AutoConnect)
+            {
+                Debug.Log("[DFMP Client] No address supplied; skipping direct connect. Open the server list to choose a server.");
+                return;
+            }
+
             DFMPNetworkClient.Start(ServerAddress, (ushort)ServerPort, ClientTickRate, AccountId);
         }
 

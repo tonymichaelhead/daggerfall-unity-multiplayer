@@ -12,6 +12,9 @@ namespace DFMP.Runtime
         public bool IsDedicatedServer;
         public bool IsClient;
         public string Address;
+
+        /// <summary>True only when an address was passed on the command line, not defaulted.</summary>
+        public bool HasExplicitAddress;
         public int Port;
         public int TickRate;
         public int MaxConnections;
@@ -25,6 +28,7 @@ namespace DFMP.Runtime
             IsDedicatedServer = false,
             IsClient = false,
             Address = "127.0.0.1",
+            HasExplicitAddress = false,
             Port = 7777,
             TickRate = 30,
             MaxConnections = 16,
@@ -66,7 +70,10 @@ namespace DFMP.Runtime
                 else if ((arg == "-address" || arg == "--address" || arg == "-host" || arg == "--host") && i + 1 < args.Length)
                 {
                     if (!string.IsNullOrEmpty(args[i + 1]))
+                    {
                         result.Address = args[i + 1];
+                        result.HasExplicitAddress = true;
+                    }
                 }
                 else if ((arg == "-port" || arg == "--port") && i + 1 < args.Length)
                 {
