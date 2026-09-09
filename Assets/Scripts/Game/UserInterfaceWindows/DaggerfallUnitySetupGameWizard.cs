@@ -627,6 +627,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             AdvancedSettingsButton.OnMouseClick += AdvancedSettingsButton_OnOnMouseBlick;
             AdvancedSettingsButton.Hotkey = DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.GameSetupAdvancedSettings);
 
+            if (DFMP.Hooks.DaggerfallHooks.ConfigureStartupLaunchButton != null)
+                DFMP.Hooks.DaggerfallHooks.ConfigureStartupLaunchButton(optionsConfirmButton);
         }
 
         private void SettingsPathLabel_OnMouseClick(BaseScreenComponent sender, Vector2 position)
@@ -730,7 +732,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 //    ShowSummaryPanel();
                 //    break;
                 case SetupStages.LaunchGame:
-                    SceneManager.LoadScene(DaggerfallWorkshop.Game.Utility.SceneControl.GameSceneIndex);
+                    if (DFMP.Hooks.DaggerfallHooks.TryHandleStartupLaunch != null && DFMP.Hooks.DaggerfallHooks.TryHandleStartupLaunch())
+                        currentStage = SetupStages.Options;
+                    else
+                        SceneManager.LoadScene(DaggerfallWorkshop.Game.Utility.SceneControl.GameSceneIndex);
                     break;
             }
         }

@@ -42,8 +42,10 @@ namespace DaggerfallWorkshop.Game.Utility
                     DaggerfallUnity.Settings.Fullscreen);
             }
 
+            bool forceStartupMenu = DFMP.Hooks.DaggerfallHooks.ShouldForceStartupMenu != null && DFMP.Hooks.DaggerfallHooks.ShouldForceStartupMenu();
+
             // Check arena2 path is validated OK, otherwise start game setup
-            if (!DaggerfallUnity.Instance.IsPathValidated || DaggerfallUnity.Settings.ShowOptionsAtStart || Input.anyKey)
+            if (forceStartupMenu || !DaggerfallUnity.Instance.IsPathValidated || DaggerfallUnity.Settings.ShowOptionsAtStart || Input.anyKey)
             {
                 // Enable sky for test models
                 if (defaultSky != null)

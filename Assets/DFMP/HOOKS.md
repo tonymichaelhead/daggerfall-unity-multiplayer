@@ -21,6 +21,9 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 | M6-DOOR-002 | `Assets/Scripts/Game/PlayerEnterExit.cs` | `TransitionExterior()` before vanilla building-exterior mutations | Allow DFMP to consume multiplayer building-to-exterior transitions and wait for a server-issued door assignment before running vanilla exit. | 2026-09-08 |
 | M6-DUNGEON-001 | `Assets/Scripts/Game/PlayerEnterExit.cs` | `TransitionDungeonInterior()` before vanilla dungeon-entry mutations | Allow DFMP to consume multiplayer dungeon entry and wait for a server-issued dungeon transition assignment before running vanilla entry. | 2026-09-08 |
 | M6-DUNGEON-002 | `Assets/Scripts/Game/PlayerEnterExit.cs` | `TransitionDungeonExterior()` before vanilla dungeon-exit mutations | Allow DFMP to consume multiplayer dungeon exit and wait for a server-issued dungeon transition assignment before running vanilla exit. | 2026-09-08 |
+| DFMP-STARTUP-001 | `Assets/Scripts/Game/Utility/SceneControl.cs` | `Start()` before the startup-scene vs game-scene branch | Allow DFMP to keep the launcher menu reachable so the single-player game scene is never auto-loaded. | 2026-09-09 |
+| DFMP-STARTUP-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | End of `ShowOptionsPanel()` | Allow DFMP to relabel and resize the launcher's confirm button ("Play" -> "Join Server"). | 2026-09-09 |
+| DFMP-STARTUP-003 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `ShowNextStage()`, `SetupStages.LaunchGame` case | Allow DFMP to consume the launch action and open the server list instead of loading the single-player game scene. | 2026-09-09 |
 
 ---
 
