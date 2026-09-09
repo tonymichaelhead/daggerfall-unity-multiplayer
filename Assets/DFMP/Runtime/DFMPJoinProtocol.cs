@@ -13,6 +13,7 @@ namespace DFMP.Runtime
         public DFMPJoinDecisionKind Decision;
         public string AccountId;
         public string ServerWorldId;
+        public string ServerName;
         public string Reason;
         public bool EnableBeginnerTutorial;
     }

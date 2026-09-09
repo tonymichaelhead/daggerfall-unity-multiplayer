@@ -66,9 +66,17 @@ namespace DFMP.Runtime
             }
             else
             {
-                var serverListWin = new DFMPServerListWindow(uiManager, topWindow);
-                uiManager.PushWindow(serverListWin);
+                uiManager.PushWindow(new DFMPServerListWindow(uiManager, topWindow));
             }
+        }
+
+        public static void OpenServerList()
+        {
+            var uiManager = DaggerfallUI.UIManager;
+            if (uiManager == null || uiManager.TopWindow is DFMPServerListWindow)
+                return;
+
+            uiManager.PushWindow(new DFMPServerListWindow(uiManager, uiManager.TopWindow));
         }
     }
 }

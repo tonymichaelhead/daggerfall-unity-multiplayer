@@ -5,6 +5,7 @@ using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Game.Entity;
 using DaggerfallWorkshop.Game.Questing;
+using DaggerfallWorkshop.Game.UserInterfaceWindows;
 using DaggerfallWorkshop.Game.Utility;
 
 namespace DFMP.Runtime
@@ -74,6 +75,8 @@ namespace DFMP.Runtime
 
     public sealed class DFMPClientJoinFlowController : MonoBehaviour
     {
+        const float ConnectionNoticeDuration = 4f;
+
         public static DFMPClientJoinFlowController Instance { get; private set; }
         public DFMPClientJoinFlow Flow { get; private set; }
         public bool ServerIdentityApplied { get; private set; }
@@ -81,6 +84,7 @@ namespace DFMP.Runtime
         DFMPCharacterSnapshotMessage pendingSnapshot;
         bool hasPendingSnapshot;
         bool introQuestSuppressionStarted;
+        string pendingConnectionNotice;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Initialize()
@@ -113,6 +117,8 @@ namespace DFMP.Runtime
 
         private void Update()
         {
+            TryShowConnectionNotice();
+
             StartGameBehaviour startGameBehaviour = FindObjectOfType<StartGameBehaviour>();
             if (!hasPendingSnapshot || ServerIdentityApplied || startGameBehaviour == null ||
                 startGameBehaviour.LastStartMethod != StartGameBehaviour.StartMethods.NewCharacter ||
@@ -122,16 +128,33 @@ namespace DFMP.Runtime
             ApplySnapshotToLocalPlayer(pendingSnapshot);
         }
 
+        void TryShowConnectionNotice()
+        {
+            if (string.IsNullOrEmpty(pendingConnectionNotice))
+                return;
+
+            // The HUD only exists once the world is running, so the notice waits for it rather than being dropped.
+            if (DaggerfallUI.Instance == null || DaggerfallUI.Instance.DaggerfallHUD == null ||
+                GameManager.Instance == null || !GameManager.Instance.IsPlayingGame())
+                return;
+
+            DaggerfallUI.AddHUDText(pendingConnectionNotice, ConnectionNoticeDuration);
+            pendingConnectionNotice = null;
+        }
+
         private void OnDestroy()
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
             StartGameBehaviour.OnStartGame -= OnStartGameBehaviourStarted;
+            StartGameBehaviour.OnStartMenu -= OnStartMenuOpened;
         }
 
         public void MarkConnecting()
         {
             StartGameBehaviour.OnStartGame -= OnStartGameBehaviourStarted;
+            StartGameBehaviour.OnStartMenu -= OnStartMenuOpened;
             introQuestSuppressionStarted = false;
+            pendingConnectionNotice = null;
             Flow.MarkConnecting();
         }
 
@@ -140,7 +163,12 @@ namespace DFMP.Runtime
             Flow.ApplyJoinResult(result);
 
             if (result.Decision == DFMPJoinDecisionKind.Rejected)
+            {
+                ShowJoinRejectedMessage(result.Reason);
                 return;
+            }
+
+            pendingConnectionNotice = BuildConnectionNotice(result.ServerName);
 
             if (DFMPClientJoinFlow.ShouldLoadGameScene(result, SceneManager.GetActiveScene().buildIndex))
             {
@@ -151,6 +179,29 @@ namespace DFMP.Runtime
 
             // Joining from the server list means the game scene is already loaded and OnSceneLoaded will never fire.
             BeginMultiplayerStartup();
+        }
+
+        public static string BuildConnectionNotice(string serverName)
+        {
+            return string.IsNullOrWhiteSpace(serverName)
+                ? "Connected to server."
+                : string.Format("Connected to {0}.", serverName.Trim());
+        }
+
+        static void ShowJoinRejectedMessage(string reason)
+        {
+            Debug.LogWarning($"[DFMP Join] Join rejected by server: reason={reason}.");
+
+            var uiManager = DaggerfallUI.UIManager;
+            if (uiManager == null)
+                return;
+
+            var messageBox = new DaggerfallMessageBox(uiManager, uiManager.TopWindow);
+            messageBox.SetText(string.IsNullOrWhiteSpace(reason)
+                ? "The server refused the connection."
+                : string.Format("The server refused the connection: {0}.", reason));
+            messageBox.ClickAnywhereToClose = true;
+            uiManager.PushWindow(messageBox);
         }
 
         public void ApplyCharacterSnapshot(DFMPCharacterSnapshotMessage snapshot)
@@ -267,6 +318,8 @@ namespace DFMP.Runtime
         {
             if (Flow.State == DFMPClientJoinState.ReturningPlayerRestore)
                 ConfigureReturningPlayerStartup();
+            else if (Flow.State == DFMPClientJoinState.FirstJoinCharacterCreation)
+                ConfigureFirstJoinStartup();
 
             if (Flow.EnableBeginnerTutorial || introQuestSuppressionStarted)
                 return;
@@ -311,6 +364,31 @@ namespace DFMP.Runtime
 
             startGameBehaviour.StartMethod = StartGameBehaviour.StartMethods.NewCharacter;
             Debug.Log("[DFMP Join] Returning player startup configured without local save selection.");
+        }
+
+        void ConfigureFirstJoinStartup()
+        {
+            var startGameBehaviour = FindObjectOfType<StartGameBehaviour>();
+            if (startGameBehaviour == null)
+                return;
+
+            // Redirecting the title menu's post-start message skips the splash video and the
+            // single-player load/new-game screen, landing straight in character creation.
+            startGameBehaviour.EnableVideos = false;
+            startGameBehaviour.StartMethod = StartGameBehaviour.StartMethods.TitleMenu;
+            startGameBehaviour.PostStartMessage = DaggerfallUIMessages.dfuiStartNewGameWizard;
+            StartGameBehaviour.OnStartMenu += OnStartMenuOpened;
+            Debug.Log("[DFMP Join] First join startup configured directly into character creation.");
+        }
+
+        void OnStartMenuOpened(object sender, System.EventArgs args)
+        {
+            StartGameBehaviour.OnStartMenu -= OnStartMenuOpened;
+
+            // StartNewCharacter re-posts PostStartMessage, which would reopen character creation forever.
+            var startGameBehaviour = sender as StartGameBehaviour;
+            if (startGameBehaviour != null)
+                startGameBehaviour.PostStartMessage = string.Empty;
         }
     }
 }

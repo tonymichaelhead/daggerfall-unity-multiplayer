@@ -288,6 +288,7 @@ namespace DFMP.Runtime
                 Decision = decision.Kind,
                 AccountId = decision.AccountId,
                 ServerWorldId = decision.ServerWorldId,
+                ServerName = ServerName,
                 Reason = decision.Reason,
                 EnableBeginnerTutorial = Config.Gameplay.EnableBeginnerTutorial
             });

@@ -490,6 +490,14 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void ClientJoinFlow_BuildsConnectionNoticeFromServerName()
+        {
+            Assert.AreEqual("Connected to Tony's DFU RP.", DFMPClientJoinFlowController.BuildConnectionNotice("  Tony's DFU RP  "));
+            Assert.AreEqual("Connected to server.", DFMPClientJoinFlowController.BuildConnectionNotice(null));
+            Assert.AreEqual("Connected to server.", DFMPClientJoinFlowController.BuildConnectionNotice("   "));
+        }
+
+        [Test]
         public void CharacterSnapshot_NormalizesAndValidatesSavedIdentity()
         {
             var record = DFMPCharacterRecord.CreateNew("steam:charlie", "world-m5", "  Charlie  ");
