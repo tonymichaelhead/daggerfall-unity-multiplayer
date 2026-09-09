@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game.Entity;
+using DaggerfallWorkshop.Utility;
 using Mirror;
 using UnityEngine;
 
@@ -39,6 +40,12 @@ namespace DFMP.Runtime
             return scenePosition;
         }
 
+        public static Vector3 ApplySceneHeightOffset(Vector3 groundPosition, float sceneHeightOffset)
+        {
+            groundPosition.y += sceneHeightOffset;
+            return groundPosition;
+        }
+
         public static bool IsVisibleInLocalMapPixel(Vector3 localScenePosition, Vector3 remoteScenePosition)
         {
             return Vector3.SqrMagnitude(remoteScenePosition - localScenePosition) <= MaximumVisibleDistance * MaximumVisibleDistance;
@@ -57,40 +64,63 @@ namespace DFMP.Runtime
             return directionToCamera.sqrMagnitude > 0.0001f ? Quaternion.LookRotation(directionToCamera) : Quaternion.identity;
         }
 
-        public static bool IsAppearanceChanged(int cachedRace, int cachedGender, int cachedOutfitVariant, int cachedFaceVariant, DFMPPlayerSessionState session)
+        public static bool IsAppearanceChanged(int cachedMobileType, int cachedGender, DFMPPlayerSessionState session)
         {
-            return cachedRace != session.Race || cachedGender != session.Gender || cachedOutfitVariant != session.OutfitVariant || cachedFaceVariant != session.FaceVariant;
+            return cachedMobileType != session.AvatarMobileType || cachedGender != session.Gender;
         }
 
-        public static bool GetAvatarIsIdle(bool isMoving)
+        public static MobileStates GetMovementState(bool isMoving)
         {
-            return !isMoving;
+            return isMoving ? MobileStates.Move : MobileStates.Idle;
+        }
+
+        public static MobileStates GetActionState(DFMPPlayerActionKind action)
+        {
+            switch (action)
+            {
+                case DFMPPlayerActionKind.RangedAttack:
+                    return MobileStates.RangedAttack1;
+                case DFMPPlayerActionKind.Spell:
+                    return MobileStates.Spell;
+                default:
+                    return MobileStates.PrimaryAttack;
+            }
         }
     }
 
     public class DFMPRemoteAvatarAppearance : MonoBehaviour
     {
-        int race = int.MinValue;
+        int mobileType = int.MinValue;
         int gender = int.MinValue;
-        int outfitVariant = int.MinValue;
-        int faceVariant = int.MinValue;
+        uint actionSequence;
 
         public void ApplyIfChanged(DFMPPlayerSessionState session)
         {
-            if (!DFMPRemotePlayerPresentation.IsAppearanceChanged(race, gender, outfitVariant, faceVariant, session))
-                return;
+            var mobile = GetComponentInChildren<DaggerfallMobileUnit>();
+            if (DFMPRemotePlayerPresentation.IsAppearanceChanged(mobileType, gender, session))
+            {
+                MobileEnemy enemy;
+                if (EnemyBasics.GetEnemy((MobileTypes)session.AvatarMobileType, out enemy))
+                {
+                    enemy.Gender = session.Gender == 1 ? MobileGender.Female : MobileGender.Male;
+                    mobile.SetEnemy(DaggerfallUnity.Instance, enemy, MobileReactions.Custom, 0);
+                    mobile.ChangeEnemyState(DFMPRemotePlayerPresentation.GetMovementState(session.IsMoving));
+                    transform.localPosition = new Vector3(0f, mobile.GetSize().y * 0.5f, 0f);
+                }
 
-            var billboard = GetComponent<MobilePersonBillboard>();
-            Races displayRace = (Races)DFMPPositionProtocol.GetDisplayRace(session.Race);
-            Genders displayGender = (Genders)DFMPPositionProtocol.GetDisplayGender(session.Gender);
-            billboard.SetPerson(displayRace, displayGender, session.OutfitVariant, false, session.FaceVariant, 0);
-            billboard.IsIdle = DFMPRemotePlayerPresentation.GetAvatarIsIdle(session.IsMoving);
-            transform.localPosition = new Vector3(0f, billboard.GetSize().y * 0.5f, 0f);
+                mobileType = session.AvatarMobileType;
+                gender = session.Gender;
+                actionSequence = session.ActionSequence;
+            }
 
-            race = session.Race;
-            gender = session.Gender;
-            outfitVariant = session.OutfitVariant;
-            faceVariant = session.FaceVariant;
+            if (actionSequence != session.ActionSequence)
+            {
+                actionSequence = session.ActionSequence;
+                mobile.ChangeEnemyState(DFMPRemotePlayerPresentation.GetActionState(session.ActionKind));
+            }
+
+            if (!mobile.IsPlayingOneShot())
+                mobile.ChangeEnemyState(DFMPRemotePlayerPresentation.GetMovementState(session.IsMoving));
         }
     }
 
@@ -156,6 +186,7 @@ namespace DFMP.Runtime
                 Vector3 localPosition = streamingWorld.LocalPlayerGPS.transform.position;
                 Vector3 targetPosition = DFMPRemotePlayerPresentation.WorldToScenePosition(streamingWorld.LocalPlayerGPS, localPosition, session.WorldX, session.WorldZ);
                 targetPosition = DFMPRemotePlayerPresentation.GroundScenePosition(streamingWorld, targetPosition);
+                targetPosition = DFMPRemotePlayerPresentation.ApplySceneHeightOffset(targetPosition, session.SceneHeightOffset);
                 bool isVisible = isInLocalMapPixel && DFMPRemotePlayerPresentation.IsVisibleInLocalMapPixel(localPosition, targetPosition);
 
                 if (isVisible)
@@ -196,20 +227,22 @@ namespace DFMP.Runtime
         {
             GameObject avatarGo = new GameObject("DaggerfallAvatar");
             avatarGo.transform.SetParent(parent, false);
-            var billboard = avatarGo.AddComponent<MobilePersonBillboard>();
-            billboard.SetPerson(Races.Breton, Genders.Male, 0, false, 0, 192);
-            avatarGo.transform.localPosition = new Vector3(0f, billboard.GetSize().y * 0.5f, 0f);
             avatarGo.AddComponent<DFMPRemoteAvatarAppearance>();
+
+            GameObject mobileGo = new GameObject("Mobile");
+            mobileGo.transform.SetParent(avatarGo.transform, false);
+            mobileGo.AddComponent<DaggerfallMobileUnit>();
         }
 
         static void CreateLabel(Transform proxyTransform, int connectionId)
         {
-            GameObject labelGo = new GameObject("Label");
-            labelGo.transform.SetParent(proxyTransform, false);
-            MobilePersonBillboard billboard = proxyTransform.GetComponentInChildren<MobilePersonBillboard>();
-            float avatarHeight = billboard != null ? billboard.GetSize().y : 2f;
-            labelGo.transform.localPosition = new Vector3(0f, avatarHeight + 0.2f, 0f);
-            var label = labelGo.AddComponent<TextMesh>();
+            GameObject labelAnchorGo = new GameObject("Label");
+            labelAnchorGo.transform.SetParent(proxyTransform, false);
+            labelAnchorGo.transform.localPosition = new Vector3(0f, 2.2f, 0f);
+
+            GameObject labelTextGo = new GameObject("Text");
+            labelTextGo.transform.SetParent(labelAnchorGo.transform, false);
+            var label = labelTextGo.AddComponent<TextMesh>();
             label.text = $"Player {connectionId}";
             label.characterSize = 0.05f;
             label.fontSize = 32;
@@ -221,7 +254,7 @@ namespace DFMP.Runtime
         static void UpdateLabel(GameObject proxy, string displayName)
         {
             TextMesh label = proxy.GetComponentInChildren<TextMesh>();
-            if (label != null)
+            if (label != null && label.text != displayName)
                 label.text = displayName;
         }
 
@@ -230,23 +263,26 @@ namespace DFMP.Runtime
             DFMPRemoteAvatarAppearance avatar = proxy.GetComponentInChildren<DFMPRemoteAvatarAppearance>();
             if (avatar != null)
                 avatar.ApplyIfChanged(session);
-
-            MobilePersonBillboard billboard = proxy.GetComponentInChildren<MobilePersonBillboard>();
-            if (billboard != null)
-            {
-                bool isIdle = DFMPRemotePlayerPresentation.GetAvatarIsIdle(session.IsMoving);
-                if (billboard.IsIdle != isIdle)
-                    billboard.IsIdle = isIdle;
-            }
         }
 
-            static void FaceLabelToCamera(GameObject proxy)
+        static void FaceLabelToCamera(GameObject proxy)
+        {
+            Camera mainCamera = Camera.main;
+            TextMesh label = proxy.GetComponentInChildren<TextMesh>();
+            if (mainCamera == null || label == null)
+                return;
+
+            Transform anchor = label.transform.parent;
+            anchor.rotation = DFMPRemotePlayerPresentation.GetLabelBillboardRotation(anchor.position, mainCamera.transform.position);
+            label.transform.localPosition = Vector3.zero;
+            Renderer labelRenderer = label.GetComponent<Renderer>();
+            if (labelRenderer != null)
             {
-                Camera mainCamera = Camera.main;
-                TextMesh label = proxy.GetComponentInChildren<TextMesh>();
-                if (mainCamera != null && label != null)
-                label.transform.rotation = DFMPRemotePlayerPresentation.GetLabelBillboardRotation(label.transform.position, mainCamera.transform.position);
+                Vector3 correction = anchor.position - labelRenderer.bounds.center;
+                correction.y = 0f;
+                label.transform.position += correction;
             }
+        }
 
         void RemoveStaleProxies(HashSet<int> liveProxyIds)
         {

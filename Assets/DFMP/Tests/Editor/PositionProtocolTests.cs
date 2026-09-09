@@ -41,6 +41,23 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void SceneHeightOffset_IsRelativeAndBounded()
+        {
+            Assert.AreEqual(0f, DFMPPositionProtocol.GetSceneHeightOffset(11.08f, 10f, 0f, 2f, 0.08f), 0.0001f);
+            Assert.AreEqual(1.25f, DFMPPositionProtocol.GetSceneHeightOffset(12.33f, 10f, 0f, 2f, 0.08f), 0.0001f);
+            Assert.AreEqual(DFMPPositionProtocol.MaximumSceneHeightOffset, DFMPPositionProtocol.GetSceneHeightOffset(100f, 10f, 0f, 2f, 0.08f));
+            Assert.AreEqual(-DFMPPositionProtocol.MaximumSceneHeightOffset, DFMPPositionProtocol.GetSceneHeightOffset(-100f, 10f, 0f, 2f, 0.08f));
+
+            Assert.IsFalse(DFMPPositionProtocol.IsValidWorldPosition(new DFMPPlayerPositionReport
+            {
+                WorldX = 6792821,
+                WorldY = 0f,
+                WorldZ = 9374554,
+                SceneHeightOffset = DFMPPositionProtocol.MaximumSceneHeightOffset + 1f
+            }));
+        }
+
+        [Test]
         public void AppearanceSelection_MapsAndClampsForNativeBillboards()
         {
             Assert.AreEqual(1, DFMPPositionProtocol.GetDisplayRace(4));
@@ -149,6 +166,60 @@ namespace DFMP.Tests
                 session.Initialize(7, 6792821, 0f, 9374554);
 
                 Assert.IsFalse(session.IsMoving);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void SessionActionSequence_ChangesForEachAcceptedPresentationAction()
+        {
+            GameObject go = new GameObject("DFMP_ActionStateTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+
+                session.PlayAction(DFMPPlayerActionKind.PrimaryAttack);
+                Assert.AreEqual(1u, session.ActionSequence);
+                Assert.AreEqual(DFMPPlayerActionKind.PrimaryAttack, session.ActionKind);
+
+                session.PlayAction(DFMPPlayerActionKind.Spell);
+                Assert.AreEqual(2u, session.ActionSequence);
+                Assert.AreEqual(DFMPPlayerActionKind.Spell, session.ActionKind);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void AvatarProtocol_RejectsUnknownPresentationActions()
+        {
+            Assert.IsTrue(DFMPAvatarProtocol.IsValidAction(DFMPPlayerActionKind.PrimaryAttack));
+            Assert.IsTrue(DFMPAvatarProtocol.IsValidAction(DFMPPlayerActionKind.RangedAttack));
+            Assert.IsTrue(DFMPAvatarProtocol.IsValidAction(DFMPPlayerActionKind.Spell));
+            Assert.IsFalse(DFMPAvatarProtocol.IsValidAction(DFMPPlayerActionKind.None));
+            Assert.IsFalse(DFMPAvatarProtocol.IsValidAction((DFMPPlayerActionKind)99));
+        }
+
+        [Test]
+        public void AvatarProtocol_AcceptsActionsOnlyForConfirmedRateLimitedSessions()
+        {
+            GameObject go = new GameObject("DFMP_ActionValidationTest");
+
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                Assert.IsFalse(DFMPAvatarProtocol.IsActionAccepted(session, DFMPPlayerActionKind.PrimaryAttack, 1f));
+
+                session.ConfirmSpawn();
+                Assert.IsFalse(DFMPAvatarProtocol.IsActionAccepted(session, DFMPPlayerActionKind.PrimaryAttack, 0.09f));
+                Assert.IsFalse(DFMPAvatarProtocol.IsActionAccepted(session, DFMPPlayerActionKind.None, 1f));
+                Assert.IsTrue(DFMPAvatarProtocol.IsActionAccepted(session, DFMPPlayerActionKind.PrimaryAttack, 0.1f));
             }
             finally
             {

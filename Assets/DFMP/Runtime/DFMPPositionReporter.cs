@@ -17,6 +17,8 @@ namespace DFMP.Runtime
         float nextChangeReportTime;
         int lastContextSignature;
         int lastInventorySignature;
+        WeaponStates lastWeaponState = WeaponStates.Idle;
+        bool wasCastingSpell;
 
         public static void EnsureInstance()
         {
@@ -44,10 +46,15 @@ namespace DFMP.Runtime
 
         void Update()
         {
-            if (!NetworkClient.isConnected || Time.unscaledTime < nextReportTime)
+            if (!NetworkClient.isConnected)
                 return;
 
             if (DFMPSpawnAssignmentController.HasPendingServerAssignment)
+                return;
+
+            ReportPlayerAction();
+
+            if (Time.unscaledTime < nextReportTime)
                 return;
 
             StreamingWorld streamingWorld = FindObjectOfType<StreamingWorld>();
@@ -57,13 +64,52 @@ namespace DFMP.Runtime
             nextReportTime = Time.unscaledTime + DFMPPositionProtocol.MinimumReportInterval;
             SendIdentityReport();
             SendWorldContextReport(streamingWorld);
+            Vector3 playerScenePosition = streamingWorld.LocalPlayerGPS.transform.position;
+            Vector3 groundScenePosition = DFMPRemotePlayerPresentation.GroundScenePosition(streamingWorld, playerScenePosition);
+            CharacterController playerController = GameManager.Instance != null ? GameManager.Instance.PlayerController : null;
+            float controllerCenterY = playerController != null ? playerController.center.y : 0f;
+            float controllerHeight = playerController != null ? playerController.height : 0f;
+            float controllerSkinWidth = playerController != null ? playerController.skinWidth : 0f;
             NetworkClient.Send(new DFMPPlayerPositionReport
             {
                 WorldX = streamingWorld.LocalPlayerGPS.WorldX,
                 WorldY = 0f,
                 WorldZ = streamingWorld.LocalPlayerGPS.WorldZ,
-                FacingYaw = streamingWorld.LocalPlayerGPS.transform.eulerAngles.y
+                FacingYaw = streamingWorld.LocalPlayerGPS.transform.eulerAngles.y,
+                SceneHeightOffset = DFMPPositionProtocol.GetSceneHeightOffset(
+                    playerScenePosition.y,
+                    groundScenePosition.y,
+                    controllerCenterY,
+                        controllerHeight,
+                        controllerSkinWidth)
             }, Channels.Unreliable);
+        }
+
+        void ReportPlayerAction()
+        {
+            if (GameManager.Instance == null || GameManager.Instance.WeaponManager == null)
+                return;
+
+            FPSWeapon screenWeapon = GameManager.Instance.WeaponManager.ScreenWeapon;
+            if (screenWeapon != null)
+            {
+                WeaponStates weaponState = screenWeapon.WeaponState;
+                if (lastWeaponState == WeaponStates.Idle && weaponState != WeaponStates.Idle)
+                {
+                    DFMPPlayerActionKind action = screenWeapon.WeaponType == WeaponTypes.Bow
+                        ? DFMPPlayerActionKind.RangedAttack
+                        : DFMPPlayerActionKind.PrimaryAttack;
+                    NetworkClient.Send(new DFMPPlayerActionReport { Kind = action });
+                }
+
+                lastWeaponState = weaponState;
+            }
+
+            bool isCastingSpell = GameManager.Instance.PlayerSpellCasting != null && GameManager.Instance.PlayerSpellCasting.IsPlayingAnim;
+            if (!wasCastingSpell && isCastingSpell)
+                NetworkClient.Send(new DFMPPlayerActionReport { Kind = DFMPPlayerActionKind.Spell });
+
+            wasCastingSpell = isCastingSpell;
         }
 
         void SendIdentityReport()

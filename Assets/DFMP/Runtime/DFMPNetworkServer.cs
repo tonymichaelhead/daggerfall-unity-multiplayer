@@ -36,6 +36,7 @@ namespace DFMP.Runtime
         static readonly Dictionary<int, string> startMarkerAssignments = new Dictionary<int, string>();
         static readonly Dictionary<int, DFMPTransitionAssignmentState> transitionAssignmentStates = new Dictionary<int, DFMPTransitionAssignmentState>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
+        static readonly Dictionary<int, float> lastActionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
         static int nextTransitionAssignmentId = 1;
@@ -216,6 +217,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPDungeonTransitionRequest>(OnDungeonTransitionRequest);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
+            NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
             NetworkServer.RegisterHandler<DFMPChatMessage>(OnChatMessage);
             NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
@@ -371,6 +373,7 @@ namespace DFMP.Runtime
                     DFMPPositionProtocol.GetDisplayGender(record.Gender),
                     DFMPPositionProtocol.GetOutfitVariant(record.OutfitVariant),
                     DFMPPositionProtocol.GetFaceVariant(record.FaceVariant));
+                sessionState.SetAvatarMobileType(DFMPAvatarProtocol.GetMobileType(record.CareerJson));
             }
 
             UnityEngine.Object.DontDestroyOnLoad(sessionGo);
@@ -715,6 +718,7 @@ namespace DFMP.Runtime
             sessionState.SetPosition(report.WorldX, report.WorldY, report.WorldZ);
             sessionState.SetMovement(isMoving);
             sessionState.SetFacingYaw(DFMPPositionProtocol.NormalizeFacingYaw(report.FacingYaw));
+            sessionState.SetSceneHeightOffset(report.SceneHeightOffset);
             if (activePositionReportConnections.Add(conn.connectionId))
                 Debug.Log($"[DFMP Session] Server accepted player position reports: connectionId={conn.connectionId}.");
         }
@@ -731,6 +735,7 @@ namespace DFMP.Runtime
                 DFMPPositionProtocol.GetDisplayGender(report.Gender),
                 DFMPPositionProtocol.GetOutfitVariant(report.OutfitVariant),
                 DFMPPositionProtocol.GetFaceVariant(report.FaceVariant));
+            sessionState.SetAvatarMobileType(DFMPAvatarProtocol.GetMobileType(report.CareerJson));
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) &&
@@ -744,6 +749,24 @@ namespace DFMP.Runtime
                     DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
                 CharacterStore.Save(joinDecision.CharacterRecord);
             }
+        }
+
+        private static void OnPlayerActionReport(NetworkConnectionToClient conn, DFMPPlayerActionReport report)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            float lastReportTime;
+            float elapsedSeconds = lastActionReportTimes.TryGetValue(conn.connectionId, out lastReportTime)
+                ? Time.unscaledTime - lastReportTime
+                : DFMPAvatarProtocol.MinimumActionInterval;
+            if (!DFMPAvatarProtocol.IsActionAccepted(sessionState, report.Kind, elapsedSeconds))
+                return;
+
+            lastActionReportTimes[conn.connectionId] = Time.unscaledTime;
+            sessionState.PlayAction(report.Kind);
         }
 
         private static void OnWorldContextReport(NetworkConnectionToClient conn, DFMPWorldContextReport report)
@@ -837,6 +860,7 @@ namespace DFMP.Runtime
             startMarkerAssignments.Remove(conn.connectionId);
             transitionAssignmentStates.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
+            lastActionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
             DFMPChatProtocol.RateLimiter.Reset(conn.connectionId);
@@ -867,6 +891,7 @@ namespace DFMP.Runtime
             startMarkerAssignments.Clear();
             transitionAssignmentStates.Clear();
             lastPositionReportTimes.Clear();
+            lastActionReportTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();
             activeAccounts.Clear();

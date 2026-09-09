@@ -1,3 +1,6 @@
+using System;
+using DaggerfallWorkshop;
+using DaggerfallWorkshop.Game.Entity;
 using UnityEngine;
 
 namespace DFMP.Runtime
@@ -8,6 +11,7 @@ namespace DFMP.Runtime
         public float WorldY;
         public int WorldZ;
         public float FacingYaw;
+        public float SceneHeightOffset;
     }
 
     public struct DFMPPlayerIdentityReport : Mirror.NetworkMessage
@@ -31,6 +35,19 @@ namespace DFMP.Runtime
         public int[] Skills;
         public string InventoryJson;
         public string EquipmentJson;
+    }
+
+    public struct DFMPPlayerActionReport : Mirror.NetworkMessage
+    {
+        public DFMPPlayerActionKind Kind;
+    }
+
+    public enum DFMPPlayerActionKind
+    {
+        None,
+        PrimaryAttack,
+        RangedAttack,
+        Spell,
     }
 
     public struct DFMPWorldContextReport : Mirror.NetworkMessage
@@ -74,6 +91,7 @@ namespace DFMP.Runtime
         // Reports routinely arrive slightly early because of send/receive jitter, so only clear flooding is rejected.
         public const float MinimumAcceptedReportInterval = MinimumReportInterval * 0.5f;
         public const float MaximumSpeed = 4096f;
+        public const float MaximumSceneHeightOffset = 20f;
         public const int MinimumMapPixelX = 3;
         public const int MaximumMapPixelX = 998;
         public const int MinimumMapPixelY = 3;
@@ -139,9 +157,17 @@ namespace DFMP.Runtime
             return normalizedYaw < 0f ? normalizedYaw + 360f : normalizedYaw;
         }
 
+        public static float GetSceneHeightOffset(float sceneY, float groundY, float controllerCenterY, float controllerHeight, float controllerSkinWidth)
+        {
+            float feetY = sceneY + controllerCenterY - controllerHeight * 0.5f - Mathf.Max(0f, controllerSkinWidth);
+            return Mathf.Clamp(feetY - groundY, -MaximumSceneHeightOffset, MaximumSceneHeightOffset);
+        }
+
         public static bool IsValidWorldPosition(DFMPPlayerPositionReport report)
         {
-            if (float.IsNaN(report.WorldY) || float.IsInfinity(report.WorldY) || !IsValidFacingYaw(report.FacingYaw))
+            if (float.IsNaN(report.WorldY) || float.IsInfinity(report.WorldY) ||
+                float.IsNaN(report.SceneHeightOffset) || float.IsInfinity(report.SceneHeightOffset) ||
+                Mathf.Abs(report.SceneHeightOffset) > MaximumSceneHeightOffset || !IsValidFacingYaw(report.FacingYaw))
                 return false;
 
             int mapPixelX = report.WorldX / DFMPSpawnProtocol.WorldMapPixelDimension;
@@ -185,6 +211,51 @@ namespace DFMP.Runtime
             long deltaZ = (long)currentWorldZ - previousWorldZ;
             long threshold = MovementThreshold;
             return deltaX * deltaX + deltaZ * deltaZ > threshold * threshold;
+        }
+    }
+
+    public static class DFMPAvatarProtocol
+    {
+        public const int DefaultMobileType = (int)MobileTypes.Warrior;
+        public const float MinimumActionInterval = 0.1f;
+
+        public static int GetMobileType(string careerJson)
+        {
+            DaggerfallConnect.DFCareer career;
+            string reason;
+            return DFMPCareerCodec.TryDecode(careerJson, out career, out reason)
+                ? GetMobileTypeFromCareerName(career.Name)
+                : DefaultMobileType;
+        }
+
+        public static int GetMobileTypeFromCareerName(string careerName)
+        {
+            string normalizedName = NormalizeCareerName(careerName);
+            ClassCareers career;
+            if (Enum.TryParse(normalizedName, true, out career) && career >= ClassCareers.Mage && career <= ClassCareers.Knight)
+                return (int)MobileTypes.Mage + (int)career;
+
+            return DefaultMobileType;
+        }
+
+        public static bool IsValidAction(DFMPPlayerActionKind kind)
+        {
+            return kind == DFMPPlayerActionKind.PrimaryAttack ||
+                kind == DFMPPlayerActionKind.RangedAttack ||
+                kind == DFMPPlayerActionKind.Spell;
+        }
+
+        public static bool IsActionAccepted(DFMPPlayerSessionState sessionState, DFMPPlayerActionKind kind, float elapsedSeconds)
+        {
+            return sessionState != null && sessionState.SpawnConfirmed && IsValidAction(kind) && elapsedSeconds >= MinimumActionInterval;
+        }
+
+        static string NormalizeCareerName(string careerName)
+        {
+            if (string.IsNullOrWhiteSpace(careerName))
+                return string.Empty;
+
+            return careerName.Trim().Replace(" ", string.Empty).Replace("-", string.Empty);
         }
     }
 

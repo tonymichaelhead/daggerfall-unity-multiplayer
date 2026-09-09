@@ -74,6 +74,14 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void ApplySceneHeightOffset_RaisesGroundedPositionByReplicatedAmount()
+        {
+            Vector3 position = DFMPRemotePlayerPresentation.ApplySceneHeightOffset(new Vector3(4f, 10f, 8f), 1.25f);
+
+            Assert.AreEqual(new Vector3(4f, 11.25f, 8f), position);
+        }
+
+        [Test]
         public void GetLabelBillboardRotation_ShowsTextFrontToCameraWithoutPitch()
         {
             Quaternion rotation = DFMPRemotePlayerPresentation.GetLabelBillboardRotation(new Vector3(2f, 1f, 3f), new Vector3(2f, 100f, 13f));
@@ -83,7 +91,7 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void IsAppearanceChanged_UpdatesOnlyWhenReplicatedAppearanceChanges()
+        public void IsAppearanceChanged_UpdatesOnlyWhenReplicatedAvatarChanges()
         {
             GameObject go = new GameObject("DFMP_AppearanceCacheTest");
 
@@ -91,9 +99,10 @@ namespace DFMP.Tests
             {
                 var session = go.AddComponent<DFMPPlayerSessionState>();
                 session.SetAppearance(1, 0, 2, 6);
+                session.SetAvatarMobileType((int)MobileTypes.Spellsword);
 
-                Assert.IsFalse(DFMPRemotePlayerPresentation.IsAppearanceChanged(1, 0, 2, 6, session));
-                Assert.IsTrue(DFMPRemotePlayerPresentation.IsAppearanceChanged(1, 1, 2, 6, session));
+                Assert.IsFalse(DFMPRemotePlayerPresentation.IsAppearanceChanged((int)MobileTypes.Spellsword, 0, session));
+                Assert.IsTrue(DFMPRemotePlayerPresentation.IsAppearanceChanged((int)MobileTypes.Mage, 0, session));
             }
             finally
             {
@@ -102,10 +111,29 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void AvatarIdleState_MapsReplicatedMovementState()
+        public void AvatarMovementState_MapsReplicatedMovementState()
         {
-            Assert.IsFalse(DFMPRemotePlayerPresentation.GetAvatarIsIdle(true));
-            Assert.IsTrue(DFMPRemotePlayerPresentation.GetAvatarIsIdle(false));
+            Assert.AreEqual(MobileStates.Move, DFMPRemotePlayerPresentation.GetMovementState(true));
+            Assert.AreEqual(MobileStates.Idle, DFMPRemotePlayerPresentation.GetMovementState(false));
+        }
+
+        [Test]
+        public void AvatarClassMapping_MapsStandardClassesAndFallsBackForCustomClasses()
+        {
+            Assert.AreEqual((int)MobileTypes.Mage, DFMPAvatarProtocol.GetMobileTypeFromCareerName("Mage"));
+            Assert.AreEqual((int)MobileTypes.Spellsword, DFMPAvatarProtocol.GetMobileTypeFromCareerName("Spellsword"));
+            Assert.AreEqual((int)MobileTypes.Nightblade, DFMPAvatarProtocol.GetMobileTypeFromCareerName("Night Blade"));
+            Assert.AreEqual((int)MobileTypes.Knight, DFMPAvatarProtocol.GetMobileTypeFromCareerName("Knight"));
+            Assert.AreEqual((int)MobileTypes.Warrior, DFMPAvatarProtocol.GetMobileTypeFromCareerName("Spellblade"));
+            Assert.AreEqual((int)MobileTypes.Warrior, DFMPAvatarProtocol.GetMobileTypeFromCareerName("Bladesinger"));
+        }
+
+        [Test]
+        public void AvatarActionState_MapsPresentationActions()
+        {
+            Assert.AreEqual(MobileStates.PrimaryAttack, DFMPRemotePlayerPresentation.GetActionState(DFMPPlayerActionKind.PrimaryAttack));
+            Assert.AreEqual(MobileStates.RangedAttack1, DFMPRemotePlayerPresentation.GetActionState(DFMPPlayerActionKind.RangedAttack));
+            Assert.AreEqual(MobileStates.Spell, DFMPRemotePlayerPresentation.GetActionState(DFMPPlayerActionKind.Spell));
         }
     }
 }

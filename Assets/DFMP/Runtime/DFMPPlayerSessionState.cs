@@ -32,6 +32,9 @@ namespace DFMP.Runtime
         float facingYaw;
 
         [SyncVar]
+        float sceneHeightOffset;
+
+        [SyncVar]
         int race;
 
         [SyncVar]
@@ -42,6 +45,15 @@ namespace DFMP.Runtime
 
         [SyncVar]
         int faceVariant;
+
+        [SyncVar]
+        int avatarMobileType = DFMPAvatarProtocol.DefaultMobileType;
+
+        [SyncVar]
+        int actionKind;
+
+        [SyncVar]
+        uint actionSequence;
 
         public int ConnectionId
         {
@@ -83,6 +95,11 @@ namespace DFMP.Runtime
             get { return facingYaw; }
         }
 
+        public float SceneHeightOffset
+        {
+            get { return sceneHeightOffset; }
+        }
+
         public int Race
         {
             get { return race; }
@@ -101,6 +118,21 @@ namespace DFMP.Runtime
         public int FaceVariant
         {
             get { return faceVariant; }
+        }
+
+        public int AvatarMobileType
+        {
+            get { return avatarMobileType; }
+        }
+
+        public DFMPPlayerActionKind ActionKind
+        {
+            get { return (DFMPPlayerActionKind)actionKind; }
+        }
+
+        public uint ActionSequence
+        {
+            get { return actionSequence; }
         }
 
         public void Initialize(int ownerConnectionId, int initialWorldX, float initialWorldY, int initialWorldZ)
@@ -138,12 +170,31 @@ namespace DFMP.Runtime
             facingYaw = newFacingYaw;
         }
 
+        public void SetSceneHeightOffset(float newSceneHeightOffset)
+        {
+            sceneHeightOffset = newSceneHeightOffset;
+        }
+
         public void SetAppearance(int newRace, int newGender, int newOutfitVariant, int newFaceVariant)
         {
             race = newRace;
             gender = newGender;
             outfitVariant = newOutfitVariant;
             faceVariant = newFaceVariant;
+        }
+
+        public void SetAvatarMobileType(int newAvatarMobileType)
+        {
+            avatarMobileType = newAvatarMobileType;
+        }
+
+        public void PlayAction(DFMPPlayerActionKind newActionKind)
+        {
+            actionKind = (int)newActionKind;
+            unchecked
+            {
+                actionSequence++;
+            }
         }
 
         public static void RegisterClientSpawnHandler()
