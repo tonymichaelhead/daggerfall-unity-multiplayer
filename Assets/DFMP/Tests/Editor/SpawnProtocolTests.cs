@@ -8,6 +8,48 @@ namespace DFMP.Tests
     public class SpawnProtocolTests
     {
         [Test]
+        public void DeadSpawnedSession_WithRespawnPosition_AcceptsDeathRespawnAssignment()
+        {
+            DFMPDeathRespawnRejectionReason reason = DFMPDeathRespawnPolicy.GetRejectionReason(new DFMPDeathRespawnContext
+            {
+                HasSession = true,
+                SpawnConfirmed = true,
+                IsDead = true,
+                HasPendingTransition = false,
+                HasRespawnPosition = true
+            });
+
+            Assert.AreEqual(DFMPDeathRespawnRejectionReason.None, reason);
+            Assert.IsTrue(DFMPDeathRespawnPolicy.IsAccepted(reason));
+        }
+
+        [TestCase(DFMPDeathRespawnRejectionReason.MissingSession, false, true, true, false, true)]
+        [TestCase(DFMPDeathRespawnRejectionReason.SpawnNotConfirmed, true, false, true, false, true)]
+        [TestCase(DFMPDeathRespawnRejectionReason.PlayerNotDead, true, true, false, false, true)]
+        [TestCase(DFMPDeathRespawnRejectionReason.TransitionAlreadyPending, true, true, true, true, true)]
+        [TestCase(DFMPDeathRespawnRejectionReason.MissingRespawnPosition, true, true, true, false, false)]
+        public void InvalidDeathRespawnContext_RejectsAssignment(
+            DFMPDeathRespawnRejectionReason expectedReason,
+            bool hasSession,
+            bool spawnConfirmed,
+            bool isDead,
+            bool hasPendingTransition,
+            bool hasRespawnPosition)
+        {
+            DFMPDeathRespawnRejectionReason reason = DFMPDeathRespawnPolicy.GetRejectionReason(new DFMPDeathRespawnContext
+            {
+                HasSession = hasSession,
+                SpawnConfirmed = spawnConfirmed,
+                IsDead = isDead,
+                HasPendingTransition = hasPendingTransition,
+                HasRespawnPosition = hasRespawnPosition
+            });
+
+            Assert.AreEqual(expectedReason, reason);
+            Assert.IsFalse(DFMPDeathRespawnPolicy.IsAccepted(reason));
+        }
+
+        [Test]
         public void AssignmentState_ReceiveRequeueAndReset_TracksLifecycle()
         {
             var state = new DFMPSpawnAssignmentState();
