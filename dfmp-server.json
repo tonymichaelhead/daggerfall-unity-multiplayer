@@ -10,6 +10,9 @@
   "Gameplay": {
     "EnableBeginnerTutorial": false
   },
+  "Rest": {
+    "Policy": "Disabled"
+  },
   "StartingLocation": {
     "Mode": "LocationCenter",
     "RegionName": "Daggerfall",

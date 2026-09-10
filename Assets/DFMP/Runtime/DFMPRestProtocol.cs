@@ -30,7 +30,9 @@ namespace DFMP.Runtime
         Moving,
         AlreadyResting,
         Interrupted,
-        UnsupportedMode
+        UnsupportedMode,
+        DisabledByServer,
+        ServerManagedUnavailable
     }
 
     public static class DFMPRestProtocol
@@ -43,6 +45,29 @@ namespace DFMP.Runtime
             if (!DFMPRestAdvancePolicy.TryParseMode(restModeName, out mode))
                 return DFMPRestRequestRejectionReason.UnsupportedMode;
 
+            return GetContextRejectionReason(context);
+        }
+
+        public static DFMPRestRequestRejectionReason GetRejectionReason(
+            DFMPRestRequestContext context,
+            string restModeName,
+            string restPolicy)
+        {
+            DFMPRestAdvanceMode mode;
+            if (!DFMPRestAdvancePolicy.TryParseMode(restModeName, out mode))
+                return DFMPRestRequestRejectionReason.UnsupportedMode;
+
+            if (string.Equals(restPolicy, DFMPRestPolicies.ServerManaged, System.StringComparison.OrdinalIgnoreCase))
+                 return DFMPRestRequestRejectionReason.ServerManagedUnavailable;
+
+            if (string.Equals(restPolicy, DFMPRestPolicies.Disabled, System.StringComparison.OrdinalIgnoreCase))
+                return DFMPRestRequestRejectionReason.DisabledByServer;
+
+            return DFMPRestRequestRejectionReason.DisabledByServer;
+        }
+
+        static DFMPRestRequestRejectionReason GetContextRejectionReason(DFMPRestRequestContext context)
+        {
             if (!context.HasSession)
                 return DFMPRestRequestRejectionReason.MissingSession;
 

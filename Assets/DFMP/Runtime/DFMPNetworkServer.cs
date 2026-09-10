@@ -788,7 +788,13 @@ namespace DFMP.Runtime
                 HasInterruption = false
             };
 
-            DFMPRestRequestRejectionReason rejectionReason = DFMPRestProtocol.GetRejectionReason(context, request.RestModeName);
+            string restPolicy = Config != null && Config.Rest != null
+                ? Config.Rest.Policy
+                : DFMPRestPolicies.Disabled;
+            DFMPRestRequestRejectionReason rejectionReason = DFMPRestProtocol.GetRejectionReason(
+                context,
+                request.RestModeName,
+                restPolicy);
             bool accepted = DFMPRestProtocol.IsAccepted(rejectionReason);
             if (accepted)
                 sessionState.SetResting(true);

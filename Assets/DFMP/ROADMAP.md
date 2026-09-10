@@ -247,14 +247,28 @@ Everything the server needs to know where players are before it can own entities
   - Loiter, rest-until-healed, and wait-until-dawn paths are removed as time-advance mechanisms.
   - Audit vampirism, lycanthropy, and guild-rank timers for hidden dependencies on player-driven time advancement.
 - **Rest and healing replacement**, since rest no longer advances the clock:
-  - Server-mediated rest in place. The server computes the vanilla heal and spell-point rates from the character's attributes and skills, then delivers that recovery over compressed real time with a configurable rate multiplier. Blocked while hostiles are present, and interruptible on damage or movement.
-  - Renting an inn room grants an immediate full restore, preserving the vanilla gold sink.
-  - Temple and guild paid restoration services continue to work unchanged.
+  - **MVP policy:** rest, rest-until-healed, and loiter are disabled by default. Clients never advance server time through these actions.
+  - The server configuration preserves a `ServerManaged` policy for a future milestone; it is not part of the MVP gameplay loop yet.
+  - Renting an inn room, and temple or guild paid restoration services, remain separate restoration paths and do not advance global time.
 
 Verification:
 
 - EditMode tests for coordinate and context conversion, occupancy transitions, observer selection, time-scale math, and rest recovery rates.
 - Headless and graphical transition smoke tests covering doors, dungeon entry, fast travel, death, and reconnect.
+
+### Post-MVP: Server-Managed Rest and Recovery
+
+Status: Deferred until after the MVP beta.
+
+When enabled by the server's `Rest.Policy = ServerManaged` setting:
+
+- Rest happens in place without advancing global server time, including in dungeons.
+- The server computes vanilla-compatible health, fatigue, and spell-point recovery over compressed real time using a configurable multiplier.
+- Resting does not make a player safe. Hostiles may attack, and damage or movement interrupts active recovery.
+- Vanilla rest-driven skill practice and resulting level progression are server-owned.
+- Inn rental can provide an immediate full restore, while temple and guild restoration services remain distinct paid paths.
+
+The MVP uses `Rest.Policy = Disabled`; clients still block all vanilla rest and loiter time advancement in both policies.
 
 ### M6.5: Spike — Headless Dungeon Geometry
 

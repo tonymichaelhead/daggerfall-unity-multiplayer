@@ -23,6 +23,26 @@ namespace DFMP.Tests
             Assert.AreEqual(DFMPStartingLocationModes.LocationCenter, config.StartingLocation.Mode);
             Assert.AreEqual("Daggerfall", config.StartingLocation.RegionName);
             Assert.AreEqual("Daggerfall", config.StartingLocation.LocationName);
+            Assert.NotNull(config.Rest);
+            Assert.AreEqual(DFMPRestPolicies.Disabled, config.Rest.Policy);
+        }
+
+        [Test]
+        public void ServerConfig_NormalizesRestPolicy()
+        {
+            var config = new DFMPServerConfig
+            {
+                Rest = new DFMPServerRestConfig { Policy = "servermanaged" }
+            };
+
+            config.Normalize();
+
+            Assert.AreEqual(DFMPRestPolicies.ServerManaged, config.Rest.Policy);
+
+            config.Rest.Policy = "unsupported";
+            config.Normalize();
+
+            Assert.AreEqual(DFMPRestPolicies.Disabled, config.Rest.Policy);
         }
 
         [Test]

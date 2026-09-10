@@ -25,6 +25,26 @@ namespace DFMP.Runtime
         public bool EnableBeginnerTutorial;
     }
 
+    public static class DFMPRestPolicies
+    {
+        public const string Disabled = "Disabled";
+        public const string ServerManaged = "ServerManaged";
+    }
+
+    [Serializable]
+    public class DFMPServerRestConfig
+    {
+        public string Policy = DFMPRestPolicies.Disabled;
+
+        public void Normalize()
+        {
+            if (string.Equals(Policy, DFMPRestPolicies.ServerManaged, StringComparison.OrdinalIgnoreCase))
+                Policy = DFMPRestPolicies.ServerManaged;
+            else
+                Policy = DFMPRestPolicies.Disabled;
+        }
+    }
+
     public static class DFMPStartingLocationModes
     {
         public const string LocationCenter = "LocationCenter";
@@ -81,6 +101,7 @@ namespace DFMP.Runtime
         public DFMPServerChatConfig Chat = new DFMPServerChatConfig();
         public DFMPServerIdentityConfig Identity = new DFMPServerIdentityConfig();
         public DFMPServerGameplayConfig Gameplay = new DFMPServerGameplayConfig();
+        public DFMPServerRestConfig Rest = new DFMPServerRestConfig();
         public DFMPServerStartingLocationConfig StartingLocation = new DFMPServerStartingLocationConfig();
 
         public void Normalize()
@@ -111,6 +132,11 @@ namespace DFMP.Runtime
 
             if (Gameplay == null)
                 Gameplay = new DFMPServerGameplayConfig();
+
+            if (Rest == null)
+                Rest = new DFMPServerRestConfig();
+
+            Rest.Normalize();
 
             if (StartingLocation == null)
                 StartingLocation = new DFMPServerStartingLocationConfig();
