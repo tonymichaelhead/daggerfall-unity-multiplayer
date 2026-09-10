@@ -32,6 +32,8 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 
 The upstream rest window has no separate wait-until-dawn action. Its only client-side time-advance entry points are timed rest, rest-until-healed, and loiter, all covered by `M6-REST-001`. Server-mediated rest and healing remains a separate M6.10 implementation task.
 
+Additional `RaiseTime()` paths were audited in upstream DFU. Fast travel is already covered by `M6-FAST-TRAVEL-001`, and the vanilla rest tick cannot start after `M6-REST-001` consumes the rest action. Quest training (`TrainPc`), guild training, prison/court time, and vampirism or lycanthropy transitions remain separate player or effect workflows; they must not be blanket-blocked by the rest hook. Each requires a future server-mediated policy before it may advance global time in multiplayer.
+
 ## Hook Interface Definitions
 
 Static hook entry points live under `Assets/DFMP/Hooks/` (e.g. `DaggerfallHooks.cs`).
