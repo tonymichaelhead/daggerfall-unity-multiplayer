@@ -4,6 +4,7 @@ using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
 using kcp2k;
 using Mirror;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -39,6 +40,7 @@ namespace DFMP.Runtime
         static readonly Dictionary<int, float> lastActionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
+        static readonly HashSet<int> pendingAdminKickConnections = new HashSet<int>();
         static int nextTransitionAssignmentId = 1;
 
         public static bool IsListening
@@ -220,6 +222,9 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
             NetworkServer.RegisterHandler<DFMPChatMessage>(OnChatMessage);
+            NetworkServer.RegisterHandler<DFMPAdminRosterRequest>(OnAdminRosterRequest);
+            NetworkServer.RegisterHandler<DFMPAdminKickRequest>(OnAdminKickRequest);
+            NetworkServer.RegisterHandler<DFMPAdminKickAcknowledgement>(OnAdminKickAcknowledgement);
             NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
             SpawnTimeState();
 
@@ -836,6 +841,96 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Chat] Accepted message: connectionId={conn.connectionId}, sender='{sessionState.DisplayName}', text='{sanitizedText}'.");
         }
 
+        private static void OnAdminRosterRequest(NetworkConnectionToClient conn, DFMPAdminRosterRequest request)
+        {
+            DFMPPlayerSessionState requesterSession;
+            if (!TryValidateAdminRequester(conn, out requesterSession))
+                return;
+
+            conn.Send(CreateAdminRoster(conn.connectionId));
+        }
+
+        private static void OnAdminKickRequest(NetworkConnectionToClient conn, DFMPAdminKickRequest request)
+        {
+            DFMPPlayerSessionState requesterSession;
+            if (!TryValidateAdminRequester(conn, out requesterSession))
+                return;
+
+            DFMPPlayerSessionState targetSession;
+            NetworkConnectionToClient targetConnection;
+            if (!playerSessionStates.TryGetValue(request.TargetConnectionId, out targetSession) ||
+                targetSession == null ||
+                !NetworkServer.connections.TryGetValue(request.TargetConnectionId, out targetConnection) ||
+                targetConnection == null)
+            {
+                Debug.LogWarning($"[DFMP Admin] Rejected kick for unavailable player: requester={conn.connectionId}, target={request.TargetConnectionId}.");
+                conn.Send(CreateAdminRoster(conn.connectionId));
+                return;
+            }
+
+            Debug.Log($"[DFMP Admin] Player kick requested: requester={conn.connectionId}, target={request.TargetConnectionId}, name='{targetSession.DisplayName}'.");
+            if (pendingAdminKickConnections.Add(request.TargetConnectionId))
+            {
+                targetConnection.Send(new DFMPAdminKickNotice { Message = DFMPAdminProtocol.KickNoticeText });
+                if (Manager != null)
+                    Manager.StartCoroutine(DisconnectAfterAdminKickNotice(request.TargetConnectionId, targetConnection));
+                else
+                    targetConnection.Disconnect();
+            }
+
+            if (request.TargetConnectionId != conn.connectionId && conn.isReady)
+                conn.Send(CreateAdminRoster(conn.connectionId, request.TargetConnectionId));
+        }
+
+        private static DFMPAdminRosterResponse CreateAdminRoster(int adminConnectionId, int excludedConnectionId = -1)
+        {
+            var accountIds = new Dictionary<int, string>();
+            foreach (KeyValuePair<int, DFMPJoinDecision> entry in joinDecisions)
+            {
+                if (entry.Value != null && entry.Value.Accepted)
+                    accountIds[entry.Key] = entry.Value.AccountId;
+            }
+
+            return DFMPAdminProtocol.CreateRoster(playerSessionStates, accountIds, adminConnectionId, excludedConnectionId);
+        }
+
+        private static void OnAdminKickAcknowledgement(NetworkConnectionToClient conn, DFMPAdminKickAcknowledgement acknowledgement)
+        {
+            if (conn != null && pendingAdminKickConnections.Remove(conn.connectionId))
+                conn.Disconnect();
+        }
+
+        private static IEnumerator DisconnectAfterAdminKickNotice(int connectionId, NetworkConnectionToClient expectedConnection)
+        {
+            yield return new WaitForSecondsRealtime(1f);
+
+            if (!pendingAdminKickConnections.Remove(connectionId))
+                yield break;
+
+            NetworkConnectionToClient currentConnection;
+            if (NetworkServer.connections.TryGetValue(connectionId, out currentConnection) && currentConnection == expectedConnection)
+                currentConnection.Disconnect();
+        }
+
+        private static bool TryValidateAdminRequester(NetworkConnectionToClient conn, out DFMPPlayerSessionState sessionState)
+        {
+            sessionState = null;
+            if (conn == null || !IsJoinAccepted(conn) || !playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
+            {
+                Debug.LogWarning($"[DFMP Admin] Rejected request without an accepted session: connectionId={(conn != null ? conn.connectionId : -1)}.");
+                return false;
+            }
+
+            string reason;
+            if (!DFMPAdminProtocol.TryValidateRequester(sessionState, conn.connectionId, out reason))
+            {
+                Debug.LogWarning($"[DFMP Admin] Rejected request: connectionId={conn.connectionId}, reason={reason}.");
+                return false;
+            }
+
+            return true;
+        }
+
         public static void DestroyPlayerSessionState(NetworkConnectionToClient conn)
         {
             if (conn == null)
@@ -864,6 +959,7 @@ namespace DFMP.Runtime
             lastActionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
             rejectedPositionReportConnections.Remove(conn.connectionId);
+            pendingAdminKickConnections.Remove(conn.connectionId);
             DFMPChatProtocol.RateLimiter.Reset(conn.connectionId);
             activeAccounts.Release(conn.connectionId);
             if (sessionState != null)
@@ -895,6 +991,7 @@ namespace DFMP.Runtime
             lastActionReportTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();
+            pendingAdminKickConnections.Clear();
             activeAccounts.Clear();
             nextTransitionAssignmentId = 1;
             Port = 0;

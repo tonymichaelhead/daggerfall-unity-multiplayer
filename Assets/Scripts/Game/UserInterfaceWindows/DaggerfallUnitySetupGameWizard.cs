@@ -151,7 +151,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             NativePanel.Components.Add(exitButton);
 
             // If actually validated and we just want to see settings then move direct to settings page
-            if (DaggerfallUnity.Instance.IsPathValidated && (DaggerfallUnity.Settings.ShowOptionsAtStart || Input.anyKey))
+            bool forceStartupMenu = DFMP.Hooks.DaggerfallHooks.ShouldForceStartupMenu != null && DFMP.Hooks.DaggerfallHooks.ShouldForceStartupMenu();
+            if (DaggerfallUnity.Instance.IsPathValidated && (forceStartupMenu || DaggerfallUnity.Settings.ShowOptionsAtStart || Input.anyKey))
             {
                 currentStage = SetupStages.Options - 1;
             }

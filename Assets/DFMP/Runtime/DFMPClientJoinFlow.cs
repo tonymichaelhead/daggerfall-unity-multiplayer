@@ -54,6 +54,11 @@ namespace DFMP.Runtime
             State = DFMPClientJoinState.InGame;
         }
 
+        public void MarkDisconnected()
+        {
+            State = DFMPClientJoinState.Disconnected;
+        }
+
         public void ApplyCharacterSnapshot(DFMPCharacterSnapshotMessage snapshot)
         {
             LastCharacterSnapshot = snapshot;
@@ -85,6 +90,8 @@ namespace DFMP.Runtime
         bool hasPendingSnapshot;
         bool introQuestSuppressionStarted;
         string pendingConnectionNotice;
+        string pendingKickNotice;
+        bool shouldShowKickNotice;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Initialize()
@@ -117,6 +124,7 @@ namespace DFMP.Runtime
 
         private void Update()
         {
+            TryShowKickNotice();
             TryShowConnectionNotice();
 
             StartGameBehaviour startGameBehaviour = FindObjectOfType<StartGameBehaviour>();
@@ -142,6 +150,27 @@ namespace DFMP.Runtime
             pendingConnectionNotice = null;
         }
 
+        void TryShowKickNotice()
+        {
+            if (!shouldShowKickNotice || DaggerfallUI.UIManager == null)
+                return;
+
+            shouldShowKickNotice = false;
+            string message = DFMPAdminProtocol.GetKickNoticeText(pendingKickNotice);
+            pendingKickNotice = null;
+
+            var messageBox = new DaggerfallMessageBox(DaggerfallUI.UIManager, DaggerfallUI.UIManager.TopWindow, true);
+            messageBox.PauseWhileOpen = true;
+            messageBox.SetText(message);
+            messageBox.AddButton(DaggerfallMessageBox.MessageBoxButtons.OK, true);
+            messageBox.OnButtonClick += (sender, button) =>
+            {
+                sender.CloseWindow();
+                ReturnToStartupScreen();
+            };
+            DaggerfallUI.UIManager.PushWindow(messageBox);
+        }
+
         private void OnDestroy()
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
@@ -155,7 +184,29 @@ namespace DFMP.Runtime
             StartGameBehaviour.OnStartMenu -= OnStartMenuOpened;
             introQuestSuppressionStarted = false;
             pendingConnectionNotice = null;
+            pendingKickNotice = null;
+            shouldShowKickNotice = false;
             Flow.MarkConnecting();
+        }
+
+        public void SetPendingKickNotice(string message)
+        {
+            pendingKickNotice = DFMPAdminProtocol.GetKickNoticeText(message);
+        }
+
+        public void HandleClientDisconnected()
+        {
+            Flow.MarkDisconnected();
+            pendingConnectionNotice = null;
+            shouldShowKickNotice = !string.IsNullOrEmpty(pendingKickNotice);
+        }
+
+        void ReturnToStartupScreen()
+        {
+            pendingKickNotice = null;
+            shouldShowKickNotice = false;
+            DFMPNetworkClient.Stop();
+            SceneManager.LoadScene(SceneControl.StartupSceneIndex);
         }
 
         public void ApplyJoinResult(DFMPJoinResultMessage result)

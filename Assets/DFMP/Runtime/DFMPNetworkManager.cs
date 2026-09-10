@@ -102,6 +102,8 @@ namespace DFMP.Runtime
         public override void OnClientDisconnect()
         {
             Debug.Log($"[DFMP Net] Disconnected from server: address={networkAddress}, port={DFMPNetworkClient.Port}.");
+            if (DFMPClientJoinFlowController.Instance != null)
+                DFMPClientJoinFlowController.Instance.HandleClientDisconnected();
             base.OnClientDisconnect();
         }
     }

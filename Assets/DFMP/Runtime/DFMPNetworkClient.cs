@@ -13,6 +13,8 @@ namespace DFMP.Runtime
         public static ushort Port { get; private set; }
         public static string AccountId { get; private set; }
 
+        public static event Action<DFMPAdminRosterResponse> AdminRosterReceived;
+
         public static bool IsConnected
         {
             get { return NetworkClient.isConnected; }
@@ -65,6 +67,8 @@ namespace DFMP.Runtime
             DFMPPlayerSessionState.RegisterClientSpawnHandler();
             DFMPSpawnAssignmentController.RegisterClientHandler();
             NetworkClient.RegisterHandler<DFMPChatMessage>(OnChatMessageReceived);
+            NetworkClient.RegisterHandler<DFMPAdminRosterResponse>(OnAdminRosterReceived);
+            NetworkClient.RegisterHandler<DFMPAdminKickNotice>(OnAdminKickNoticeReceived);
             NetworkClient.RegisterHandler<DFMPJoinResultMessage>(OnJoinResultReceived);
             NetworkClient.RegisterHandler<DFMPCharacterSnapshotMessage>(OnCharacterSnapshotReceived);
             DFMPPositionReporter.EnsureInstance();
@@ -90,6 +94,35 @@ namespace DFMP.Runtime
             });
 
             Debug.Log($"[DFMP Chat] Client received chat: sender='{message.SenderDisplayName}', text='{message.Text}'.");
+        }
+
+        static void OnAdminRosterReceived(DFMPAdminRosterResponse message)
+        {
+            if (message.Players == null)
+                message.Players = new DFMPAdminPlayer[0];
+
+            AdminRosterReceived?.Invoke(message);
+        }
+
+        static void OnAdminKickNoticeReceived(DFMPAdminKickNotice message)
+        {
+            if (DFMPClientJoinFlowController.Instance != null)
+                DFMPClientJoinFlowController.Instance.SetPendingKickNotice(message.Message);
+
+            if (NetworkClient.isConnected)
+                NetworkClient.Send(new DFMPAdminKickAcknowledgement());
+        }
+
+        public static void RequestAdminRoster()
+        {
+            if (NetworkClient.isConnected)
+                NetworkClient.Send(new DFMPAdminRosterRequest());
+        }
+
+        public static void RequestKickPlayer(int connectionId)
+        {
+            if (NetworkClient.isConnected)
+                NetworkClient.Send(new DFMPAdminKickRequest { TargetConnectionId = connectionId });
         }
 
         static void OnJoinResultReceived(DFMPJoinResultMessage message)
@@ -136,8 +169,12 @@ namespace DFMP.Runtime
 
         public static void Stop()
         {
-            if (Manager != null && Manager.isNetworkActive)
-                Manager.StopClient();
+            DFMPNetworkManager networkManager = Manager;
+            if (networkManager != null && networkManager.isNetworkActive)
+                networkManager.StopClient();
+
+            if (networkManager != null)
+                UnityEngine.Object.Destroy(networkManager.gameObject);
 
             DFMPSpawnAssignmentController.Reset();
             DFMPPositionReporter.Reset();

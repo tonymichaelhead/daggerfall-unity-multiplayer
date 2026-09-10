@@ -374,6 +374,8 @@ Verification:
 
 Status: Planned.
 
+An early F12 administration prototype now provides a server-authored connected-player roster showing character and account identities, highlights the requesting player as Admin, and supports confirmed kicks. Kicked clients receive an explicit notice and return to the DFMP startup screen after acknowledgement. The protocol has focused EditMode coverage and the two-client kick flow has passed a runtime smoke test. This prototype intentionally allows every logged-in player to use it and does not satisfy this milestone until the permission and audit requirements below are implemented.
+
 - Role and permission model: owner, admin, moderator, player, with permissions granted per command.
 - In-game chat command framework, with commands registerable by both the core and R2 scripts.
 - Core moderation commands: kick, ban, unban, mute, whitelist add and remove, teleport, and player lookup.
