@@ -21,6 +21,7 @@ namespace DFMP.Runtime
         DaggerfallHUD attachedHud;
         Panel passivePanel;
         DFMPChatWindow openWindow;
+        DFMPChatWindow pendingInputReleaseWindow;
         bool wasConnected;
 
         public static DFMPChatController Instance { get; private set; }
@@ -67,6 +68,8 @@ namespace DFMP.Runtime
 
         void Update()
         {
+            TryFinishDeferredInputRelease();
+
             bool connected = DFMPNetworkClient.IsConnected;
             if (wasConnected && !connected)
                 ResetForConnection();
@@ -164,7 +167,15 @@ namespace DFMP.Runtime
                 return;
 
             openWindow = null;
+            if (pendingInputReleaseWindow == window)
+                pendingInputReleaseWindow = null;
             IsTextInputOwned = false;
+        }
+
+        public void DeferWindowCloseUntilSubmitReleased(DFMPChatWindow window)
+        {
+            if (openWindow == window)
+                pendingInputReleaseWindow = window;
         }
 
         void EnsurePassivePanel()
@@ -237,6 +248,23 @@ namespace DFMP.Runtime
                 attachedHud.NativePanel.Components.Remove(passivePanel);
             attachedHud = null;
             passivePanel = null;
+        }
+
+        void TryFinishDeferredInputRelease()
+        {
+            if (pendingInputReleaseWindow == null)
+                return;
+
+            if (Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter))
+            {
+                pendingInputReleaseWindow.MaintainInputState();
+                return;
+            }
+
+            DFMPChatWindow window = pendingInputReleaseWindow;
+            pendingInputReleaseWindow = null;
+            window.ReleaseInputState();
+            NotifyWindowClosed(window);
         }
     }
 }

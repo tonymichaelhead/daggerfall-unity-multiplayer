@@ -29,6 +29,7 @@ namespace DFMP.Runtime
         bool capturedCursorState;
         bool restoredInput;
         bool toggleCloseArmed;
+        bool deferInputRelease;
         long displayedRevision;
         readonly List<long> displayedSequences = new List<long>();
 
@@ -120,6 +121,7 @@ namespace DFMP.Runtime
                 string text = inputTextBox.Text;
                 if (!string.IsNullOrWhiteSpace(text))
                     controller.SendPlayerMessage(text);
+                deferInputRelease = true;
                 CloseWindow();
             }
             else if (Input.GetKeyDown(KeyCode.Escape) ||
@@ -131,8 +133,13 @@ namespace DFMP.Runtime
 
         public override void OnPop()
         {
-            ReleaseInputState();
-            controller.NotifyWindowClosed(this);
+            if (deferInputRelease)
+                controller.DeferWindowCloseUntilSubmitReleased(this);
+            else
+            {
+                ReleaseInputState();
+                controller.NotifyWindowClosed(this);
+            }
             base.OnPop();
         }
 
@@ -199,6 +206,21 @@ namespace DFMP.Runtime
             {
                 GameManager.Instance.PlayerMouseLook.cursorActive = previousCursorActive;
                 Cursor.lockState = previousCursorLockMode;
+            }
+        }
+
+        public void MaintainInputState()
+        {
+            if (InputManager.Instance != null)
+            {
+                InputManager.Instance.IsPaused = true;
+                InputManager.Instance.CursorVisible = true;
+            }
+
+            if (capturedCursorState && GameManager.HasInstance && GameManager.Instance.PlayerMouseLook != null)
+            {
+                GameManager.Instance.PlayerMouseLook.cursorActive = true;
+                Cursor.lockState = CursorLockMode.None;
             }
         }
 
