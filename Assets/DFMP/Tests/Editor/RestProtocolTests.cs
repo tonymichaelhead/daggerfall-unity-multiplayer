@@ -55,6 +55,16 @@ namespace DFMP.Tests
             Assert.AreEqual(DFMPRestRequestRejectionReason.UnsupportedMode, reason);
         }
 
+        [TestCase(true, true, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        public void MovementInterruptsOnlyAnActiveRest(bool isResting, bool isMoving, bool expectedInterrupted)
+        {
+            Assert.AreEqual(
+                expectedInterrupted,
+                DFMPRestProtocol.ShouldInterruptOnMovement(isResting, isMoving));
+        }
+
         static DFMPRestRequestContext CreateReadyContext()
         {
             return new DFMPRestRequestContext

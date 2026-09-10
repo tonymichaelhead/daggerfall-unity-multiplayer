@@ -159,6 +159,8 @@ namespace DFMP.Runtime
         public void SetMovement(bool newIsMoving)
         {
             isMoving = newIsMoving;
+            if (DFMPRestProtocol.ShouldInterruptOnMovement(isResting, newIsMoving))
+                isResting = false;
         }
 
         public void SetResting(bool newIsResting)

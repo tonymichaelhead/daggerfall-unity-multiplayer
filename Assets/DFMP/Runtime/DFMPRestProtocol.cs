@@ -65,5 +65,10 @@ namespace DFMP.Runtime
         {
             return reason == DFMPRestRequestRejectionReason.None;
         }
+
+        public static bool ShouldInterruptOnMovement(bool isResting, bool isMoving)
+        {
+            return isResting && isMoving;
+        }
     }
 }

@@ -431,6 +431,10 @@ namespace DFMP.Runtime
             if (conn == null || !CanAssignContext(kind, context.Kind))
                 return false;
 
+            DFMPPlayerSessionState sessionState;
+            if (playerSessionStates.TryGetValue(conn.connectionId, out sessionState) && sessionState != null)
+                sessionState.SetResting(false);
+
             var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(nextTransitionAssignmentId++, conn.connectionId, kind, position, context, startMarkerName);
             DFMPTransitionAssignmentState assignmentState;
             if (!transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState))
