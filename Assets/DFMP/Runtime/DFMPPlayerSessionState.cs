@@ -26,6 +26,9 @@ namespace DFMP.Runtime
         bool isMoving;
 
         [SyncVar]
+        bool isResting;
+
+        [SyncVar]
         string displayName = "Player";
 
         [SyncVar]
@@ -83,6 +86,11 @@ namespace DFMP.Runtime
         public bool IsMoving
         {
             get { return isMoving; }
+        }
+
+        public bool IsResting
+        {
+            get { return isResting; }
         }
 
         public string DisplayName
@@ -151,6 +159,11 @@ namespace DFMP.Runtime
         public void SetMovement(bool newIsMoving)
         {
             isMoving = newIsMoving;
+        }
+
+        public void SetResting(bool newIsResting)
+        {
+            isResting = newIsResting;
         }
 
         public void SetPosition(int newWorldX, float newWorldY, int newWorldZ)

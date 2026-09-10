@@ -221,6 +221,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
+            NetworkServer.RegisterHandler<DFMPRestRequest>(OnRestRequest);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
             NetworkServer.RegisterHandler<DFMPChatSubmitMessage>(OnChatMessage);
             NetworkServer.RegisterHandler<DFMPAdminRosterRequest>(OnAdminRosterRequest);
@@ -765,6 +766,36 @@ namespace DFMP.Runtime
                     DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
                 CharacterStore.Save(joinDecision.CharacterRecord);
             }
+        }
+
+        private static void OnRestRequest(NetworkConnectionToClient conn, DFMPRestRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            bool hasSession = playerSessionStates.TryGetValue(conn.connectionId, out sessionState) && sessionState != null;
+            DFMPRestRequestContext context = new DFMPRestRequestContext
+            {
+                HasSession = hasSession,
+                SpawnConfirmed = hasSession && sessionState.SpawnConfirmed,
+                IsMoving = hasSession && sessionState.IsMoving,
+                IsResting = hasSession && sessionState.IsResting,
+                HasInterruption = false
+            };
+
+            DFMPRestRequestRejectionReason rejectionReason = DFMPRestProtocol.GetRejectionReason(context, request.RestModeName);
+            bool accepted = DFMPRestProtocol.IsAccepted(rejectionReason);
+            if (accepted)
+                sessionState.SetResting(true);
+            else
+                Debug.LogWarning($"[DFMP Rest] Rejected rest request: connectionId={conn.connectionId}, mode={request.RestModeName}, reason={rejectionReason}.");
+
+            conn.Send(new DFMPRestResponse
+            {
+                Accepted = accepted,
+                RejectionReason = rejectionReason
+            });
         }
 
         private static void OnPlayerActionReport(NetworkConnectionToClient conn, DFMPPlayerActionReport report)

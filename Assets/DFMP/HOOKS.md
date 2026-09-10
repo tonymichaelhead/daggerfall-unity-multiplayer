@@ -28,6 +28,10 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 
 ---
 
+## M6 Time-Advance Audit
+
+The upstream rest window has no separate wait-until-dawn action. Its only client-side time-advance entry points are timed rest, rest-until-healed, and loiter, all covered by `M6-REST-001`. Server-mediated rest and healing remains a separate M6.10 implementation task.
+
 ## Hook Interface Definitions
 
 Static hook entry points live under `Assets/DFMP/Hooks/` (e.g. `DaggerfallHooks.cs`).

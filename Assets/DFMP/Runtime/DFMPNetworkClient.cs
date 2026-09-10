@@ -73,6 +73,7 @@ namespace DFMP.Runtime
             NetworkClient.RegisterHandler<DFMPAdminKickNotice>(OnAdminKickNoticeReceived);
             NetworkClient.RegisterHandler<DFMPJoinResultMessage>(OnJoinResultReceived);
             NetworkClient.RegisterHandler<DFMPCharacterSnapshotMessage>(OnCharacterSnapshotReceived);
+            NetworkClient.RegisterHandler<DFMPRestResponse>(OnRestResponseReceived);
             DFMPPositionReporter.EnsureInstance();
             DFMPRemotePlayerPresentationController.EnsureInstance();
 
@@ -126,6 +127,20 @@ namespace DFMP.Runtime
         {
             if (NetworkClient.isConnected)
                 NetworkClient.Send(new DFMPAdminKickRequest { TargetConnectionId = connectionId });
+        }
+
+        public static void RequestRest(string restModeName)
+        {
+            if (NetworkClient.isConnected)
+                NetworkClient.Send(new DFMPRestRequest { RestModeName = restModeName });
+        }
+
+        static void OnRestResponseReceived(DFMPRestResponse message)
+        {
+            if (message.Accepted)
+                Debug.Log("[DFMP Rest] Server accepted rest request; recovery is pending server implementation.");
+            else
+                Debug.LogWarning($"[DFMP Rest] Server rejected rest request: reason={message.RejectionReason}.");
         }
 
         static void OnJoinResultReceived(DFMPJoinResultMessage message)
