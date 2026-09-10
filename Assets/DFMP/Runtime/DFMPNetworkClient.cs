@@ -39,6 +39,8 @@ namespace DFMP.Runtime
             AccountId = string.IsNullOrWhiteSpace(accountId) ? GetDefaultAccountId() : accountId;
             if (DFMPClientJoinFlowController.Instance != null)
                 DFMPClientJoinFlowController.Instance.MarkConnecting();
+            if (DFMPChatController.Instance != null)
+                DFMPChatController.Instance.ResetForConnection();
 
             DFMPLogRouter.Initialize(DFMPLogRole.Client);
             DFMPClientBootstrap.ApplyClientRuntimeSettings(tickRate);
@@ -66,7 +68,7 @@ namespace DFMP.Runtime
             DFMPTimeState.RegisterClientSpawnHandler();
             DFMPPlayerSessionState.RegisterClientSpawnHandler();
             DFMPSpawnAssignmentController.RegisterClientHandler();
-            NetworkClient.RegisterHandler<DFMPChatMessage>(OnChatMessageReceived);
+            NetworkClient.RegisterHandler<DFMPChatDeliveryMessage>(OnChatMessageReceived);
             NetworkClient.RegisterHandler<DFMPAdminRosterResponse>(OnAdminRosterReceived);
             NetworkClient.RegisterHandler<DFMPAdminKickNotice>(OnAdminKickNoticeReceived);
             NetworkClient.RegisterHandler<DFMPJoinResultMessage>(OnJoinResultReceived);
@@ -83,17 +85,18 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Net] Client connection requested: transport=KCP, address={Address}, port={port}, tickRate={tickRate}.");
         }
 
-        static void OnChatMessageReceived(DFMPChatMessage message)
+        static void OnChatMessageReceived(DFMPChatDeliveryMessage message)
         {
             DFMPEventBus.Instance.PublishChatMessageReceived(new DFMPChatMessageReceivedEvent
             {
+            Kind = message.Kind,
                 ConnectionId = message.ConnectionId,
                 SenderDisplayName = message.SenderDisplayName,
                 MessageText = message.Text,
                 Message = message
             });
 
-            Debug.Log($"[DFMP Chat] Client received chat: sender='{message.SenderDisplayName}', text='{message.Text}'.");
+            Debug.Log($"[DFMP Chat] Client received chat: kind={message.Kind}, sender='{message.SenderDisplayName}', text='{message.Text}'.");
         }
 
         static void OnAdminRosterReceived(DFMPAdminRosterResponse message)

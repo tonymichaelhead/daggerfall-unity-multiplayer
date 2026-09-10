@@ -19,6 +19,16 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void ChatSubmission_ContainsOnlyClientAuthoredText()
+        {
+            var fields = typeof(DFMPChatSubmitMessage).GetFields();
+
+            Assert.AreEqual(1, fields.Length);
+            Assert.AreEqual("Text", fields[0].Name);
+            Assert.AreEqual(typeof(string), fields[0].FieldType);
+        }
+
+        [Test]
         public void ChatValidation_RejectsEmptyOversizedInvalidOrMalformedInput()
         {
             string sanitized;
@@ -39,6 +49,88 @@ namespace DFMP.Tests
             Assert.IsFalse(limiter.TryConsume(42, 10.2f, out reason));
             Assert.IsTrue(reason.Contains("rate"));
             Assert.IsTrue(limiter.TryConsume(43, 10.2f, out reason));
+        }
+
+        [Test]
+        public void ChatHistory_EvictsOldestEntryAtCapacity()
+        {
+            var history = new DFMPChatHistory(2);
+            history.Add(CreateChatDelivery(1, "Alyx", "First"), 1f);
+            history.Add(CreateChatDelivery(2, "Barenziah", "Second"), 2f);
+            history.Add(CreateChatDelivery(3, "Cyrus", "Third"), 3f);
+
+            Assert.AreEqual(2, history.Entries.Count);
+            Assert.AreEqual("Second", history.Entries[0].MessageText);
+            Assert.AreEqual("Third", history.Entries[1].MessageText);
+        }
+
+        [Test]
+        public void ChatHistory_PassiveEntriesRespectAgeAndRowLimit()
+        {
+            var history = new DFMPChatHistory();
+            history.Add(CreateChatDelivery(1, "Alyx", "Expired"), 1f);
+            history.Add(CreateChatDelivery(2, "Barenziah", "Visible"), 10f);
+            history.Add(CreateChatDelivery(3, "Cyrus", "Newest"), 12f);
+
+            var passiveEntries = history.GetPassiveEntries(13f, 2, 5f);
+
+            Assert.AreEqual(2, passiveEntries.Count);
+            Assert.AreEqual("Visible", passiveEntries[0].MessageText);
+            Assert.AreEqual("Newest", passiveEntries[1].MessageText);
+        }
+
+        [Test]
+        public void ChatHistory_DefaultPassiveLifetimeIsFourSeconds()
+        {
+            var history = new DFMPChatHistory();
+            history.Add(CreateChatDelivery(1, "Alyx", "Visible"), 10f);
+
+            Assert.AreEqual(1, history.GetPassiveEntries(14f, 6).Count);
+            Assert.AreEqual(0, history.GetPassiveEntries(14.01f, 6).Count);
+        }
+
+        [Test]
+        public void ChatHistory_FormatsSystemMessagesWithoutPlayerPrefix()
+        {
+            var history = new DFMPChatHistory();
+            history.Add(CreateChatDelivery(4, "Alyx", "Hello"), 1f);
+            history.Add(new DFMPChatDeliveryMessage
+            {
+                Kind = DFMPChatMessageKind.Motd,
+                ConnectionId = -1,
+                SenderDisplayName = string.Empty,
+                Text = "Mind the guards."
+            }, 2f);
+
+            Assert.AreEqual("Alyx: Hello", history.Entries[0].DisplayText);
+            Assert.AreEqual("Mind the guards.", history.Entries[1].DisplayText);
+            Assert.IsFalse(history.Entries[1].IsPlayerMessage);
+        }
+
+        [Test]
+        public void ChatHistory_TruncatesPassiveTextWithoutChangingFullHistory()
+        {
+            var history = new DFMPChatHistory();
+            history.Add(CreateChatDelivery(1, "Alyx", "This message is intentionally long."), 1f);
+
+            Assert.AreEqual("Alyx: This m...", history.Entries[0].GetDisplayText(15));
+            Assert.AreEqual("Alyx: This message is intentionally long.", history.Entries[0].DisplayText);
+        }
+
+        [Test]
+        public void ChatLifecycleNotifier_AnnouncesOnlyConfirmedLifetimeOnce()
+        {
+            var notifier = new DFMPChatLifecycleNotifier();
+
+            Assert.IsFalse(notifier.TryAnnounceDisconnect(7));
+            Assert.IsTrue(notifier.TryAnnounceSpawn(7));
+            Assert.IsFalse(notifier.TryAnnounceSpawn(7));
+            Assert.IsTrue(notifier.TryAnnounceDisconnect(7));
+            Assert.IsFalse(notifier.TryAnnounceDisconnect(7));
+
+            notifier.TryAnnounceSpawn(7);
+            notifier.Clear();
+            Assert.IsFalse(notifier.TryAnnounceDisconnect(7));
         }
 
         [Test]
@@ -136,18 +228,37 @@ namespace DFMP.Tests
             bus.PublishPlayerSpawned(new DFMPPlayerSpawnedEvent { ConnectionId = 5, WorldX = 100, WorldZ = 200 });
             bus.PublishChatMessageReceived(new DFMPChatMessageReceivedEvent
             {
+                Kind = DFMPChatMessageKind.Player,
                 ConnectionId = 5,
                 SenderDisplayName = "Alyx",
                 MessageText = "Hello",
-                Message = new DFMPChatMessage { ConnectionId = 5, SenderDisplayName = "Alyx", Text = "Hello" }
+                Message = new DFMPChatDeliveryMessage
+                {
+                    Kind = DFMPChatMessageKind.Player,
+                    ConnectionId = 5,
+                    SenderDisplayName = "Alyx",
+                    Text = "Hello"
+                }
             });
 
             Assert.NotNull(spawned);
             Assert.AreEqual(100, spawned.WorldX);
             Assert.AreEqual(200, spawned.WorldZ);
             Assert.NotNull(chat);
+            Assert.AreEqual(DFMPChatMessageKind.Player, chat.Kind);
             Assert.AreEqual("Alyx", chat.SenderDisplayName);
             Assert.AreEqual("Hello", chat.MessageText);
+        }
+
+        static DFMPChatDeliveryMessage CreateChatDelivery(int connectionId, string sender, string text)
+        {
+            return new DFMPChatDeliveryMessage
+            {
+                Kind = DFMPChatMessageKind.Player,
+                ConnectionId = connectionId,
+                SenderDisplayName = sender,
+                Text = text
+            };
         }
     }
 }

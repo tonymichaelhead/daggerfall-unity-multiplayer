@@ -220,6 +220,7 @@ namespace DFMP.Runtime
             }
 
             pendingConnectionNotice = BuildConnectionNotice(result.ServerName);
+            PublishJoinChatMessages(result);
 
             if (DFMPClientJoinFlow.ShouldLoadGameScene(result, SceneManager.GetActiveScene().buildIndex))
             {
@@ -237,6 +238,40 @@ namespace DFMP.Runtime
             return string.IsNullOrWhiteSpace(serverName)
                 ? "Connected to server."
                 : string.Format("Connected to {0}.", serverName.Trim());
+        }
+
+        public static string BuildWelcomeMessage(string serverName)
+        {
+            return string.IsNullOrWhiteSpace(serverName)
+                ? "Welcome to the server."
+                : string.Format("Welcome to {0}.", serverName.Trim());
+        }
+
+        static void PublishJoinChatMessages(DFMPJoinResultMessage result)
+        {
+            PublishLocalChatMessage(DFMPChatMessageKind.Welcome, BuildWelcomeMessage(result.ServerName));
+
+            if (!string.IsNullOrWhiteSpace(result.Motd))
+                PublishLocalChatMessage(DFMPChatMessageKind.Motd, result.Motd.Trim());
+        }
+
+        static void PublishLocalChatMessage(DFMPChatMessageKind kind, string text)
+        {
+            var message = new DFMPChatDeliveryMessage
+            {
+                Kind = kind,
+                ConnectionId = -1,
+                SenderDisplayName = string.Empty,
+                Text = text
+            };
+            DFMPEventBus.Instance.PublishChatMessageReceived(new DFMPChatMessageReceivedEvent
+            {
+                Kind = message.Kind,
+                ConnectionId = message.ConnectionId,
+                SenderDisplayName = message.SenderDisplayName,
+                MessageText = message.Text,
+                Message = message
+            });
         }
 
         static void ShowJoinRejectedMessage(string reason)

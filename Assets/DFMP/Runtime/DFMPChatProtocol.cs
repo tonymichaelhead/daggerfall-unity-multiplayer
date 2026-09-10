@@ -4,11 +4,47 @@ using Mirror;
 
 namespace DFMP.Runtime
 {
-    public struct DFMPChatMessage : NetworkMessage
+    public enum DFMPChatMessageKind : byte
     {
+        Player = 0,
+        System = 1,
+        Welcome = 2,
+        Motd = 3,
+        PlayerJoined = 4,
+        PlayerLeft = 5,
+    }
+
+    public struct DFMPChatSubmitMessage : NetworkMessage
+    {
+        public string Text;
+    }
+
+    public struct DFMPChatDeliveryMessage : NetworkMessage
+    {
+        public DFMPChatMessageKind Kind;
         public int ConnectionId;
         public string SenderDisplayName;
         public string Text;
+    }
+
+    public sealed class DFMPChatLifecycleNotifier
+    {
+        readonly HashSet<int> announcedConnectionIds = new HashSet<int>();
+
+        public bool TryAnnounceSpawn(int connectionId)
+        {
+            return announcedConnectionIds.Add(connectionId);
+        }
+
+        public bool TryAnnounceDisconnect(int connectionId)
+        {
+            return announcedConnectionIds.Remove(connectionId);
+        }
+
+        public void Clear()
+        {
+            announcedConnectionIds.Clear();
+        }
     }
 
     public class DFMPChatRateLimiter

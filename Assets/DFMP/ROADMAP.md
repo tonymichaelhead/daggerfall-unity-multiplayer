@@ -175,7 +175,8 @@ One global MMO-style text channel, plus the configuration and event surfaces tha
 - Clients submit bounded chat input messages.
 - Server validates message size, characters, sender session, and rate limit.
 - Server broadcasts accepted messages to all ready clients.
-- Client UI displays a scrolling global-channel history with sender display names.
+- Client UI displays a bounded, scrolling global-channel history with sender display names, F9 text entry, and fading lower-left HUD messages.
+- Server-authored welcome, MOTD, player-joined, and player-left messages share the chat presentation with visually distinct status styling.
 - Expand `dfmp-server.json` into a structured server configuration document covering server identity, connection limits, chat rate limits, and world rules. This is the baseline surface only; the exhaustive, documented configuration surface for third-party owners is R1.
 - Introduce a server-side event bus raising `PlayerConnected`, `PlayerDisconnected`, `PlayerSpawned`, `ChatMessageReceived`, and `LocationEntered`. No scripting engine is bound in this milestone; the bus exists so later systems publish through it by default and R2 can bind to it rather than retrofitting finished systems.
 

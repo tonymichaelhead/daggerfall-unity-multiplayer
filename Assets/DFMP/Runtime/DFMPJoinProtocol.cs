@@ -14,6 +14,7 @@ namespace DFMP.Runtime
         public string AccountId;
         public string ServerWorldId;
         public string ServerName;
+        public string Motd;
         public string Reason;
         public bool EnableBeginnerTutorial;
     }

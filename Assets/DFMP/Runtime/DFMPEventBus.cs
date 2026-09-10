@@ -29,10 +29,11 @@ namespace DFMP.Runtime
 
     public class DFMPChatMessageReceivedEvent
     {
+        public DFMPChatMessageKind Kind;
         public int ConnectionId;
         public string SenderDisplayName;
         public string MessageText;
-        public DFMPChatMessage Message;
+        public DFMPChatDeliveryMessage Message;
     }
 
     public class DFMPPlayerWorldContextChangedEvent

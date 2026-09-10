@@ -41,6 +41,7 @@ namespace DFMP.Runtime
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> pendingAdminKickConnections = new HashSet<int>();
+        static readonly DFMPChatLifecycleNotifier chatLifecycleNotifier = new DFMPChatLifecycleNotifier();
         static int nextTransitionAssignmentId = 1;
 
         public static bool IsListening
@@ -221,7 +222,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
-            NetworkServer.RegisterHandler<DFMPChatMessage>(OnChatMessage);
+            NetworkServer.RegisterHandler<DFMPChatSubmitMessage>(OnChatMessage);
             NetworkServer.RegisterHandler<DFMPAdminRosterRequest>(OnAdminRosterRequest);
             NetworkServer.RegisterHandler<DFMPAdminKickRequest>(OnAdminKickRequest);
             NetworkServer.RegisterHandler<DFMPAdminKickAcknowledgement>(OnAdminKickAcknowledgement);
@@ -294,6 +295,7 @@ namespace DFMP.Runtime
                 AccountId = decision.AccountId,
                 ServerWorldId = decision.ServerWorldId,
                 ServerName = ServerName,
+                Motd = Motd,
                 Reason = decision.Reason,
                 EnableBeginnerTutorial = Config.Gameplay.EnableBeginnerTutorial
             });
@@ -690,6 +692,14 @@ namespace DFMP.Runtime
                 WorldZ = sessionState.WorldZ,
                 DisplayName = sessionState.DisplayName
             });
+
+            if (chatLifecycleNotifier.TryAnnounceSpawn(connectionId))
+            {
+                BroadcastSystemMessage(
+                    DFMPChatMessageKind.PlayerJoined,
+                    string.Format("{0} joined.", sessionState.DisplayName),
+                    connectionId);
+            }
         }
 
         private static void OnPlayerPositionReport(NetworkConnectionToClient conn, DFMPPlayerPositionReport report)
@@ -798,7 +808,7 @@ namespace DFMP.Runtime
             }
         }
 
-        private static void OnChatMessage(NetworkConnectionToClient conn, DFMPChatMessage message)
+        private static void OnChatMessage(NetworkConnectionToClient conn, DFMPChatSubmitMessage message)
         {
             if (conn == null)
                 return;
@@ -830,15 +840,63 @@ namespace DFMP.Runtime
                 return;
             }
 
-            var acceptedMessage = new DFMPChatMessage
+            var acceptedMessage = new DFMPChatDeliveryMessage
             {
+                Kind = DFMPChatMessageKind.Player,
                 ConnectionId = conn.connectionId,
                 SenderDisplayName = sessionState.DisplayName,
                 Text = sanitizedText
             };
 
-            NetworkServer.SendToReady(acceptedMessage);
+            DFMPEventBus.Instance.PublishChatMessageReceived(new DFMPChatMessageReceivedEvent
+            {
+                Kind = acceptedMessage.Kind,
+                ConnectionId = acceptedMessage.ConnectionId,
+                SenderDisplayName = acceptedMessage.SenderDisplayName,
+                MessageText = acceptedMessage.Text,
+                Message = acceptedMessage
+            });
+            SendChatDeliveryToSpawned(acceptedMessage);
             Debug.Log($"[DFMP Chat] Accepted message: connectionId={conn.connectionId}, sender='{sessionState.DisplayName}', text='{sanitizedText}'.");
+        }
+
+        public static bool BroadcastSystemMessage(DFMPChatMessageKind kind, string text, int excludedConnectionId = -1)
+        {
+            if (kind == DFMPChatMessageKind.Player || string.IsNullOrWhiteSpace(text) || !NetworkServer.active)
+                return false;
+
+            var message = new DFMPChatDeliveryMessage
+            {
+                Kind = kind,
+                ConnectionId = -1,
+                SenderDisplayName = string.Empty,
+                Text = text.Trim()
+            };
+
+            SendChatDeliveryToSpawned(message, excludedConnectionId);
+
+            DFMPEventBus.Instance.PublishChatMessageReceived(new DFMPChatMessageReceivedEvent
+            {
+                Kind = message.Kind,
+                ConnectionId = message.ConnectionId,
+                SenderDisplayName = message.SenderDisplayName,
+                MessageText = message.Text,
+                Message = message
+            });
+            return true;
+        }
+
+        static void SendChatDeliveryToSpawned(DFMPChatDeliveryMessage message, int excludedConnectionId = -1)
+        {
+            foreach (KeyValuePair<int, DFMPPlayerSessionState> entry in playerSessionStates)
+            {
+                if (entry.Key == excludedConnectionId || entry.Value == null || !entry.Value.SpawnConfirmed)
+                    continue;
+
+                NetworkConnectionToClient recipient;
+                if (NetworkServer.connections.TryGetValue(entry.Key, out recipient) && recipient != null && recipient.isReady)
+                    recipient.Send(message);
+            }
         }
 
         private static void OnAdminRosterRequest(NetworkConnectionToClient conn, DFMPAdminRosterRequest request)
@@ -950,6 +1008,14 @@ namespace DFMP.Runtime
                 Reason = "disconnect"
             });
 
+            if (chatLifecycleNotifier.TryAnnounceDisconnect(conn.connectionId))
+            {
+                BroadcastSystemMessage(
+                    DFMPChatMessageKind.PlayerLeft,
+                    string.Format("{0} left.", sessionState.DisplayName),
+                    conn.connectionId);
+            }
+
             playerSessionStates.Remove(conn.connectionId);
             joinDecisions.Remove(conn.connectionId);
             worldOccupancy.Remove(conn.connectionId);
@@ -992,6 +1058,7 @@ namespace DFMP.Runtime
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();
             pendingAdminKickConnections.Clear();
+            chatLifecycleNotifier.Clear();
             activeAccounts.Clear();
             nextTransitionAssignmentId = 1;
             Port = 0;

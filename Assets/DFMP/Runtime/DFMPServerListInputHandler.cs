@@ -44,7 +44,7 @@ namespace DFMP.Runtime
 
         private void Update()
         {
-            if (DaggerfallUI.UIManager == null)
+            if (DaggerfallUI.UIManager == null || DFMPChatController.IsTextInputOwned)
                 return;
 
             if (Input.GetKeyDown(PrimaryHotkey) || Input.GetKeyDown(SecondaryHotkey))

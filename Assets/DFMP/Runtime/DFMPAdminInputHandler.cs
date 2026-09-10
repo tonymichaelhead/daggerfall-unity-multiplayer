@@ -36,7 +36,7 @@ namespace DFMP.Runtime
 
         void Update()
         {
-            if (DaggerfallUI.UIManager == null || !Input.GetKeyDown(ToggleHotkey))
+            if (DaggerfallUI.UIManager == null || DFMPChatController.IsTextInputOwned || !Input.GetKeyDown(ToggleHotkey))
                 return;
 
             IUserInterfaceWindow topWindow = DaggerfallUI.UIManager.TopWindow;

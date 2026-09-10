@@ -495,6 +495,23 @@ namespace DFMP.Tests
             Assert.AreEqual("Connected to Tony's DFU RP.", DFMPClientJoinFlowController.BuildConnectionNotice("  Tony's DFU RP  "));
             Assert.AreEqual("Connected to server.", DFMPClientJoinFlowController.BuildConnectionNotice(null));
             Assert.AreEqual("Connected to server.", DFMPClientJoinFlowController.BuildConnectionNotice("   "));
+            Assert.AreEqual("Welcome to Tony's DFU RP.", DFMPClientJoinFlowController.BuildWelcomeMessage("  Tony's DFU RP  "));
+            Assert.AreEqual("Welcome to the server.", DFMPClientJoinFlowController.BuildWelcomeMessage(null));
+        }
+
+        [Test]
+        public void ClientJoinFlow_RetainsServerMotdFromAcceptedResult()
+        {
+            var flow = new DFMPClientJoinFlow();
+            flow.ApplyJoinResult(new DFMPJoinResultMessage
+            {
+                Decision = DFMPJoinDecisionKind.ReturningPlayer,
+                ServerName = "Wayrest",
+                Motd = "Mind the guards."
+            });
+
+            Assert.AreEqual("Wayrest", flow.LastJoinResult.ServerName);
+            Assert.AreEqual("Mind the guards.", flow.LastJoinResult.Motd);
         }
 
         [Test]

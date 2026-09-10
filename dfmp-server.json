@@ -6,7 +6,7 @@
   "TickRate": 30,
   "HeartbeatInterval": 5.0,
   "LanDiscoveryEnabled": true,
-  "Motd": "Welcome to Daggerfall Unity Multiplayer",
+  "Motd": "Welcome, traveler! Global chat is now online.",
   "Gameplay": {
     "EnableBeginnerTutorial": false
   },
