@@ -120,7 +120,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             DaggerfallDateTime now = DaggerfallUnity.Instance.WorldTime.Now;
             playerEntity.TimeOfLastSkillTraining = now.ToClassicDaggerfallTime();
-            now.RaiseTime(DaggerfallDateTime.SecondsPerHour * 3);
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance == null || !DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance("GuildTraining", DaggerfallDateTime.SecondsPerHour * 3))
+                now.RaiseTime(DaggerfallDateTime.SecondsPerHour * 3);
             playerEntity.DecreaseFatigue(PlayerEntity.DefaultFatigueLoss * 180);
             int skillAdvancementMultiplier = DaggerfallSkills.GetAdvancementMultiplier(skillToTrain);
             short tallyAmount = (short)(UnityEngine.Random.Range(10, 20 + 1) * skillAdvancementMultiplier);

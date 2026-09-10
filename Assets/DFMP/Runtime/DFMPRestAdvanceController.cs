@@ -10,6 +10,16 @@ namespace DFMP.Runtime
         static void Initialize()
         {
             DaggerfallHooks.TryHandleRestAdvance = TryHandleRestAdvance;
+            DaggerfallHooks.TryHandleTimeAdvance = TryHandleTimeAdvance;
+        }
+
+        static bool TryHandleTimeAdvance(string source, int seconds)
+        {
+            if (!DFMPTimeAdvancePolicy.ShouldConsumeClientAdvance(NetworkClient.isConnected, source, seconds))
+                return false;
+
+            Debug.Log($"[DFMP Time] Blocked client-side time advancement: source={source}, seconds={seconds}.");
+            return true;
         }
 
         static bool TryHandleRestAdvance(string restModeName)
