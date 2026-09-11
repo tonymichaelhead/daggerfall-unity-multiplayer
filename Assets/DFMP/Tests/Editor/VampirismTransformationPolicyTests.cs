@@ -1,5 +1,6 @@
 using DFMP.Runtime;
 using NUnit.Framework;
+using System.Collections.Generic;
 
 namespace DFMP.Tests
 {
@@ -64,6 +65,69 @@ namespace DFMP.Tests
 
             Assert.AreEqual(expectedReason, DFMPVampirismTransformationPolicy.GetRejectionReason(context));
             Assert.IsFalse(DFMPVampirismTransformationPolicy.IsAccepted(expectedReason));
+        }
+
+        [Test]
+        public void CemeteryCandidates_SelectsServerProvidedExteriorDestination()
+        {
+            var candidates = new List<DFMPVampirismCemeteryCandidate>
+            {
+                CreateCemeteryCandidate("Cemetery A", 12),
+                CreateCemeteryCandidate("Cemetery B", 24)
+            };
+
+            DFMPVampirismCemeteryCandidate candidate;
+            DFMPVampirismCemeteryRejectionReason reason;
+            Assert.IsTrue(DFMPVampirismCemeteryPolicy.TrySelectCandidate(candidates, 1, out candidate, out reason));
+            Assert.AreEqual(DFMPVampirismCemeteryRejectionReason.None, reason);
+            Assert.AreEqual("Cemetery B", candidate.LocationId);
+            Assert.AreEqual(24, candidate.Context.LocationIndex);
+        }
+
+        [TestCase(-1, DFMPVampirismCemeteryRejectionReason.InvalidSelection)]
+        [TestCase(1, DFMPVampirismCemeteryRejectionReason.InvalidSelection)]
+        public void CemeteryCandidates_RejectsInvalidSelection(int selectionIndex, DFMPVampirismCemeteryRejectionReason expectedReason)
+        {
+            var candidates = new List<DFMPVampirismCemeteryCandidate>
+            {
+                CreateCemeteryCandidate("Cemetery A", 12)
+            };
+
+            DFMPVampirismCemeteryCandidate candidate;
+            DFMPVampirismCemeteryRejectionReason reason;
+            Assert.IsFalse(DFMPVampirismCemeteryPolicy.TrySelectCandidate(candidates, selectionIndex, out candidate, out reason));
+            Assert.AreEqual(expectedReason, reason);
+        }
+
+        [Test]
+        public void CemeteryCandidates_RejectsNonExteriorDestination()
+        {
+            var candidate = CreateCemeteryCandidate("Cemetery A", 12);
+            candidate.Context.Kind = DFMPWorldContextKind.Dungeon;
+
+            DFMPVampirismCemeteryCandidate selected;
+            DFMPVampirismCemeteryRejectionReason reason;
+            Assert.IsFalse(DFMPVampirismCemeteryPolicy.TrySelectCandidate(
+                new List<DFMPVampirismCemeteryCandidate> { candidate }, 0, out selected, out reason));
+            Assert.AreEqual(DFMPVampirismCemeteryRejectionReason.InvalidDestination, reason);
+        }
+
+        static DFMPVampirismCemeteryCandidate CreateCemeteryCandidate(string locationId, int locationIndex)
+        {
+            return new DFMPVampirismCemeteryCandidate
+            {
+                LocationId = locationId,
+                Position = new DFMPWorldPosition { WorldX = 6792821, WorldY = 0f, WorldZ = 9374554 },
+                Context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    RegionIndex = 3,
+                    LocationIndex = locationIndex,
+                    LocationId = locationId
+                }
+            };
         }
     }
 }
