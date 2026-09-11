@@ -432,7 +432,7 @@ namespace DFMP.Runtime
                 context);
         }
 
-        public static bool TrySendTransitionAssignment(NetworkConnectionToClient conn, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
+        public static bool TrySendTransitionAssignment(NetworkConnectionToClient conn, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null, int buildingType = -1)
         {
             if (conn == null || !CanAssignContext(kind, context.Kind))
                 return false;
@@ -441,7 +441,7 @@ namespace DFMP.Runtime
             if (playerSessionStates.TryGetValue(conn.connectionId, out sessionState) && sessionState != null)
                 sessionState.SetResting(false);
 
-            var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(nextTransitionAssignmentId++, conn.connectionId, kind, position, context, startMarkerName);
+            var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(nextTransitionAssignmentId++, conn.connectionId, kind, position, context, startMarkerName, buildingType);
             DFMPTransitionAssignmentState assignmentState;
             if (!transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState))
             {
@@ -508,7 +508,9 @@ namespace DFMP.Runtime
                     WorldY = sessionState.WorldY,
                     WorldZ = sessionState.WorldZ
                 },
-                assignedContext);
+                assignedContext,
+                null,
+                request.EnterInterior ? request.BuildingType : -1);
         }
 
         public static bool TrySendDungeonTransitionAssignment(NetworkConnectionToClient conn, DFMPDungeonTransitionRequest request, out DFMPDungeonTransitionRejectionReason rejectionReason)
@@ -698,6 +700,26 @@ namespace DFMP.Runtime
             }
 
             SetSessionWorldContext(conn.connectionId, sessionState, DFMPSpawnProtocol.GetAssignedContext(assignmentState.Assignment), $"transition-{assignmentState.Assignment.Kind}");
+            if (assignmentState.Assignment.Kind == DFMPTransitionKind.Door &&
+                assignmentState.Assignment.BuildingType >= 0 &&
+                DFMPRespawnAnchorPolicy.IsInnBuildingType(assignmentState.Assignment.BuildingType))
+            {
+                DFMPJoinDecision joinDecision;
+                if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) && joinDecision.CharacterRecord != null)
+                {
+                    DFMPCharacterPersistence.ApplyInnRespawnAnchor(
+                        joinDecision.CharacterRecord,
+                        new DFMPWorldPosition
+                        {
+                            WorldX = sessionState.WorldX,
+                            WorldY = sessionState.WorldY,
+                            WorldZ = sessionState.WorldZ
+                        },
+                        DFMPSpawnProtocol.GetAssignedContext(assignmentState.Assignment));
+                    CharacterStore.Save(joinDecision.CharacterRecord);
+                    Debug.Log($"[DFMP Respawn] Saved inn anchor: connectionId={conn.connectionId}, location='{assignmentState.Assignment.LocationId}', buildingKey={assignmentState.Assignment.BuildingKey}.");
+                }
+            }
             ConfirmSessionArrival(conn.connectionId, sessionState);
             Debug.Log($"[DFMP Transition] Server confirmed transition: connectionId={conn.connectionId}, assignmentId={acknowledgement.AssignmentId}, kind={assignmentState.Assignment.Kind}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
         }

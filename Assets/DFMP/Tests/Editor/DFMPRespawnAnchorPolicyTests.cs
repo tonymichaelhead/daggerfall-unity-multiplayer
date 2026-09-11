@@ -36,5 +36,13 @@ namespace DFMP.Tests
                 DFMPRespawnAnchorKind.None,
                 DFMPRespawnAnchorPolicy.ResolveDefaultAnchor(new DFMPRespawnAnchorContext()));
         }
+
+        [TestCase(15, true)]
+        [TestCase(0, false)]
+        [TestCase(16, false)]
+        public void BuildingType_RecognizesOnlyTavernsAsInns(int buildingType, bool expected)
+        {
+            Assert.AreEqual(expected, DFMPRespawnAnchorPolicy.IsInnBuildingType(buildingType));
+        }
     }
 }

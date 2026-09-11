@@ -306,7 +306,8 @@ namespace DFMP.Runtime
                 RegionIndex = playerGPS.CurrentRegionIndex,
                 LocationIndex = playerGPS.CurrentLocationIndex,
                 LocationId = playerGPS.CurrentLocation.Name,
-                BuildingKey = buildingKey
+                BuildingKey = buildingKey,
+                BuildingType = enterInterior ? (int)playerEnterExit.BuildingType : -1
             };
             return true;
         }

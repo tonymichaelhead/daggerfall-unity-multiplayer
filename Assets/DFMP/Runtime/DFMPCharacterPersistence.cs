@@ -142,5 +142,13 @@ namespace DFMP.Runtime
             record.OutfitVariant = DFMPPositionProtocol.GetOutfitVariant(sessionState.OutfitVariant);
             record.FaceVariant = DFMPPositionProtocol.GetFaceVariant(sessionState.FaceVariant);
         }
+
+        public static void ApplyInnRespawnAnchor(DFMPCharacterRecord record, DFMPWorldPosition position, DFMPWorldContextKey context)
+        {
+            if (record == null)
+                return;
+
+            record.RespawnAnchor = DFMPRespawnAnchorRecord.FromKey(DFMPRespawnAnchorKind.Inn, position, context);
+        }
     }
 }

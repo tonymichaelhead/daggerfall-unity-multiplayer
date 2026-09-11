@@ -50,6 +50,7 @@ namespace DFMP.Runtime
         public int LocationIndex;
         public string LocationId;
         public int BuildingKey;
+        public int BuildingType;
         public int DungeonBlockIndex;
         public string DungeonBlockName;
         public string InstanceId;
@@ -79,6 +80,7 @@ namespace DFMP.Runtime
         public int LocationIndex;
         public string LocationId;
         public int BuildingKey;
+        public int BuildingType;
     }
 
     public struct DFMPDungeonTransitionRequest : Mirror.NetworkMessage
@@ -446,10 +448,15 @@ namespace DFMP.Runtime
 
         public static DFMPTransitionAssignment CreateTransitionAssignment(int assignmentId, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
         {
-            return CreateTransitionAssignment(assignmentId, -1, kind, position, context, startMarkerName);
+            return CreateTransitionAssignment(assignmentId, -1, kind, position, context, startMarkerName, -1);
         }
 
         public static DFMPTransitionAssignment CreateTransitionAssignment(int assignmentId, int connectionId, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null)
+        {
+            return CreateTransitionAssignment(assignmentId, connectionId, kind, position, context, startMarkerName, -1);
+        }
+
+        public static DFMPTransitionAssignment CreateTransitionAssignment(int assignmentId, int connectionId, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName, int buildingType)
         {
             return new DFMPTransitionAssignment
             {
@@ -467,6 +474,7 @@ namespace DFMP.Runtime
                 LocationIndex = context.LocationIndex,
                 LocationId = context.LocationId ?? string.Empty,
                 BuildingKey = context.BuildingKey,
+                BuildingType = buildingType,
                 DungeonBlockIndex = context.DungeonBlockIndex,
                 DungeonBlockName = context.DungeonBlockName ?? string.Empty,
                 InstanceId = context.InstanceId ?? string.Empty

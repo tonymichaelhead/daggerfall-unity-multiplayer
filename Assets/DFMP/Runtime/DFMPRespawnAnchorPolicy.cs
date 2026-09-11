@@ -1,3 +1,5 @@
+using DaggerfallConnect;
+
 namespace DFMP.Runtime
 {
     public enum DFMPRespawnAnchorKind
@@ -15,6 +17,11 @@ namespace DFMP.Runtime
 
     public static class DFMPRespawnAnchorPolicy
     {
+        public static bool IsInnBuildingType(int buildingType)
+        {
+            return buildingType == (int)DFLocation.BuildingTypes.Tavern;
+        }
+
         public static DFMPRespawnAnchorKind ResolveDefaultAnchor(DFMPRespawnAnchorContext context)
         {
             if (context.HasInnAnchor)
