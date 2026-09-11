@@ -28,7 +28,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M4 | Global text chat, baseline server configuration, and a server-side event bus. | Done |
 | M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Done |
 | M6 | World context, location occupancy, interest management, and safe transitions. | Done |
-| M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Planned |
+| M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Done |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Planned |
 | M8 | Server-owned dungeon enemies with rosters, replication, AI, and kill credit. | Planned |
 | M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
@@ -285,7 +285,7 @@ The MVP uses `Rest.Policy = Disabled`; clients still block all vanilla rest and 
 
 ### M6.5: Spike — Headless Dungeon Geometry
 
-Status: Planned. Timeboxed investigation, not a shipped feature.
+Status: Complete. Timeboxed investigation, not a shipped feature.
 
 Server-side enemy AI needs navigation, collision, and raycasts against real dungeon meshes, but the M0 headless path intentionally starts DFU in `StartMethods.Void` with world suppression. This spike answers whether the dedicated server can selectively instantiate dungeon geometry for occupied locations without cameras, audio, or UI, and at what CPU and memory cost per occupied dungeon.
 
@@ -294,7 +294,8 @@ The outcome gates the design of M7 and M8. If full geometry proves too expensive
 Verification:
 
 - Headless run instantiating one and several dungeons, with recorded startup time, frame cost, and memory footprint.
-- Written recommendation and a decision recorded before M8 design begins.
+- Native DFU geometry generated one dungeon with 5 blocks in 413 ms and three dungeons with 44 blocks in 1,206 ms; the headless server remained near 30 FPS after both runs.
+- Written recommendation and caveats are recorded in [Dungeon Geometry Spike](DUNGEON_GEOMETRY_SPIKE.md) before M8 design begins. Native geometry is viable as a server-hosting foundation, but duplicate action-door `LoadID` warnings, audio behavior, teardown, and enemy-import cost require separate hardening before M8.
 
 ### M7: Vitals and Combat Authority
 

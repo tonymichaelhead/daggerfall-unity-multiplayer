@@ -27,6 +27,8 @@ namespace DFMP.Runtime
         public static string ServerName { get; private set; } = "Tony's DFU RP";
         public static string Motd { get; private set; } = "Welcome to Daggerfall Unity Multiplayer";
         public static bool LanDiscoveryEnabled { get; private set; } = true;
+        public static bool RunDungeonGeometrySpike { get; private set; }
+        public static int DungeonGeometrySpikeCount { get; private set; } = 1;
         public static string Arena2OverridePath { get; private set; } = null;
         public static float HeartbeatInterval { get; private set; } = 5.0f;
         private static DFMPServerConfig serverConfig;
@@ -60,6 +62,8 @@ namespace DFMP.Runtime
             ServerName = !string.IsNullOrEmpty(cli.ServerName) ? cli.ServerName : fileConfig.ServerName;
             Motd = fileConfig.Motd;
             LanDiscoveryEnabled = fileConfig.LanDiscoveryEnabled;
+            RunDungeonGeometrySpike = cli.RunDungeonGeometrySpike;
+            DungeonGeometrySpikeCount = cli.DungeonGeometrySpikeCount;
             Arena2OverridePath = cli.Arena2Path;
 
             DFMPLogRouter.Initialize(DFMPLogRole.Server);
@@ -187,6 +191,9 @@ namespace DFMP.Runtime
             }
 
             DFMPNetworkServer.Start((ushort)ServerPort, ServerTickRate, MaxConnections, ServerName, Motd, LanDiscoveryEnabled, DiscoveryPort, serverConfig);
+
+            if (RunDungeonGeometrySpike)
+                StartCoroutine(DFMPDungeonGeometrySpike.Run(DungeonGeometrySpikeCount));
 
             Debug.Log("[DFMP] Headless World Initialized (NoWorld=true, Unpaused). Starting heartbeat...");
 

@@ -22,6 +22,8 @@ namespace DFMP.Runtime
         public float HeartbeatInterval;
         public string ServerName;
         public string AccountId;
+        public bool RunDungeonGeometrySpike;
+        public int DungeonGeometrySpikeCount;
 
         public static ServerCommandLineArgs Default => new ServerCommandLineArgs
         {
@@ -35,7 +37,9 @@ namespace DFMP.Runtime
             Arena2Path = null,
             HeartbeatInterval = 5.0f,
             ServerName = null,
-            AccountId = null
+            AccountId = null,
+            RunDungeonGeometrySpike = false,
+            DungeonGeometrySpikeCount = 1
         };
 
         public static ServerCommandLineArgs Parse(string[] args, bool isBatchMode = false)
@@ -108,6 +112,15 @@ namespace DFMP.Runtime
                 {
                     if (!string.IsNullOrEmpty(args[i + 1]))
                         result.AccountId = args[i + 1];
+                }
+                else if (arg == "-dfmp-dungeon-spike" || arg == "--dfmp-dungeon-spike")
+                {
+                    result.RunDungeonGeometrySpike = true;
+                }
+                else if ((arg == "-dfmp-dungeon-spike-count" || arg == "--dfmp-dungeon-spike-count") && i + 1 < args.Length)
+                {
+                    if (int.TryParse(args[i + 1], out int dungeonCount))
+                        result.DungeonGeometrySpikeCount = Mathf.Clamp(dungeonCount, 1, 3);
                 }
             }
 

@@ -24,6 +24,18 @@ namespace DFMP.Tests
             Assert.IsNull(def.Arena2Path);
             Assert.AreEqual(5.0f, def.HeartbeatInterval);
             Assert.IsNull(def.AccountId);
+            Assert.IsFalse(def.RunDungeonGeometrySpike);
+            Assert.AreEqual(1, def.DungeonGeometrySpikeCount);
+        }
+
+        [Test]
+        public void Parse_DungeonGeometrySpikeFlags_ParsesAndClampsCount()
+        {
+            string[] args = new string[] { "-server", "--dfmp-dungeon-spike", "--dfmp-dungeon-spike-count", "99" };
+            var result = ServerCommandLineArgs.Parse(args, false);
+
+            Assert.IsTrue(result.RunDungeonGeometrySpike);
+            Assert.AreEqual(3, result.DungeonGeometrySpikeCount);
         }
 
         [Test]
