@@ -4,6 +4,8 @@ namespace DFMP.Runtime
     {
         public const string QuestTraining = "QuestTraining";
         public const string GuildTraining = "GuildTraining";
+        public const string PrisonSentence = "PrisonSentence";
+        public const string PrisonRelease = "PrisonRelease";
     }
 
     public static class DFMPTimeAdvancePolicy
@@ -14,7 +16,9 @@ namespace DFMP.Runtime
                 return false;
 
             return source == DFMPTimeAdvanceSources.QuestTraining ||
-                   source == DFMPTimeAdvanceSources.GuildTraining;
+                                     source == DFMPTimeAdvanceSources.GuildTraining ||
+                                     source == DFMPTimeAdvanceSources.PrisonSentence ||
+                                     source == DFMPTimeAdvanceSources.PrisonRelease;
         }
     }
 }

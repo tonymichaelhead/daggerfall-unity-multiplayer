@@ -8,7 +8,9 @@ namespace DFMP.Tests
     {
         [TestCase(DFMPTimeAdvanceSources.QuestTraining)]
         [TestCase(DFMPTimeAdvanceSources.GuildTraining)]
-        public void ConnectedClient_ConsumesTrainingTimeAdvance(string source)
+        [TestCase(DFMPTimeAdvanceSources.PrisonSentence)]
+        [TestCase(DFMPTimeAdvanceSources.PrisonRelease)]
+        public void ConnectedClient_ConsumesProtectedTimeAdvance(string source)
         {
             Assert.IsTrue(DFMPTimeAdvancePolicy.ShouldConsumeClientAdvance(true, source, 10800));
         }

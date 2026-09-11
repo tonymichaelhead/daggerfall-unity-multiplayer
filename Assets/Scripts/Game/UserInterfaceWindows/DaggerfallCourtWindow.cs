@@ -472,7 +472,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             {
                 playerEntity.PreventEnemySpawns = true;
                 playerEntity.PreventNormalizingReputations = true;
-                DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(daysInPrison * 1440 * 60);
+                if (DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance == null || !DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance("PrisonSentence", daysInPrison * 1440 * 60))
+                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(daysInPrison * 1440 * 60);
                 RaiseOnEndPrisonTimeEvent();
                 playerEntity.InPrison = false;
                 playerEntity.FillVitalSigns();
@@ -482,7 +483,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public void ReleaseFromPrison()
         {
             playerEntity.PreventEnemySpawns = true;
-            DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(240 * 60);
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance == null || !DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance("PrisonRelease", 240 * 60))
+                DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(240 * 60);
             playerEntity.CrimeCommitted = Entity.PlayerEntity.Crimes.None;
             if (repositionPlayer)
                 PositionPlayerAtLocationEntrance();
