@@ -28,6 +28,7 @@ namespace DFMP.Runtime
         DungeonEntry,
         DungeonExit,
         DeathRespawn,
+        VampirismTransformation,
         Reconnect,
         SaveLoad
     }
@@ -87,6 +88,10 @@ namespace DFMP.Runtime
         public int RegionIndex;
         public int LocationIndex;
         public string LocationId;
+    }
+
+    public struct DFMPVampirismTransformationRequest : Mirror.NetworkMessage
+    {
     }
 
     public enum DFMPDoorTransitionRejectionReason
