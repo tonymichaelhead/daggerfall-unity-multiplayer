@@ -24,5 +24,11 @@ namespace DFMP.Tests
         {
             Assert.IsFalse(DFMPTimeAdvancePolicy.ShouldConsumeClientAdvance(connected, source, seconds));
         }
+
+        [Test]
+        public void VampirismTransformation_IsNotConsumedAsGenericTimeAdvance()
+        {
+            Assert.IsFalse(DFMPTimeAdvancePolicy.ShouldConsumeClientAdvance(true, "VampirismTransformation", 1209600));
+        }
     }
 }
