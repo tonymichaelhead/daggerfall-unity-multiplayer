@@ -37,6 +37,10 @@ namespace DFMP.Runtime
         static readonly DFMPWorldOccupancyRegistry worldOccupancy = new DFMPWorldOccupancyRegistry();
         static readonly Dictionary<int, string> startMarkerAssignments = new Dictionary<int, string>();
         static readonly Dictionary<int, DFMPTransitionAssignmentState> transitionAssignmentStates = new Dictionary<int, DFMPTransitionAssignmentState>();
+        static readonly Dictionary<int, DFMPVitalState> vitalStates = new Dictionary<int, DFMPVitalState>();
+        static readonly HashSet<int> initializedIdentityReportConnections = new HashSet<int>();
+        static readonly Dictionary<int, uint> lastDamageSequences = new Dictionary<int, uint>();
+        static readonly Dictionary<int, ulong> lastDamageRequestIds = new Dictionary<int, ulong>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly Dictionary<int, float> lastActionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
@@ -162,6 +166,40 @@ namespace DFMP.Runtime
                 SaveCharacterRecord(entry.Key, entry.Value);
         }
 
+        static DFMPVitalState CreateVitalState(DFMPCharacterRecord record)
+        {
+            return new DFMPVitalState
+            {
+                Health = record.Health,
+                MaxHealth = record.MaxHealth,
+                Fatigue = record.Fatigue,
+                MaxFatigue = record.MaxFatigue,
+                SpellPoints = record.SpellPoints,
+                MaxSpellPoints = record.MaxSpellPoints
+            };
+        }
+
+        static DFMPVitalSnapshot CreateVitalSnapshot(DFMPVitalState vitalState, int connectionId, bool isDead)
+        {
+            return new DFMPVitalSnapshot
+            {
+                ConnectionId = connectionId,
+                Health = vitalState.Health,
+                MaxHealth = vitalState.MaxHealth,
+                Fatigue = vitalState.Fatigue,
+                MaxFatigue = vitalState.MaxFatigue,
+                SpellPoints = vitalState.SpellPoints,
+                MaxSpellPoints = vitalState.MaxSpellPoints,
+                IsDead = isDead || vitalState.Health <= 0
+            };
+        }
+
+        static void SendVitalSnapshot(NetworkConnectionToClient conn, DFMPVitalState vitalState, bool isDead)
+        {
+            if (conn != null)
+                conn.Send(CreateVitalSnapshot(vitalState, conn.connectionId, isDead));
+        }
+
         static bool TryFinalizePendingDeathRespawnOnDisconnect(int connectionId, DFMPPlayerSessionState sessionState)
         {
             if (sessionState == null || !sessionState.IsDead)
@@ -192,6 +230,7 @@ namespace DFMP.Runtime
                 joinDecision.CharacterRecord.Health = joinDecision.CharacterRecord.MaxHealth;
                 joinDecision.CharacterRecord.Fatigue = joinDecision.CharacterRecord.MaxFatigue;
                 joinDecision.CharacterRecord.SpellPoints = joinDecision.CharacterRecord.MaxSpellPoints;
+                vitalStates[connectionId] = CreateVitalState(joinDecision.CharacterRecord);
             }
 
             Debug.Log($"[DFMP Respawn] Finalized pending death respawn on disconnect: connectionId={connectionId}, anchor={context.LocationId ?? string.Empty}, world={position.WorldX}/{position.WorldZ}.");
@@ -259,6 +298,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPPlayerDeathReport>(OnPlayerDeathReport);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
+            NetworkServer.RegisterHandler<DFMPDamageIntent>(OnDamageIntent);
             NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
             NetworkServer.RegisterHandler<DFMPRestRequest>(OnRestRequest);
             NetworkServer.RegisterHandler<DFMPWorldContextReport>(OnWorldContextReport);
@@ -345,7 +385,11 @@ namespace DFMP.Runtime
             });
 
             if (decision.Accepted && decision.Kind == DFMPJoinDecisionKind.ReturningPlayer && decision.CharacterRecord != null)
+            {
                 conn.Send(DFMPCharacterSnapshotProtocol.FromRecord(decision.CharacterRecord));
+                SendVitalSnapshot(conn, CreateVitalState(decision.CharacterRecord), false);
+                initializedIdentityReportConnections.Add(conn.connectionId);
+            }
 
             if (!decision.Accepted)
             {
@@ -409,6 +453,8 @@ namespace DFMP.Runtime
             }
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
+            if (savedJoinDecision != null && savedJoinDecision.CharacterRecord != null)
+                vitalStates[conn.connectionId] = CreateVitalState(savedJoinDecision.CharacterRecord);
             SetSessionWorldContext(conn.connectionId, sessionState, initialContext, "initial-spawn");
             if (!string.IsNullOrWhiteSpace(startMarkerName))
                 startMarkerAssignments[conn.connectionId] = startMarkerName;
@@ -433,6 +479,9 @@ namespace DFMP.Runtime
 
             NetworkServer.Spawn(sessionGo, DFMPPlayerSessionState.AssetId);
             playerSessionStates.Add(conn.connectionId, sessionState);
+            DFMPVitalState initialVitals;
+            if (vitalStates.TryGetValue(conn.connectionId, out initialVitals))
+                conn.Send(CreateVitalSnapshot(initialVitals, conn.connectionId, sessionState.IsDead));
             DFMPEventBus.Instance.PublishPlayerConnected(new DFMPPlayerConnectedEvent
             {
                 ConnectionId = conn.connectionId,
@@ -766,6 +815,8 @@ namespace DFMP.Runtime
                     deathJoinDecision.CharacterRecord.Health = deathJoinDecision.CharacterRecord.MaxHealth;
                     deathJoinDecision.CharacterRecord.Fatigue = deathJoinDecision.CharacterRecord.MaxFatigue;
                     deathJoinDecision.CharacterRecord.SpellPoints = deathJoinDecision.CharacterRecord.MaxSpellPoints;
+                    vitalStates[conn.connectionId] = CreateVitalState(deathJoinDecision.CharacterRecord);
+                    SendVitalSnapshot(conn, vitalStates[conn.connectionId], false);
                     CharacterStore.Save(deathJoinDecision.CharacterRecord);
                 }
             }
@@ -1035,6 +1086,101 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Session] Server accepted player position reports: connectionId={conn.connectionId}.");
         }
 
+        private static void OnDamageIntent(NetworkConnectionToClient conn, DFMPDamageIntent intent)
+        {
+            if (conn == null || !DFMPCombatProtocol.IsValidDamageIntent(intent))
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected malformed damage intent: connectionId={(conn != null ? conn.connectionId : -1)}.");
+                return;
+            }
+
+            DFMPPlayerSessionState sourceSession;
+            DFMPPlayerSessionState targetSession;
+            DFMPVitalState targetVitals;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sourceSession) || sourceSession == null ||
+                !playerSessionStates.TryGetValue(intent.TargetConnectionId, out targetSession) || targetSession == null ||
+                !vitalStates.TryGetValue(intent.TargetConnectionId, out targetVitals))
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, reason=missing-session.");
+                return;
+            }
+
+            uint lastSequence;
+            if (!lastDamageSequences.TryGetValue(conn.connectionId, out lastSequence))
+                lastSequence = 0;
+
+            ulong lastRequestId;
+            if (lastDamageRequestIds.TryGetValue(conn.connectionId, out lastRequestId) && lastRequestId == intent.RequestId)
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, requestId={intent.RequestId}, reason=duplicate-request.");
+                return;
+            }
+
+            DFMPWorldContextKey sourceContext;
+            DFMPWorldContextKey targetContext;
+            bool hasSourceContext = worldOccupancy.TryGetContext(conn.connectionId, out sourceContext);
+            bool hasTargetContext = worldOccupancy.TryGetContext(intent.TargetConnectionId, out targetContext);
+            DFMPTransitionAssignmentState assignmentState;
+            bool hasPendingTransition = transitionAssignmentStates.TryGetValue(intent.TargetConnectionId, out assignmentState) &&
+                assignmentState != null && assignmentState.HasPendingAssignment;
+            DFMPDamageValidationRequest validationRequest = new DFMPDamageValidationRequest
+            {
+                RequestId = intent.RequestId,
+                Sequence = intent.Sequence,
+                SourceKind = intent.SourceKind,
+                VitalKind = intent.VitalKind,
+                SourceConnectionId = conn.connectionId,
+                TargetConnectionId = intent.TargetConnectionId,
+                Amount = intent.Amount
+            };
+            DFMPDamageValidationContext validationContext = new DFMPDamageValidationContext
+            {
+                HasSession = sourceSession != null,
+                SpawnConfirmed = sourceSession.SpawnConfirmed,
+                TargetExists = targetSession != null,
+                TargetIsDead = targetSession.IsDead || targetVitals.Health <= 0,
+                HasPendingTransition = hasPendingTransition,
+                SameWorldContext = hasSourceContext && hasTargetContext && sourceContext.Equals(targetContext),
+                InRange = true,
+                PvpEnabled = Config != null && Config.Combat != null && Config.Combat.PvpEnabled,
+                CooldownElapsed = true,
+                AuthoritativeSourceConnectionId = conn.connectionId,
+                LastAcceptedSequence = lastSequence,
+                MaximumAmount = Config != null && Config.Combat != null ? Config.Combat.MaximumDamagePerHit : 100
+            };
+
+            DFMPDamageRejectionReason rejectionReason = DFMPDamagePolicy.GetRejectionReason(validationRequest, validationContext);
+            if (!DFMPDamagePolicy.IsAccepted(rejectionReason))
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, requestId={intent.RequestId}, reason={rejectionReason}.");
+                return;
+            }
+
+            DFMPVitalApplicationResult applicationResult = targetVitals.ApplyDamage(intent.VitalKind, intent.Amount);
+            if (!applicationResult.Accepted)
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected damage application: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, reason={applicationResult.RejectionReason}.");
+                return;
+            }
+
+            vitalStates[intent.TargetConnectionId] = targetVitals;
+            lastDamageSequences[conn.connectionId] = intent.Sequence;
+            lastDamageRequestIds[conn.connectionId] = intent.RequestId;
+
+            DFMPJoinDecision joinDecision;
+            if (joinDecisions.TryGetValue(intent.TargetConnectionId, out joinDecision) && joinDecision.CharacterRecord != null)
+            {
+                DFMPCharacterPersistence.ApplyVitalState(joinDecision.CharacterRecord, targetVitals);
+                CharacterStore.Save(joinDecision.CharacterRecord);
+            }
+
+            NetworkConnectionToClient targetConnection;
+            if (NetworkServer.connections.TryGetValue(intent.TargetConnectionId, out targetConnection))
+                SendVitalSnapshot(targetConnection, targetVitals, targetSession.IsDead);
+
+            Debug.Log($"[DFMP Combat] Applied damage: source={conn.connectionId}, target={intent.TargetConnectionId}, vital={intent.VitalKind}, requested={intent.Amount}, applied={applicationResult.AppliedAmount}, current={applicationResult.CurrentValue}, killed={applicationResult.Killed}.");
+        }
+
         private static void OnPlayerIdentityReport(NetworkConnectionToClient conn, DFMPPlayerIdentityReport report)
         {
             DFMPPlayerSessionState sessionState;
@@ -1053,13 +1199,19 @@ namespace DFMP.Runtime
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) &&
                 joinDecision.Kind != DFMPJoinDecisionKind.Rejected && joinDecision.CharacterRecord != null)
             {
-                DFMPCharacterPersistence.ApplyIdentityReport(joinDecision.CharacterRecord, report);
+                bool acceptReportedVitals = joinDecision.Kind == DFMPJoinDecisionKind.FirstJoin &&
+                    initializedIdentityReportConnections.Add(conn.connectionId);
+                DFMPCharacterPersistence.ApplyIdentityReport(joinDecision.CharacterRecord, report, acceptReportedVitals);
+                if (acceptReportedVitals)
+                    vitalStates[conn.connectionId] = CreateVitalState(joinDecision.CharacterRecord);
                 DFMPWorldContextKey context;
                 if (worldOccupancy.TryGetContext(conn.connectionId, out context))
                     DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState, context);
                 else
                     DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
                 CharacterStore.Save(joinDecision.CharacterRecord);
+                if (acceptReportedVitals)
+                    SendVitalSnapshot(conn, vitalStates[conn.connectionId], sessionState.IsDead);
             }
         }
 
@@ -1354,6 +1506,10 @@ namespace DFMP.Runtime
             worldOccupancy.Remove(conn.connectionId);
             startMarkerAssignments.Remove(conn.connectionId);
             transitionAssignmentStates.Remove(conn.connectionId);
+            vitalStates.Remove(conn.connectionId);
+            initializedIdentityReportConnections.Remove(conn.connectionId);
+            lastDamageSequences.Remove(conn.connectionId);
+            lastDamageRequestIds.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             lastActionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
@@ -1386,6 +1542,10 @@ namespace DFMP.Runtime
             worldOccupancy.Clear();
             startMarkerAssignments.Clear();
             transitionAssignmentStates.Clear();
+            vitalStates.Clear();
+            initializedIdentityReportConnections.Clear();
+            lastDamageSequences.Clear();
+            lastDamageRequestIds.Clear();
             lastPositionReportTimes.Clear();
             lastActionReportTimes.Clear();
             activePositionReportConnections.Clear();

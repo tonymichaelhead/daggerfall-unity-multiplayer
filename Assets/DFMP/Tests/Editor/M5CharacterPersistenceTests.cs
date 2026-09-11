@@ -641,6 +641,64 @@ namespace DFMP.Tests
             }
 
             [Test]
+            public void CharacterPersistence_IdentityReportCanPreserveServerVitals()
+            {
+                var record = DFMPCharacterRecord.CreateNew("steam:vitals", "world-m7", "Player");
+                record.Health = 18;
+                record.MaxHealth = 20;
+                record.SpellPoints = 7;
+                record.MaxSpellPoints = 12;
+                record.Fatigue = 65;
+                record.MaxFatigue = 100;
+
+                var report = new DFMPPlayerIdentityReport
+                {
+                    DisplayName = "Updated Hero",
+                    Level = 3,
+                    Health = 1,
+                    MaxHealth = 1,
+                    SpellPoints = 0,
+                    MaxSpellPoints = 1,
+                    Fatigue = 0,
+                    MaxFatigue = 1,
+                    Attributes = new int[8],
+                    Skills = new int[35]
+                };
+
+                DFMPCharacterPersistence.ApplyIdentityReport(record, report, false);
+
+                Assert.AreEqual("Updated Hero", record.CharacterName);
+                Assert.AreEqual(18, record.Health);
+                Assert.AreEqual(20, record.MaxHealth);
+                Assert.AreEqual(7, record.SpellPoints);
+                Assert.AreEqual(12, record.MaxSpellPoints);
+                Assert.AreEqual(65, record.Fatigue);
+                Assert.AreEqual(100, record.MaxFatigue);
+            }
+
+            [Test]
+            public void CharacterPersistence_AppliesServerVitalStateWithBounds()
+            {
+                var record = DFMPCharacterRecord.CreateNew("steam:vitals", "world-m7", "Player");
+                DFMPCharacterPersistence.ApplyVitalState(record, new DFMPVitalState
+                {
+                    Health = 25,
+                    MaxHealth = 20,
+                    SpellPoints = -1,
+                    MaxSpellPoints = 12,
+                    Fatigue = 55,
+                    MaxFatigue = 100
+                });
+
+                Assert.AreEqual(20, record.Health);
+                Assert.AreEqual(20, record.MaxHealth);
+                Assert.AreEqual(0, record.SpellPoints);
+                Assert.AreEqual(12, record.MaxSpellPoints);
+                Assert.AreEqual(55, record.Fatigue);
+                Assert.AreEqual(100, record.MaxFatigue);
+            }
+
+            [Test]
             public void ClientJoinFlow_IdentifiesMultiplayerIntroQuests()
             {
                 Assert.IsTrue(DFMPClientJoinFlowController.IsMultiplayerIntroQuest("_TUTOR__"));

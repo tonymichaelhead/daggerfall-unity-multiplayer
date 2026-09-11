@@ -67,6 +67,11 @@ namespace DFMP.Runtime
 
         public static void ApplyIdentityReport(DFMPCharacterRecord record, DFMPPlayerIdentityReport report)
         {
+            ApplyIdentityReport(record, report, true);
+        }
+
+        public static void ApplyIdentityReport(DFMPCharacterRecord record, DFMPPlayerIdentityReport report, bool acceptReportedVitals)
+        {
             if (record == null || report.Attributes == null || report.Skills == null || report.Attributes.Length != 8 || report.Skills.Length != 35)
                 return;
 
@@ -76,12 +81,15 @@ namespace DFMP.Runtime
             record.OutfitVariant = DFMPPositionProtocol.GetOutfitVariant(report.OutfitVariant);
             record.FaceVariant = Mathf.Clamp(report.FaceVariant, 0, 9);
             record.Level = Mathf.Max(1, report.Level);
-            record.MaxHealth = Mathf.Max(1, report.MaxHealth);
-            record.Health = Mathf.Clamp(report.Health, 0, record.MaxHealth);
-            record.MaxSpellPoints = Mathf.Max(0, report.MaxSpellPoints);
-            record.SpellPoints = Mathf.Clamp(report.SpellPoints, 0, record.MaxSpellPoints);
-            record.MaxFatigue = Mathf.Max(1, report.MaxFatigue);
-            record.Fatigue = Mathf.Clamp(report.Fatigue, 0, record.MaxFatigue);
+            if (acceptReportedVitals)
+            {
+                record.MaxHealth = Mathf.Max(1, report.MaxHealth);
+                record.Health = Mathf.Clamp(report.Health, 0, record.MaxHealth);
+                record.MaxSpellPoints = Mathf.Max(0, report.MaxSpellPoints);
+                record.SpellPoints = Mathf.Clamp(report.SpellPoints, 0, record.MaxSpellPoints);
+                record.MaxFatigue = Mathf.Max(1, report.MaxFatigue);
+                record.Fatigue = Mathf.Clamp(report.Fatigue, 0, record.MaxFatigue);
+            }
             record.Gold = Mathf.Max(0, report.Gold);
             record.StartingLevelUpSkillSum = Mathf.Max(0, report.StartingLevelUpSkillSum);
 
@@ -108,6 +116,19 @@ namespace DFMP.Runtime
                     record.Equipment = equipment;
                 }
             }
+        }
+
+        public static void ApplyVitalState(DFMPCharacterRecord record, DFMPVitalState vitalState)
+        {
+            if (record == null)
+                return;
+
+            record.Health = Mathf.Clamp(vitalState.Health, 0, Mathf.Max(1, vitalState.MaxHealth));
+            record.MaxHealth = Mathf.Max(1, vitalState.MaxHealth);
+            record.SpellPoints = Mathf.Clamp(vitalState.SpellPoints, 0, Mathf.Max(0, vitalState.MaxSpellPoints));
+            record.MaxSpellPoints = Mathf.Max(0, vitalState.MaxSpellPoints);
+            record.Fatigue = Mathf.Clamp(vitalState.Fatigue, 0, Mathf.Max(1, vitalState.MaxFatigue));
+            record.MaxFatigue = Mathf.Max(1, vitalState.MaxFatigue);
         }
 
         public static void ApplySessionState(DFMPCharacterRecord record, DFMPPlayerSessionState sessionState)
