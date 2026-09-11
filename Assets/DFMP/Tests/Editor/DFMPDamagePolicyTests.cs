@@ -23,9 +23,9 @@ namespace DFMP.Tests
             };
         }
 
-        static DFMPDamageIntent LocalQuestIntent()
+        static DFMPDamageValidationRequest LocalQuestIntent()
         {
-            return new DFMPDamageIntent
+            return new DFMPDamageValidationRequest
             {
                 RequestId = 1,
                 Sequence = 11,
@@ -48,7 +48,7 @@ namespace DFMP.Tests
         [Test]
         public void LocalQuestPve_RejectsAnotherPlayerTarget()
         {
-            DFMPDamageIntent intent = LocalQuestIntent();
+            DFMPDamageValidationRequest intent = LocalQuestIntent();
             intent.TargetConnectionId = 8;
 
             Assert.AreEqual(
@@ -59,7 +59,7 @@ namespace DFMP.Tests
         [Test]
         public void ForgedSourceConnection_IsRejected()
         {
-            DFMPDamageIntent intent = LocalQuestIntent();
+            DFMPDamageValidationRequest intent = LocalQuestIntent();
             intent.SourceConnectionId = 8;
 
             Assert.AreEqual(
@@ -70,7 +70,7 @@ namespace DFMP.Tests
         [Test]
         public void InvalidRequestId_IsRejected()
         {
-            DFMPDamageIntent intent = LocalQuestIntent();
+            DFMPDamageValidationRequest intent = LocalQuestIntent();
             intent.RequestId = 0;
 
             Assert.AreEqual(DFMPDamageRejectionReason.InvalidRequestId, DFMPDamagePolicy.GetRejectionReason(intent, ReadyContext()));
@@ -81,7 +81,7 @@ namespace DFMP.Tests
         [TestCase(101)]
         public void InvalidAmount_IsRejected(int amount)
         {
-            DFMPDamageIntent intent = LocalQuestIntent();
+            DFMPDamageValidationRequest intent = LocalQuestIntent();
             intent.Amount = amount;
 
             Assert.AreEqual(DFMPDamageRejectionReason.InvalidAmount, DFMPDamagePolicy.GetRejectionReason(intent, ReadyContext()));
@@ -90,7 +90,7 @@ namespace DFMP.Tests
         [Test]
         public void DuplicateOrRateLimitedRequest_IsRejected()
         {
-            DFMPDamageIntent intent = LocalQuestIntent();
+            DFMPDamageValidationRequest intent = LocalQuestIntent();
             DFMPDamageValidationContext context = ReadyContext();
             context.LastAcceptedSequence = intent.Sequence;
             Assert.AreEqual(DFMPDamageRejectionReason.DuplicateRequest, DFMPDamagePolicy.GetRejectionReason(intent, context));
@@ -115,7 +115,7 @@ namespace DFMP.Tests
         [Test]
         public void PlayerDamage_RequiresEnabledPvpAndValidRelationship()
         {
-            DFMPDamageIntent intent = LocalQuestIntent();
+            DFMPDamageValidationRequest intent = LocalQuestIntent();
             intent.SourceKind = DFMPDamageSourceKind.Player;
             intent.TargetConnectionId = 8;
             DFMPDamageValidationContext context = ReadyContext();

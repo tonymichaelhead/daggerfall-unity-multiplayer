@@ -41,7 +41,7 @@ namespace DFMP.Runtime
         OutOfRange
     }
 
-    public struct DFMPDamageIntent
+    public struct DFMPDamageValidationRequest
     {
         public ulong RequestId;
         public uint Sequence;
@@ -175,7 +175,7 @@ namespace DFMP.Runtime
     public static class DFMPDamagePolicy
     {
         public static DFMPDamageRejectionReason GetRejectionReason(
-            DFMPDamageIntent intent,
+            DFMPDamageValidationRequest intent,
             DFMPDamageValidationContext context)
         {
             if (!context.HasSession)

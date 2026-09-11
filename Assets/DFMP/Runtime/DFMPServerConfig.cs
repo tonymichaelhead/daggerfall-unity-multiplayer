@@ -30,6 +30,24 @@ namespace DFMP.Runtime
         public bool CommandsEnabled;
     }
 
+    [Serializable]
+    public class DFMPServerCombatConfig
+    {
+        public bool PvpEnabled;
+        public int MaximumDamagePerHit = 100;
+        public float DamageCooldownSeconds = 0.1f;
+        public float DamageRateWindowSeconds = 1.0f;
+        public int MaximumDamageRequestsPerWindow = 10;
+
+        public void Normalize()
+        {
+            MaximumDamagePerHit = MaximumDamagePerHit > 0 && MaximumDamagePerHit <= 10000 ? MaximumDamagePerHit : 100;
+            DamageCooldownSeconds = DamageCooldownSeconds > 0f && DamageCooldownSeconds <= 60f ? DamageCooldownSeconds : 0.1f;
+            DamageRateWindowSeconds = DamageRateWindowSeconds > 0f && DamageRateWindowSeconds <= 300f ? DamageRateWindowSeconds : 1.0f;
+            MaximumDamageRequestsPerWindow = MaximumDamageRequestsPerWindow > 0 && MaximumDamageRequestsPerWindow <= 1000 ? MaximumDamageRequestsPerWindow : 10;
+        }
+    }
+
     public static class DFMPRestPolicies
     {
         public const string Disabled = "Disabled";
@@ -107,6 +125,7 @@ namespace DFMP.Runtime
         public DFMPServerIdentityConfig Identity = new DFMPServerIdentityConfig();
         public DFMPServerGameplayConfig Gameplay = new DFMPServerGameplayConfig();
         public DFMPServerDeveloperConfig Developer = new DFMPServerDeveloperConfig();
+        public DFMPServerCombatConfig Combat = new DFMPServerCombatConfig();
         public DFMPServerRestConfig Rest = new DFMPServerRestConfig();
         public DFMPServerStartingLocationConfig StartingLocation = new DFMPServerStartingLocationConfig();
 
@@ -140,6 +159,11 @@ namespace DFMP.Runtime
                 Gameplay = new DFMPServerGameplayConfig();
             if (Developer == null)
                 Developer = new DFMPServerDeveloperConfig();
+
+            if (Combat == null)
+                Combat = new DFMPServerCombatConfig();
+
+            Combat.Normalize();
 
             if (Rest == null)
                 Rest = new DFMPServerRestConfig();
