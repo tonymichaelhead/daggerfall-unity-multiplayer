@@ -33,6 +33,8 @@ The command starts infection; it does not immediately transform the character. A
 
 Expected log evidence includes `[DFMP Developer] Authorized vampirism infection`, `[DFMP Time] Server advanced time`, and `[DFMP Transition] Accepted vampirism transformation request`.
 
+This command and the transformation transition are intended for live-session testing. Active vampirism persistence across disconnect, reconnect, server restart, and character restore is deferred to Phase 2. Lycanthropy is completely deferred to Phase 2 and has no supported DFMP developer command or multiplayer transformation path in M6.
+
 ## `dfmp_advance_time`
 
 Run this in the connected DFMP client's DFU console:

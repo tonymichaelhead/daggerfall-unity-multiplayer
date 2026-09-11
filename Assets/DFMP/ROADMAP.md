@@ -246,7 +246,9 @@ Everything the server needs to know where players are before it can own entities
   - Configurable server time scale, expressed as a multiplier where `1.0` is real time and `12.0` matches DFU's default. Owners choosing slow time get long, grounded days; owners choosing fast time get vanilla pacing.
   - Fast travel becomes a server-issued instant teleport with no time cost. Clients never self-relocate.
   - Loiter, rest-until-healed, and wait-until-dawn paths are removed as time-advance mechanisms.
-  - Audit vampirism, lycanthropy, and guild-rank timers for hidden dependencies on player-driven time advancement.
+  - Vampirism transformation is implemented as a server-owned live-session transition: the server advances time, selects the cemetery, and the client applies transformed state after relocation.
+  - Vampirism persistence across reconnect, restart, and character restore is explicitly deferred to Phase 2.
+  - Lycanthropy transformation and its hidden timers are explicitly deferred to Phase 2; M6 does not intercept, synchronize, or partially implement lycanthropy.
 - **Rest and healing replacement**, since rest no longer advances the clock:
   - **MVP policy:** rest, rest-until-healed, and loiter are disabled by default. Clients never advance server time through these actions.
   - The server configuration preserves a `ServerManaged` policy for a future milestone; it is not part of the MVP gameplay loop yet.
@@ -256,6 +258,7 @@ Verification:
 
 - EditMode tests for coordinate and context conversion, occupancy transitions, observer selection, time-scale math, and rest recovery rates.
 - Headless and graphical transition smoke tests covering doors, dungeon entry, fast travel, death, and reconnect.
+- Vampirism transformation smoke evidence covers server-owned time advancement, cemetery relocation, client effect application, and transition acknowledgement. Vampirism persistence is not an M6 acceptance criterion.
 
 ### Post-MVP: Server-Managed Rest and Recovery
 
@@ -358,6 +361,12 @@ Phase 2 turns a server the author can run into a product other people can run. N
 
 Phase 2 does not begin until Phase 1 has been running a live beta long enough to know which knobs owners will actually want. Guessing the configuration and scripting surface before the beta produces the wrong surface.
 
+Phase 2 carries the deferred disease-state work that M6 deliberately leaves outside its acceptance boundary:
+
+- Persist active vampirism state across reconnect, restart, and character restore, including vampire clan, transformed state, vampire spells, satiation, and related effect data.
+- Design and implement the complete lycanthropy lifecycle, including infection, timers, transformation, transformed state, relocation if required, cure behavior, and persistence.
+- Add focused lifecycle and persistence tests before exposing disease controls to public server owners or GM tooling.
+
 ### R1: Full Server Configuration Surface
 
 Status: Planned.
@@ -441,6 +450,7 @@ The work that separates "the author babysits it" from "a stranger runs it on a r
 
 - Scheduled character and world state backups with retention, plus a documented restore path.
 - Crash and restart recovery: clean shutdown persistence, and recovery of in-flight state after an unclean stop.
+- Complete disease-state persistence for active vampirism and the later lycanthropy lifecycle before public release. Live-session vampirism transition behavior remains the M6 baseline; reconnect and restart restoration are Phase 2 work.
 - Structured server logging with levels and rotation, so log files do not grow without bound.
 - Operational metrics: player count, tick time, bandwidth, replication volume, and rejection counts, exposed for basic monitoring.
 - Server-side rate limiting and abuse protection on every client-submitted message type.
