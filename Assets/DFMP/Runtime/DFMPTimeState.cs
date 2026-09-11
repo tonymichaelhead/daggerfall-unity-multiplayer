@@ -34,6 +34,22 @@ namespace DFMP.Runtime
             get { return timeScale; }
         }
 
+        public bool TryAdvanceServerTime(uint targetClassicMinutes)
+        {
+            if (!NetworkServer.active)
+                return false;
+
+            var worldTime = GetWorldTime();
+            if (worldTime == null || targetClassicMinutes < worldTime.DaggerfallDateTime.ToClassicDaggerfallTime())
+                return false;
+
+            worldTime.DaggerfallDateTime.FromClassicDaggerfallTime(targetClassicMinutes);
+            classicMinutes = targetClassicMinutes;
+            timeScale = worldTime.TimeScale;
+            Debug.Log($"[DFMP Time] Server advanced time: classicMinutes={targetClassicMinutes}, timeScale={timeScale:F2}.");
+            return true;
+        }
+
         public override void OnStartServer()
         {
             base.OnStartServer();

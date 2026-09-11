@@ -2,6 +2,7 @@ using DaggerfallConnect;
 using DaggerfallConnect.Arena2;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Utility;
 using kcp2k;
 using Mirror;
 using System.Collections;
@@ -563,6 +564,24 @@ namespace DFMP.Runtime
             DFMPVampirismCemeteryCandidate candidate;
             if (!DFMPSpawnProtocol.TryResolveRandomCemetery(currentContext.RegionIndex, out candidate, out rejectionReason))
                 return false;
+
+            if (TimeState == null || DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.WorldTime == null)
+            {
+                rejectionReason = DFMPVampirismTransformationRejectionReason.TimeUnavailable;
+                return false;
+            }
+
+            uint targetClassicMinutes;
+            if (!DFMPVampirismTimePolicy.TryGetTargetClassicMinutes(
+                DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.ToClassicDaggerfallTime(),
+                DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.Hour,
+                DaggerfallDateTime.DuskHour,
+                out targetClassicMinutes) ||
+                !TimeState.TryAdvanceServerTime(targetClassicMinutes))
+            {
+                rejectionReason = DFMPVampirismTransformationRejectionReason.TimeUnavailable;
+                return false;
+            }
 
             return TrySendTransitionAssignment(
                 conn,

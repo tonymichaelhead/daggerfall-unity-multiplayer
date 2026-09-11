@@ -17,7 +17,8 @@ namespace DFMP.Runtime
         TransitionAlreadyPending,
         MissingWorldContext,
         InvalidRegion,
-        CemeteryUnavailable
+        CemeteryUnavailable,
+        TimeUnavailable
     }
 
     public enum DFMPVampirismTransformationAction
