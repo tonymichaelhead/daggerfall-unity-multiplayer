@@ -27,7 +27,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M3 | Players see each other move as named, grounded avatars in the shared exterior world. | Done |
 | M4 | Global text chat, baseline server configuration, and a server-side event bus. | Done |
 | M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Done |
-| M6 | World context, location occupancy, interest management, and safe transitions. | Planned |
+| M6 | World context, location occupancy, interest management, and safe transitions. | Done |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Planned |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Planned |
 | M8 | Server-owned dungeon enemies with rosters, replication, AI, and kill credit. | Planned |
@@ -232,7 +232,7 @@ Verification:
 
 ### M6: World Context, Occupancy, and Interest Management
 
-Status: Planned.
+Status: Complete.
 
 Everything the server needs to know where players are before it can own entities near them.
 
@@ -254,10 +254,19 @@ Everything the server needs to know where players are before it can own entities
   - The server configuration preserves a `ServerManaged` policy for a future milestone; it is not part of the MVP gameplay loop yet.
   - Renting an inn room, and temple or guild paid restoration services, remain separate restoration paths and do not advance global time.
 
+  M6 closeout notes:
+
+  - Exterior, building-interior, and dungeon contexts are persisted per character and tracked in server occupancy.
+  - Door entry and exit, dungeon entry and exit, fast travel, save load, reconnect, vampirism transformation, and death respawn use server-issued transition assignments with validated acknowledgements.
+  - Saved tavern anchors are recorded on confirmed inn entry. A saved interior anchor currently falls back to the configured exterior starting location during death respawn because the generic transition controller does not yet reopen saved interiors through a door assignment. No invalid interior teleport is attempted.
+  - Death handling is server-owned and no-wipe: duplicate or pending reports are rejected, pre-spawn deaths are not intercepted on the client, stale acknowledgements are rejected, and a pending death respawn is finalized before disconnect cleanup.
+  - Vampirism is a live-session transformation only. Persistence across reconnect, restart, and character restore remains explicitly deferred to Phase 2. Lycanthropy remains fully deferred.
+
 Verification:
 
 - EditMode tests for coordinate and context conversion, occupancy transitions, observer selection, time-scale math, and rest recovery rates.
-- Headless and graphical transition smoke tests covering doors, dungeon entry, fast travel, death, and reconnect.
+- Focused EditMode coverage includes spawn and transition acknowledgement validation, respawn-anchor selection, character persistence, join/reconnect resolution, and death-respawn lifecycle policy.
+- Graphical transition smoke tests covered doors, dungeon entry and exit, fast travel, reconnect, death respawn, repeated death, and disconnect during a pending death respawn. Expected evidence includes accepted `DeathRespawn` assignments, validated acknowledgements, restored vitals, and `Finalized pending death respawn on disconnect` before disconnect cleanup.
 - Vampirism transformation smoke evidence covers server-owned time advancement, cemetery relocation, client effect application, and transition acknowledgement. Vampirism persistence is not an M6 acceptance criterion.
 
 ### Post-MVP: Server-Managed Rest and Recovery
