@@ -21,6 +21,11 @@ namespace DFMP.Runtime
 
     public static class DFMPDeathRespawnPolicy
     {
+        public static bool ShouldInterceptClientDeath(bool isConnected, bool isReady, bool hasPendingSpawnAssignment, bool hasPendingTransition)
+        {
+            return isConnected && isReady && !hasPendingSpawnAssignment && !hasPendingTransition;
+        }
+
         public static DFMPDeathRespawnRejectionReason GetRejectionReason(DFMPDeathRespawnContext context)
         {
             if (!context.HasSession)

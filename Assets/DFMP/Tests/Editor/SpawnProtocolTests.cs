@@ -7,6 +7,29 @@ namespace DFMP.Tests
     [TestFixture]
     public class SpawnProtocolTests
     {
+        [TestCase(false, true, false, false)]
+        [TestCase(true, false, false, false)]
+        [TestCase(true, true, true, false)]
+        [TestCase(true, true, false, true)]
+        public void ClientDeathInterception_RejectsUnsafeLifecycleState(
+            bool isConnected,
+            bool isReady,
+            bool hasPendingSpawnAssignment,
+            bool hasPendingTransition)
+        {
+            Assert.IsFalse(DFMPDeathRespawnPolicy.ShouldInterceptClientDeath(
+                isConnected,
+                isReady,
+                hasPendingSpawnAssignment,
+                hasPendingTransition));
+        }
+
+        [Test]
+        public void ClientDeathInterception_AcceptsReadySpawnedSession()
+        {
+            Assert.IsTrue(DFMPDeathRespawnPolicy.ShouldInterceptClientDeath(true, true, false, false));
+        }
+
         [Test]
         public void DeadSpawnedSession_WithRespawnPosition_AcceptsDeathRespawnAssignment()
         {

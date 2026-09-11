@@ -94,10 +94,12 @@ namespace DFMP.Runtime
 
         static bool TryHandlePlayerDeath()
         {
-            if (!NetworkClient.isConnected || !NetworkClient.ready)
+            if (!DFMPDeathRespawnPolicy.ShouldInterceptClientDeath(
+                NetworkClient.isConnected,
+                NetworkClient.ready,
+                instance != null && instance.assignmentState.HasPendingAssignment,
+                instance != null && instance.transitionState.HasPendingAssignment))
                 return false;
-            if (instance != null && instance.transitionState.HasPendingAssignment)
-                return true;
 
             DFMPNetworkClient.ReportPlayerDeath();
             Debug.Log("[DFMP Respawn] Blocked local death-to-title flow and requested server respawn assignment.");

@@ -162,6 +162,42 @@ namespace DFMP.Runtime
                 SaveCharacterRecord(entry.Key, entry.Value);
         }
 
+        static bool TryFinalizePendingDeathRespawnOnDisconnect(int connectionId, DFMPPlayerSessionState sessionState)
+        {
+            if (sessionState == null || !sessionState.IsDead)
+                return false;
+
+            DFMPTransitionAssignmentState assignmentState;
+            if (!transitionAssignmentStates.TryGetValue(connectionId, out assignmentState) || assignmentState == null ||
+                !assignmentState.HasPendingAssignment || assignmentState.Assignment.Kind != DFMPTransitionKind.DeathRespawn)
+                return false;
+
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(connectionId, out joinDecision))
+                return false;
+
+            DFMPWorldPosition position;
+            DFMPWorldContextKey context;
+            string startMarkerName;
+            if (!TryResolveRespawnPosition(joinDecision, out position, out context, out startMarkerName))
+                return false;
+
+            sessionState.SetPosition(position.WorldX, position.WorldY, position.WorldZ);
+            sessionState.SetDead(false);
+            sessionState.SetMovement(false);
+            SetSessionWorldContext(connectionId, sessionState, context, "disconnect-death-respawn");
+
+            if (joinDecision.CharacterRecord != null)
+            {
+                joinDecision.CharacterRecord.Health = joinDecision.CharacterRecord.MaxHealth;
+                joinDecision.CharacterRecord.Fatigue = joinDecision.CharacterRecord.MaxFatigue;
+                joinDecision.CharacterRecord.SpellPoints = joinDecision.CharacterRecord.MaxSpellPoints;
+            }
+
+            Debug.Log($"[DFMP Respawn] Finalized pending death respawn on disconnect: connectionId={connectionId}, anchor={context.LocationId ?? string.Empty}, world={position.WorldX}/{position.WorldZ}.");
+            return true;
+        }
+
         public static void Start(ushort port, int tickRate, int maxConnections, string serverName = null, string motd = null, bool enableDiscovery = true, int discoveryPort = 7778, DFMPServerConfig config = null)
         {
             if (IsListening)
@@ -1294,6 +1330,7 @@ namespace DFMP.Runtime
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
                 return;
 
+            TryFinalizePendingDeathRespawnOnDisconnect(conn.connectionId, sessionState);
             SaveCharacterRecord(conn.connectionId, sessionState);
 
             DFMPEventBus.Instance.PublishPlayerDisconnected(new DFMPPlayerDisconnectedEvent
