@@ -388,6 +388,29 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void JoinPolicy_ExistingRecordNeverFallsBackToFirstJoin()
+        {
+            var store = new DFMPFileCharacterStore(temporaryDirectory);
+            var config = new DFMPServerConfig();
+            config.Identity.ServerWorldId = "world-m5";
+            var stored = DFMPCharacterRecord.CreateNew("steam:existing", "world-m5", "Preserved Character");
+            stored.Level = 12;
+            stored.Inventory = new[]
+            {
+                new DFMPCharacterItemRecord { ItemId = 42, ItemGroup = 5, TemplateIndex = 7, StackCount = 1 }
+            };
+            store.Save(stored);
+
+            DFMPJoinDecision decision = DFMPJoinPolicy.Resolve("steam:existing", config, store);
+
+            Assert.AreEqual(DFMPJoinDecisionKind.ReturningPlayer, decision.Kind);
+            Assert.NotNull(decision.CharacterRecord);
+            Assert.AreEqual("Preserved Character", decision.CharacterRecord.CharacterName);
+            Assert.AreEqual(12, decision.CharacterRecord.Level);
+            Assert.AreEqual(1, decision.CharacterRecord.Inventory.Length);
+        }
+
+        [Test]
         public void JoinPolicy_RejectsInvalidAndUnapprovedPlayers()
         {
             var store = new DFMPFileCharacterStore(temporaryDirectory);

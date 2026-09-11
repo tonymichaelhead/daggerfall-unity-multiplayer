@@ -293,6 +293,8 @@ namespace DFMP.Runtime
                 CharacterStore.Save(decision.CharacterRecord);
             }
 
+            Debug.Log($"[DFMP Join] Resolved account identity: connectionId={conn.connectionId}, account='{decision.AccountId}', decision={decision.Kind}, hasCharacterRecord={decision.CharacterRecord != null}, reason='{decision.Reason ?? string.Empty}'.");
+
             joinDecisions[conn.connectionId] = decision;
             conn.Send(new DFMPJoinResultMessage
             {
