@@ -2,6 +2,7 @@ using DaggerfallConnect;
 using DaggerfallConnect.Arena2;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace DFMP.Runtime
@@ -617,6 +618,82 @@ namespace DFMP.Runtime
                     LocationId = location.Name
                 }
             };
+            return true;
+        }
+
+        public static bool TryResolveRandomCemetery(
+            int regionIndex,
+            out DFMPVampirismCemeteryCandidate candidate,
+            out DFMPVampirismTransformationRejectionReason rejectionReason)
+        {
+            candidate = default(DFMPVampirismCemeteryCandidate);
+            rejectionReason = DFMPVampirismTransformationRejectionReason.None;
+
+            if (regionIndex < 0)
+            {
+                rejectionReason = DFMPVampirismTransformationRejectionReason.InvalidRegion;
+                return false;
+            }
+
+            if (DaggerfallUnity.Instance == null ||
+                DaggerfallUnity.Instance.ContentReader == null ||
+                DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
+            {
+                rejectionReason = DFMPVampirismTransformationRejectionReason.CemeteryUnavailable;
+                return false;
+            }
+
+            DFRegion regionData = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetRegion(regionIndex);
+            var candidates = new List<DFMPVampirismCemeteryCandidate>();
+            for (int locationIndex = 0; locationIndex < regionData.LocationCount; locationIndex++)
+            {
+                if ((int)regionData.MapTable[locationIndex].DungeonType != (int)DFRegion.DungeonTypes.Cemetery)
+                    continue;
+
+                DFLocation location = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetLocation(regionIndex, locationIndex);
+                if (!location.Loaded)
+                    continue;
+
+                DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
+                DFPosition worldPosition = MapsFile.MapPixelToWorldCoord(mapPixel.X, mapPixel.Y);
+                candidates.Add(new DFMPVampirismCemeteryCandidate
+                {
+                    LocationId = location.Name,
+                    Position = new DFMPWorldPosition
+                    {
+                        WorldX = worldPosition.X,
+                        WorldY = 0f,
+                        WorldZ = worldPosition.Y
+                    },
+                    Context = new DFMPWorldContextKey
+                    {
+                        Kind = DFMPWorldContextKind.Exterior,
+                        MapPixelX = mapPixel.X,
+                        MapPixelY = mapPixel.Y,
+                        RegionIndex = location.RegionIndex,
+                        LocationIndex = location.LocationIndex,
+                        LocationId = location.Name
+                    }
+                });
+            }
+
+            if (candidates.Count == 0)
+            {
+                rejectionReason = DFMPVampirismTransformationRejectionReason.CemeteryUnavailable;
+                return false;
+            }
+
+            DFMPVampirismCemeteryRejectionReason cemeteryRejectionReason;
+            if (!DFMPVampirismCemeteryPolicy.TrySelectCandidate(
+                candidates,
+                Random.Range(0, candidates.Count),
+                out candidate,
+                out cemeteryRejectionReason))
+            {
+                rejectionReason = DFMPVampirismTransformationRejectionReason.CemeteryUnavailable;
+                return false;
+            }
+
             return true;
         }
     }

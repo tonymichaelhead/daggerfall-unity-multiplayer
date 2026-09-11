@@ -112,6 +112,15 @@ namespace DFMP.Tests
             Assert.AreEqual(DFMPVampirismCemeteryRejectionReason.InvalidDestination, reason);
         }
 
+        [Test]
+        public void CemeteryResolution_RejectsInvalidRegionBeforeContentLookup()
+        {
+            DFMPVampirismCemeteryCandidate candidate;
+            DFMPVampirismTransformationRejectionReason reason;
+            Assert.IsFalse(DFMPSpawnProtocol.TryResolveRandomCemetery(-1, out candidate, out reason));
+            Assert.AreEqual(DFMPVampirismTransformationRejectionReason.InvalidRegion, reason);
+        }
+
         static DFMPVampirismCemeteryCandidate CreateCemeteryCandidate(string locationId, int locationIndex)
         {
             return new DFMPVampirismCemeteryCandidate
