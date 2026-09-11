@@ -121,6 +121,25 @@ namespace DFMP.Tests
             Assert.AreEqual(DFMPVampirismTransformationRejectionReason.InvalidRegion, reason);
         }
 
+        [TestCase(12, 18, 20580)]
+        [TestCase(20, 18, 20100)]
+        public void VampirismTime_AdvancesToTwoWeeksAfterOneHourPastDusk(int currentHour, int duskHour, int expectedAdvanceMinutes)
+        {
+            uint targetClassicMinutes;
+            Assert.IsTrue(DFMPVampirismTimePolicy.TryGetTargetClassicMinutes(100, currentHour, duskHour, out targetClassicMinutes));
+            Assert.AreEqual((uint)(100 + expectedAdvanceMinutes), targetClassicMinutes);
+        }
+
+        [TestCase(-1, 18)]
+        [TestCase(24, 18)]
+        [TestCase(12, -1)]
+        [TestCase(12, 24)]
+        public void VampirismTime_RejectsInvalidHours(int currentHour, int duskHour)
+        {
+            uint targetClassicMinutes;
+            Assert.IsFalse(DFMPVampirismTimePolicy.TryGetTargetClassicMinutes(100, currentHour, duskHour, out targetClassicMinutes));
+        }
+
         static DFMPVampirismCemeteryCandidate CreateCemeteryCandidate(string locationId, int locationIndex)
         {
             return new DFMPVampirismCemeteryCandidate
