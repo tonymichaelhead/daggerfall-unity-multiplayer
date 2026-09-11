@@ -6,7 +6,7 @@ namespace DFMP.Runtime
     [Serializable]
     public class DFMPCharacterRecord
     {
-        public const int CurrentSchemaVersion = 4;
+        public const int CurrentSchemaVersion = 5;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public string AccountId = string.Empty;
@@ -20,6 +20,7 @@ namespace DFMP.Runtime
         public int MapPixelY;
         public string WorldContext = "Exterior";
         public DFMPWorldContextRecord Context = new DFMPWorldContextRecord();
+        public DFMPRespawnAnchorRecord RespawnAnchor = new DFMPRespawnAnchorRecord();
 
         public int Health = 1;
         public int MaxHealth = 1;
@@ -58,6 +59,9 @@ namespace DFMP.Runtime
             WorldContext = Context.Kind;
             MapPixelX = Context.MapPixelX;
             MapPixelY = Context.MapPixelY;
+            if (RespawnAnchor == null)
+                RespawnAnchor = new DFMPRespawnAnchorRecord();
+            RespawnAnchor.Normalize();
             Level = Mathf.Max(1, Level);
             MaxHealth = Mathf.Max(1, MaxHealth);
             Health = Mathf.Clamp(Health, 0, MaxHealth);

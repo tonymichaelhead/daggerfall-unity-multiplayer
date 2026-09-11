@@ -261,6 +261,34 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void CharacterRecord_RoundTripsInnRespawnAnchor()
+        {
+            var original = DFMPCharacterRecord.CreateNew("account-anchor", "world-b", "Anchor Tester");
+            original.RespawnAnchor = DFMPRespawnAnchorRecord.FromKey(
+                DFMPRespawnAnchorKind.Inn,
+                new DFMPWorldPosition { WorldX = 6792821, WorldY = 0f, WorldZ = 9374554 },
+                new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.BuildingInterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    RegionIndex = 3,
+                    LocationIndex = 41,
+                    LocationId = "Daggerfall",
+                    BuildingKey = 12345
+                });
+
+            var restored = DFMPCharacterRecord.FromJson(original.ToJson(), "account-anchor", "world-b");
+
+            Assert.NotNull(restored.RespawnAnchor);
+            Assert.IsTrue(restored.RespawnAnchor.IsInnAnchor());
+            Assert.AreEqual(6792821, restored.RespawnAnchor.WorldX);
+            Assert.AreEqual(9374554, restored.RespawnAnchor.WorldZ);
+            Assert.AreEqual("Daggerfall", restored.RespawnAnchor.Context.LocationId);
+            Assert.AreEqual(12345, restored.RespawnAnchor.Context.BuildingKey);
+        }
+
+        [Test]
         public void CharacterRecord_DropsSchemaV1ExperienceAndDefersSkillSumToClient()
         {
             const string schemaV1Json = "{\"SchemaVersion\":1,\"CharacterName\":\"Veteran\",\"Level\":7," +
