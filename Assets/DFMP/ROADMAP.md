@@ -53,6 +53,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | P-MOD | Server-supplied mod manifest with automatic client download, enable, and configuration. | Future |
 | P-VOICE | Proximity text chat, spatialized proximity voice, and party channels. | Future |
 | P-WORLD | Shared quests, shared world state and economy, ambient NPC sync. | Future |
+| P-QUEST-FOES | Spike and implement a reliable server-owned quest-enemy model, if justified by play evidence. | Future |
 | P-SCALE | SQL persistence, strict authority and anti-cheat, 100+ player scaling. | Future |
 | P-COMMUNITY | Server browser, expanded scripting API, script sharing, friends and invites. | Future |
 
@@ -291,12 +292,13 @@ Status: Planned.
 - Server-owned death and respawn.
 - Clients submit damage *intent*; the server validates and applies it. All damage flows through a single server-side application chokepoint so validation can tighten in one place.
 - Beta validation is deliberately loose: bounds, cooldown, range, and source-session sanity checks rather than full server-side combat simulation.
+- **Client-local quest PvE exception.** A client may report damage from its own local quest enemy only against its own character. The server cannot verify that source entity in Phase 1, so this is an explicit beta trust exception, but the normal damage chokepoint still enforces numeric bounds, rate limits, source-session ownership, and an owner-only target. Local quest enemies can never damage another player.
 - PvP is a server configuration flag. When disabled, the server rejects player-versus-player damage at the same chokepoint.
 - Event bus raises `PlayerDamaged`, `PlayerDied`, and `PlayerRespawned`.
 
 Verification:
 
-- EditMode tests for damage validation, PvP policy, death and respawn lifecycle, and vitals replication.
+- EditMode tests for damage validation, the owner-only local quest PvE path, PvP policy, death and respawn lifecycle, and vitals replication.
 - Two-client graphical smoke test for PvE damage, PvP enabled, and PvP disabled.
 
 ### M8: Server-Owned Dungeon Enemies
@@ -340,10 +342,15 @@ Verification:
 
 Quests remain **personal per player** rather than shared or disabled. Full quest-state synchronization is explicitly out of scope; the reference fork's approach demonstrated that it does not decompose cleanly.
 
-- Each client runs its own quest state machine. Quest NPCs, items, dialogue, and journal are client-local, so two players may independently hold the same quest from the same NPC.
-- Quest-spawned **enemies** are registered with the server as ordinary server-owned enemies tagged with an owner. Co-located players can see and fight them, and kill credit routes back to the quest owner. This delivers most of the perceived co-op value at a small fraction of full quest synchronization cost.
+- Each client runs its own quest state machine. Quest NPCs, items, dialogue, journal, and quest-spawned enemies are client-local, so two players may independently hold the same quest from the same NPC.
+- Quest enemies are not replicated or server-owned in Phase 1. Other players cannot see or help fight them. This is an intentional MVP limitation: owner-tagged enemies can multiply at shared markers and make it unclear which visually identical target advances which character's quest.
+- Quest enemies can damage only the character whose local quest created them. Their attacks enter M7 through the explicitly beta-trusted local quest PvE path, where the server applies bounded and rate-limited damage to that same character. They can never target or damage another player.
+- Quest-enemy deaths, kill credit, carried quest loot, and other quest effects remain local to the owning character. Party members cannot assist with or receive effects from that combat.
+- Active quest progress and quest-item identity still persist server-side per character because multiplayer suppresses DFU's native save/load flow.
 - Quest deadlines are suppressed by default for beta. The server disables quest timeout actions rather than editing upstream quest scripts, keeping the change configurable and rebasable.
-- Configuration exposes a quest mode of `personal` or `disabled`, plus flags for quest-foe replication and deadline enforcement. A `shared` mode is reserved for a future milestone.
+- Configuration exposes a quest mode of `personal` or `disabled`, plus a flag for deadline enforcement. Shared quests and server-owned quest enemies are reserved for later milestones.
+- Quest patterns proven incompatible with this boundary may be placed on a narrow beta blacklist rather than receiving quest-specific networking work. The tester setup note must explain that quest combat is personal and cannot be assisted by other players.
+- The alternatives, lifecycle questions, persistence requirements, and spike acceptance criteria are recorded in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
 
 ## Phase 2 Milestones: Public Release
 
@@ -496,6 +503,14 @@ Status: Future.
 - Shared and persistent world state options: doors, containers, loot mode selection, and a shared economy with server-owned shop inventories and prices.
 - Optional citizen and ambient NPC synchronization, only if it proves to matter in practice.
 - Server-owned weather and seasonal events beyond the Phase 1 time and weather baseline.
+
+### P-QUEST-FOES: Quest Enemy Networking Spike
+
+Status: Future.
+
+Investigate whether quest enemies can become server-owned without synchronizing complete quest machines or creating confusing objective ownership. The preferred hypothesis is a location-scoped shared encounter with personal objective subscriptions: a nearby unsatisfied owner activates one server enemy, anyone may fight it, nearby subscribed owners receive credit, and absent owners activate a later generation when they arrive. Start from the client-local Phase 1 baseline and use spike evidence to validate this model or choose an owner-scoped or hybrid alternative by quest action type.
+
+The spike scope, candidate designs, required experiments, and decision criteria are maintained in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
 
 ### P-SCALE: Scale, Storage, and Trust
 
