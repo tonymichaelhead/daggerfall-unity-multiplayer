@@ -50,6 +50,24 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public bool TryAdvanceServerTimeByMinutes(int minutes, out uint targetClassicMinutes)
+        {
+            targetClassicMinutes = 0;
+            if (minutes <= 0)
+                return false;
+
+            var worldTime = GetWorldTime();
+            if (worldTime == null)
+                return false;
+
+            ulong target = (ulong)worldTime.DaggerfallDateTime.ToClassicDaggerfallTime() + (ulong)minutes;
+            if (target > uint.MaxValue)
+                return false;
+
+            targetClassicMinutes = (uint)target;
+            return TryAdvanceServerTime(targetClassicMinutes);
+        }
+
         public override void OnStartServer()
         {
             base.OnStartServer();

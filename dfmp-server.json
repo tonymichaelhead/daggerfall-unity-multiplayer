@@ -10,6 +10,9 @@
   "Gameplay": {
     "EnableBeginnerTutorial": false
   },
+  "Developer": {
+    "CommandsEnabled": true
+  },
   "Rest": {
     "Policy": "Disabled"
   },

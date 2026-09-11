@@ -75,7 +75,20 @@ namespace DFMP.Runtime
             DaggerfallHooks.TryHandleBuildingExteriorTransition = TryHandleBuildingExteriorTransition;
             DaggerfallHooks.TryHandleDungeonInteriorTransition = TryHandleDungeonInteriorTransition;
             DaggerfallHooks.TryHandleDungeonExteriorTransition = TryHandleDungeonExteriorTransition;
+            DaggerfallHooks.TryHandleVampirismTransformation = TryHandleVampirismTransformation;
             EnsureInstance();
+        }
+
+        static bool TryHandleVampirismTransformation()
+        {
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return false;
+            if (instance != null && instance.transitionState.HasPendingAssignment)
+                return true;
+
+            DFMPNetworkClient.RequestVampirismTransformation();
+            Debug.Log("[DFMP Transition] Blocked local vampirism transformation and requested server assignment.");
+            return true;
         }
 
         static bool TryHandleBuildingInteriorTransition(object playerEnterExitObject, object doorOwnerObject, object doorObject, bool doFade, bool start)

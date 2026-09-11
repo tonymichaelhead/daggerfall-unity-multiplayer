@@ -382,6 +382,7 @@ The M4 event bus exists precisely so this milestone is a binding exercise rather
 - An embedded scripting runtime loading scripts from a server-side scripts folder.
 - Event API: scripts subscribe to bus events (`PlayerConnected`, `PlayerSpawned`, `ChatMessageReceived`, `LocationEntered`, `PlayerDamaged`, `PlayerDied`, `PlayerRespawned`, `EnemySpawned`, `EnemyDied`, `LootGenerated`).
 - Command API: scripts act on the world through a narrow, validated surface (send chat, teleport a player, adjust vitals, spawn or despawn enemies, grant items or gold, kick or ban, read and write per-character script data).
+- The developer command action boundary is the prototype for this API: `dfmp_infect_self` is a server-authorized, config-gated test command today, and R2 should promote its validated action service rather than expose direct client mutation.
 - Handlers may veto or modify eligible events, with the veto points defined explicitly rather than every event being interceptable.
 - Sandboxing and error isolation: a faulty script is disabled with a logged error and never takes the server down. Execution time budgets prevent a script from stalling the tick.
 - Per-character and per-server script key-value storage persisted through the M5 store interface.
@@ -401,6 +402,7 @@ An early F12 administration prototype now provides a server-authored connected-p
 - Role and permission model: owner, admin, moderator, player, with permissions granted per command.
 - In-game chat command framework, with commands registerable by both the core and R2 scripts.
 - Core moderation commands: kick, ban, unban, mute, whitelist add and remove, teleport, and player lookup.
+- GM/world-control commands should expose the same server action service used by R2 scripts, including an `Advance World Time` action, player infection/cure, player teleport, and later enemy spawn/despawn. The client menu is only a request UI; authority, validation, permission checks, confirmation for large jumps, and audit remain server-side.
 - Audit log of moderation actions, keyed to account identity.
 - Additional chat channels beyond the single global channel, at minimum a staff channel and private messages.
 

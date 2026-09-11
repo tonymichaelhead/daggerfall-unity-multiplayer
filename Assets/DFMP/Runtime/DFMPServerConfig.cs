@@ -24,6 +24,11 @@ namespace DFMP.Runtime
     {
         public bool EnableBeginnerTutorial;
     }
+    [Serializable]
+    public class DFMPServerDeveloperConfig
+    {
+        public bool CommandsEnabled;
+    }
 
     public static class DFMPRestPolicies
     {
@@ -101,6 +106,7 @@ namespace DFMP.Runtime
         public DFMPServerChatConfig Chat = new DFMPServerChatConfig();
         public DFMPServerIdentityConfig Identity = new DFMPServerIdentityConfig();
         public DFMPServerGameplayConfig Gameplay = new DFMPServerGameplayConfig();
+        public DFMPServerDeveloperConfig Developer = new DFMPServerDeveloperConfig();
         public DFMPServerRestConfig Rest = new DFMPServerRestConfig();
         public DFMPServerStartingLocationConfig StartingLocation = new DFMPServerStartingLocationConfig();
 
@@ -132,6 +138,8 @@ namespace DFMP.Runtime
 
             if (Gameplay == null)
                 Gameplay = new DFMPServerGameplayConfig();
+            if (Developer == null)
+                Developer = new DFMPServerDeveloperConfig();
 
             if (Rest == null)
                 Rest = new DFMPServerRestConfig();

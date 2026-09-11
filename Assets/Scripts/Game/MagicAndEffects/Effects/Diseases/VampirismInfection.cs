@@ -149,6 +149,10 @@ namespace DaggerfallWorkshop.Game.MagicAndEffects.MagicEffects
         {
             const int deathIsNotEternalTextID = 401;
 
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleVampirismTransformation != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandleVampirismTransformation())
+                return;
+
             // Cancel rest window if sleeping
             if (DaggerfallUI.Instance.UserInterfaceManager.TopWindow is DaggerfallRestWindow)
                 (DaggerfallUI.Instance.UserInterfaceManager.TopWindow as DaggerfallRestWindow).CloseWindow();

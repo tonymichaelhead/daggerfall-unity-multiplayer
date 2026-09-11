@@ -25,6 +25,8 @@ namespace DFMP.Tests
             Assert.AreEqual("Daggerfall", config.StartingLocation.LocationName);
             Assert.NotNull(config.Rest);
             Assert.AreEqual(DFMPRestPolicies.Disabled, config.Rest.Policy);
+            Assert.NotNull(config.Developer);
+            Assert.IsFalse(config.Developer.CommandsEnabled);
         }
 
         [Test]

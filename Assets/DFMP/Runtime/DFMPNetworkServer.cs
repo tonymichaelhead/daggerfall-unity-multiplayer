@@ -229,6 +229,8 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPAdminRosterRequest>(OnAdminRosterRequest);
             NetworkServer.RegisterHandler<DFMPAdminKickRequest>(OnAdminKickRequest);
             NetworkServer.RegisterHandler<DFMPAdminKickAcknowledgement>(OnAdminKickAcknowledgement);
+            NetworkServer.RegisterHandler<DFMPDeveloperInfectSelfRequest>(OnDeveloperInfectSelfRequest);
+            NetworkServer.RegisterHandler<DFMPDeveloperAdvanceTimeRequest>(OnDeveloperAdvanceTimeRequest);
             NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
             SpawnTimeState();
 
@@ -755,6 +757,78 @@ namespace DFMP.Runtime
             }
 
             Debug.Log($"[DFMP Transition] Accepted vampirism transformation request: connectionId={conn.connectionId}.");
+        }
+
+        private static void OnDeveloperInfectSelfRequest(NetworkConnectionToClient conn, DFMPDeveloperInfectSelfRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPDeveloperCommandRejectionReason rejectionReason = DFMPDeveloperCommandPolicy.GetInfectSelfRejectionReason(new DFMPDeveloperCommandContext
+            {
+                CommandsEnabled = Config != null && Config.Developer != null && Config.Developer.CommandsEnabled,
+                HasSession = sessionState != null,
+                SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed
+            });
+
+            if (!DFMPDeveloperCommandPolicy.IsAccepted(rejectionReason))
+            {
+                conn.Send(new DFMPDeveloperInfectSelfResponse
+                {
+                    Accepted = false,
+                    Reason = rejectionReason.ToString()
+                });
+                Debug.LogWarning($"[DFMP Developer] Rejected vampirism infection: connectionId={conn.connectionId}, reason={rejectionReason}.");
+                return;
+            }
+
+            conn.Send(new DFMPDeveloperInfectSelfResponse
+            {
+                Accepted = true,
+                Reason = string.Empty
+            });
+            Debug.Log($"[DFMP Developer] Authorized vampirism infection: connectionId={conn.connectionId}.");
+        }
+
+        private static void OnDeveloperAdvanceTimeRequest(NetworkConnectionToClient conn, DFMPDeveloperAdvanceTimeRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            const int maximumMinutes = 7 * 24 * 60;
+            DFMPDeveloperCommandRejectionReason rejectionReason = DFMPDeveloperCommandPolicy.GetAdvanceTimeRejectionReason(new DFMPDeveloperCommandContext
+            {
+                CommandsEnabled = Config != null && Config.Developer != null && Config.Developer.CommandsEnabled,
+                HasSession = sessionState != null,
+                SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed
+            }, request.Minutes, maximumMinutes);
+
+            if (!DFMPDeveloperCommandPolicy.IsAccepted(rejectionReason) || TimeState == null || !TimeState.TryAdvanceServerTimeByMinutes(request.Minutes, out _))
+            {
+                if (rejectionReason == DFMPDeveloperCommandRejectionReason.None)
+                    rejectionReason = DFMPDeveloperCommandRejectionReason.TimeUnavailable;
+
+                conn.Send(new DFMPDeveloperAdvanceTimeResponse
+                {
+                    Accepted = false,
+                    Minutes = request.Minutes,
+                    Reason = rejectionReason.ToString()
+                });
+                Debug.LogWarning($"[DFMP Developer] Rejected time advance: connectionId={conn.connectionId}, minutes={request.Minutes}, reason={rejectionReason}.");
+                return;
+            }
+
+            conn.Send(new DFMPDeveloperAdvanceTimeResponse
+            {
+                Accepted = true,
+                Minutes = request.Minutes,
+                Reason = string.Empty
+            });
+            Debug.Log($"[DFMP Developer] Authorized time advance: connectionId={conn.connectionId}, minutes={request.Minutes}.");
         }
 
         static void ConfirmSessionArrival(int connectionId, DFMPPlayerSessionState sessionState)

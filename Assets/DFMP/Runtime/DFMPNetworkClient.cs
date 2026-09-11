@@ -68,6 +68,7 @@ namespace DFMP.Runtime
             DFMPTimeState.RegisterClientSpawnHandler();
             DFMPPlayerSessionState.RegisterClientSpawnHandler();
             DFMPSpawnAssignmentController.RegisterClientHandler();
+            DFMPDeveloperCommandController.RegisterClient();
             NetworkClient.RegisterHandler<DFMPChatDeliveryMessage>(OnChatMessageReceived);
             NetworkClient.RegisterHandler<DFMPAdminRosterResponse>(OnAdminRosterReceived);
             NetworkClient.RegisterHandler<DFMPAdminKickNotice>(OnAdminKickNoticeReceived);
