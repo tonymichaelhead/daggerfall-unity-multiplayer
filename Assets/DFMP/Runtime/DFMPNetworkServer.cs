@@ -218,6 +218,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPFastTravelRequest>(OnFastTravelRequest);
             NetworkServer.RegisterHandler<DFMPDoorTransitionRequest>(OnDoorTransitionRequest);
             NetworkServer.RegisterHandler<DFMPDungeonTransitionRequest>(OnDungeonTransitionRequest);
+            NetworkServer.RegisterHandler<DFMPVampirismTransformationRequest>(OnVampirismTransformationRequest);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
@@ -532,6 +533,44 @@ namespace DFMP.Runtime
                 assignedContext);
         }
 
+        public static bool TrySendVampirismTransformationAssignment(
+            NetworkConnectionToClient conn,
+            out DFMPVampirismTransformationRejectionReason rejectionReason)
+        {
+            rejectionReason = DFMPVampirismTransformationRejectionReason.MissingSession;
+            if (conn == null)
+                return false;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPWorldContextKey currentContext;
+            bool hasCurrentContext = worldOccupancy.TryGetContext(conn.connectionId, out currentContext);
+            DFMPTransitionAssignmentState assignmentState;
+            bool hasPendingTransition = transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState) &&
+                assignmentState != null && assignmentState.HasPendingAssignment;
+
+            rejectionReason = DFMPVampirismTransformationPolicy.GetRejectionReason(new DFMPVampirismTransformationContext
+            {
+                HasSession = sessionState != null,
+                SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed,
+                HasPendingTransition = hasPendingTransition,
+                HasWorldContext = hasCurrentContext,
+                RegionIndex = hasCurrentContext ? currentContext.RegionIndex : -1
+            });
+            if (!DFMPVampirismTransformationPolicy.IsAccepted(rejectionReason))
+                return false;
+
+            DFMPVampirismCemeteryCandidate candidate;
+            if (!DFMPSpawnProtocol.TryResolveRandomCemetery(currentContext.RegionIndex, out candidate, out rejectionReason))
+                return false;
+
+            return TrySendTransitionAssignment(
+                conn,
+                DFMPTransitionKind.VampirismTransformation,
+                candidate.Position,
+                candidate.Context);
+        }
+
         public static void MakeSessionStatesVisibleTo(NetworkConnectionToClient conn)
         {
             if (conn == null)
@@ -682,6 +721,21 @@ namespace DFMP.Runtime
             }
 
             Debug.Log($"[DFMP Transition] Accepted dungeon transition request: connectionId={conn.connectionId}, enterDungeon={request.EnterDungeon}, mapPixel={request.MapPixelX}/{request.MapPixelY}, location='{request.LocationId}'.");
+        }
+
+        private static void OnVampirismTransformationRequest(NetworkConnectionToClient conn, DFMPVampirismTransformationRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPVampirismTransformationRejectionReason rejectionReason;
+            if (!TrySendVampirismTransformationAssignment(conn, out rejectionReason))
+            {
+                Debug.LogWarning($"[DFMP Transition] Rejected vampirism transformation request: connectionId={conn.connectionId}, reason={rejectionReason}.");
+                return;
+            }
+
+            Debug.Log($"[DFMP Transition] Accepted vampirism transformation request: connectionId={conn.connectionId}.");
         }
 
         static void ConfirmSessionArrival(int connectionId, DFMPPlayerSessionState sessionState)
