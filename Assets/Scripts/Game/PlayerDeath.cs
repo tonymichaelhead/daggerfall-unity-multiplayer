@@ -88,6 +88,13 @@ namespace DaggerfallWorkshop.Game
 
                 if (Time.fixedTime - timeOfDeath > TimeBeforeReset)
                 {
+                    if (DFMP.Hooks.DaggerfallHooks.TryHandlePlayerDeath != null &&
+                        DFMP.Hooks.DaggerfallHooks.TryHandlePlayerDeath())
+                    {
+                        ClearDeathAnimation();
+                        return;
+                    }
+
                     // Start new game from death cinematic
                     startGameBehaviour.StartMethod = StartGameBehaviour.StartMethods.TitleMenuFromDeath;
                     deathInProgress = false;

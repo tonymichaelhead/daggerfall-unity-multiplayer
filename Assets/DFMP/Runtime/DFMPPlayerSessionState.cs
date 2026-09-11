@@ -23,6 +23,9 @@ namespace DFMP.Runtime
         bool spawnConfirmed;
 
         [SyncVar]
+        bool isDead;
+
+        [SyncVar]
         bool isMoving;
 
         [SyncVar]
@@ -81,6 +84,11 @@ namespace DFMP.Runtime
         public bool SpawnConfirmed
         {
             get { return spawnConfirmed; }
+        }
+
+        public bool IsDead
+        {
+            get { return isDead; }
         }
 
         public bool IsMoving
@@ -154,6 +162,12 @@ namespace DFMP.Runtime
         public void ConfirmSpawn()
         {
             spawnConfirmed = true;
+            isDead = false;
+        }
+
+        public void SetDead(bool newIsDead)
+        {
+            isDead = newIsDead;
         }
 
         public void SetMovement(bool newIsMoving)

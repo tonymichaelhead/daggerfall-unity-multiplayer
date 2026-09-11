@@ -220,6 +220,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPDoorTransitionRequest>(OnDoorTransitionRequest);
             NetworkServer.RegisterHandler<DFMPDungeonTransitionRequest>(OnDungeonTransitionRequest);
             NetworkServer.RegisterHandler<DFMPVampirismTransformationRequest>(OnVampirismTransformationRequest);
+            NetworkServer.RegisterHandler<DFMPPlayerDeathReport>(OnPlayerDeathReport);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
             NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
@@ -720,6 +721,18 @@ namespace DFMP.Runtime
                     Debug.Log($"[DFMP Respawn] Saved inn anchor: connectionId={conn.connectionId}, location='{assignmentState.Assignment.LocationId}', buildingKey={assignmentState.Assignment.BuildingKey}.");
                 }
             }
+            if (assignmentState.Assignment.Kind == DFMPTransitionKind.DeathRespawn)
+            {
+                sessionState.SetDead(false);
+                DFMPJoinDecision deathJoinDecision;
+                if (joinDecisions.TryGetValue(conn.connectionId, out deathJoinDecision) && deathJoinDecision.CharacterRecord != null)
+                {
+                    deathJoinDecision.CharacterRecord.Health = deathJoinDecision.CharacterRecord.MaxHealth;
+                    deathJoinDecision.CharacterRecord.Fatigue = deathJoinDecision.CharacterRecord.MaxFatigue;
+                    deathJoinDecision.CharacterRecord.SpellPoints = deathJoinDecision.CharacterRecord.MaxSpellPoints;
+                    CharacterStore.Save(deathJoinDecision.CharacterRecord);
+                }
+            }
             ConfirmSessionArrival(conn.connectionId, sessionState);
             Debug.Log($"[DFMP Transition] Server confirmed transition: connectionId={conn.connectionId}, assignmentId={acknowledgement.AssignmentId}, kind={assignmentState.Assignment.Kind}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
         }
@@ -781,6 +794,77 @@ namespace DFMP.Runtime
             }
 
             Debug.Log($"[DFMP Transition] Accepted vampirism transformation request: connectionId={conn.connectionId}.");
+        }
+
+        private static void OnPlayerDeathReport(NetworkConnectionToClient conn, DFMPPlayerDeathReport report)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState) || sessionState == null || !sessionState.SpawnConfirmed)
+            {
+                Debug.LogWarning($"[DFMP Respawn] Rejected death report: connectionId={conn.connectionId}, reason=missing-or-unspawned-session.");
+                return;
+            }
+
+            DFMPTransitionAssignmentState assignmentState;
+            if (sessionState.IsDead || (transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState) && assignmentState != null && assignmentState.HasPendingAssignment))
+            {
+                Debug.LogWarning($"[DFMP Respawn] Rejected death report: connectionId={conn.connectionId}, reason=death-or-transition-already-pending.");
+                return;
+            }
+
+            DFMPJoinDecision joinDecision;
+            joinDecisions.TryGetValue(conn.connectionId, out joinDecision);
+            DFMPWorldPosition position;
+            DFMPWorldContextKey context;
+            string startMarkerName;
+            if (!TryResolveRespawnPosition(joinDecision, out position, out context, out startMarkerName))
+            {
+                Debug.LogWarning($"[DFMP Respawn] Rejected death report: connectionId={conn.connectionId}, reason=missing-respawn-position.");
+                return;
+            }
+
+            sessionState.SetDead(true);
+            if (!TrySendTransitionAssignment(conn, DFMPTransitionKind.DeathRespawn, position, context, startMarkerName))
+            {
+                sessionState.SetDead(false);
+                Debug.LogWarning($"[DFMP Respawn] Failed to send death respawn assignment: connectionId={conn.connectionId}.");
+                return;
+            }
+
+            Debug.Log($"[DFMP Respawn] Accepted death report: connectionId={conn.connectionId}, anchor={context.LocationId ?? string.Empty}, world={position.WorldX}/{position.WorldZ}.");
+        }
+
+        static bool TryResolveRespawnPosition(DFMPJoinDecision joinDecision, out DFMPWorldPosition position, out DFMPWorldContextKey context, out string startMarkerName)
+        {
+            position = new DFMPWorldPosition();
+            context = new DFMPWorldContextKey();
+            startMarkerName = string.Empty;
+            if (joinDecision != null && joinDecision.CharacterRecord != null && joinDecision.CharacterRecord.RespawnAnchor != null && joinDecision.CharacterRecord.RespawnAnchor.IsInnAnchor())
+            {
+                var anchor = joinDecision.CharacterRecord.RespawnAnchor;
+                position = new DFMPWorldPosition { WorldX = anchor.WorldX, WorldY = anchor.WorldY, WorldZ = anchor.WorldZ };
+                context = anchor.Context.ToKey();
+                if (context.Kind == DFMPWorldContextKind.Exterior && DFMPSpawnProtocol.IsValidMapPixel(context.MapPixelX, context.MapPixelY))
+                    return true;
+
+                // Interior anchors require a client-side door re-entry assignment; until that exists,
+                // fall back to the configured exterior starting location instead of teleporting to an invalid scene position.
+                position = new DFMPWorldPosition();
+                context = new DFMPWorldContextKey();
+            }
+
+            DFMPStartingLocationResolution resolution;
+            string reason;
+            if (!DFMPSpawnProtocol.TryResolveStartingLocation(Config != null ? Config.StartingLocation : null, out resolution, out reason))
+                return false;
+
+            position = resolution.Position;
+            context = resolution.Context;
+            startMarkerName = resolution.StartMarkerName;
+            return DFMPSpawnProtocol.IsValidMapPixel(context.MapPixelX, context.MapPixelY);
         }
 
         private static void OnDeveloperInfectSelfRequest(NetworkConnectionToClient conn, DFMPDeveloperInfectSelfRequest request)

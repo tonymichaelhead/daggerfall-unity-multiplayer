@@ -76,6 +76,7 @@ namespace DFMP.Runtime
             DaggerfallHooks.TryHandleDungeonInteriorTransition = TryHandleDungeonInteriorTransition;
             DaggerfallHooks.TryHandleDungeonExteriorTransition = TryHandleDungeonExteriorTransition;
             DaggerfallHooks.TryHandleVampirismTransformation = TryHandleVampirismTransformation;
+            DaggerfallHooks.TryHandlePlayerDeath = TryHandlePlayerDeath;
             EnsureInstance();
         }
 
@@ -88,6 +89,18 @@ namespace DFMP.Runtime
 
             DFMPNetworkClient.RequestVampirismTransformation();
             Debug.Log("[DFMP Transition] Blocked local vampirism transformation and requested server assignment.");
+            return true;
+        }
+
+        static bool TryHandlePlayerDeath()
+        {
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return false;
+            if (instance != null && instance.transitionState.HasPendingAssignment)
+                return true;
+
+            DFMPNetworkClient.ReportPlayerDeath();
+            Debug.Log("[DFMP Respawn] Blocked local death-to-title flow and requested server respawn assignment.");
             return true;
         }
 
@@ -499,6 +512,8 @@ namespace DFMP.Runtime
 
                 if (transitionState.Assignment.Kind == DFMPTransitionKind.VampirismTransformation && !ApplyVampirismTransformation())
                     return;
+                if (transitionState.Assignment.Kind == DFMPTransitionKind.DeathRespawn && !ApplyDeathRespawn())
+                    return;
 
                 transitionApplied = true;
                 return;
@@ -533,6 +548,18 @@ namespace DFMP.Runtime
             EntityEffectBundle bundle = GameManager.Instance.PlayerEffectManager.CreateVampirismCurse();
             GameManager.Instance.PlayerEffectManager.AssignBundle(bundle, AssignBundleFlags.BypassSavingThrows);
             Debug.Log($"[DFMP Transition] Applied vampirism transformation after assigned relocation: clan={clan}.");
+            return true;
+        }
+
+        bool ApplyDeathRespawn()
+        {
+            if (!GameManager.HasInstance || GameObject.FindGameObjectWithTag("Player") == null)
+                return false;
+
+            GameManager.Instance.PlayerEntity.CurrentHealth = GameManager.Instance.PlayerEntity.MaxHealth;
+            GameManager.Instance.PlayerEntity.CurrentFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
+            GameManager.Instance.PlayerEntity.CurrentMagicka = GameManager.Instance.PlayerEntity.MaxMagicka;
+            Debug.Log("[DFMP Respawn] Restored player vitals after assigned death respawn.");
             return true;
         }
 

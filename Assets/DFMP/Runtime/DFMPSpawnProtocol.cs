@@ -97,6 +97,10 @@ namespace DFMP.Runtime
     {
     }
 
+    public struct DFMPPlayerDeathReport : Mirror.NetworkMessage
+    {
+    }
+
     public enum DFMPDoorTransitionRejectionReason
     {
         None,

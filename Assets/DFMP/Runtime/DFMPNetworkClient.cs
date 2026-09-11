@@ -142,6 +142,12 @@ namespace DFMP.Runtime
                 NetworkClient.Send(new DFMPVampirismTransformationRequest());
         }
 
+            public static void ReportPlayerDeath()
+            {
+                if (NetworkClient.isConnected && NetworkClient.ready)
+                NetworkClient.Send(new DFMPPlayerDeathReport());
+            }
+
         static void OnRestResponseReceived(DFMPRestResponse message)
         {
             if (message.Accepted)
