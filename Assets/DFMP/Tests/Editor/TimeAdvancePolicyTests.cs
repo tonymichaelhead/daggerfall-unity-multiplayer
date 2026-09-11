@@ -10,6 +10,8 @@ namespace DFMP.Tests
         [TestCase(DFMPTimeAdvanceSources.GuildTraining)]
         [TestCase(DFMPTimeAdvanceSources.PrisonSentence)]
         [TestCase(DFMPTimeAdvanceSources.PrisonRelease)]
+        [TestCase(DFMPTimeAdvanceSources.VampirismCure)]
+        [TestCase(DFMPTimeAdvanceSources.LycanthropyCure)]
         public void ConnectedClient_ConsumesProtectedTimeAdvance(string source)
         {
             Assert.IsTrue(DFMPTimeAdvancePolicy.ShouldConsumeClientAdvance(true, source, 10800));

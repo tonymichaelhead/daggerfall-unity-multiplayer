@@ -6,6 +6,8 @@ namespace DFMP.Runtime
         public const string GuildTraining = "GuildTraining";
         public const string PrisonSentence = "PrisonSentence";
         public const string PrisonRelease = "PrisonRelease";
+        public const string VampirismCure = "VampirismCure";
+        public const string LycanthropyCure = "LycanthropyCure";
     }
 
     public static class DFMPTimeAdvancePolicy
@@ -16,9 +18,11 @@ namespace DFMP.Runtime
                 return false;
 
             return source == DFMPTimeAdvanceSources.QuestTraining ||
-                                     source == DFMPTimeAdvanceSources.GuildTraining ||
-                                     source == DFMPTimeAdvanceSources.PrisonSentence ||
-                                     source == DFMPTimeAdvanceSources.PrisonRelease;
+                   source == DFMPTimeAdvanceSources.GuildTraining ||
+                   source == DFMPTimeAdvanceSources.PrisonSentence ||
+                   source == DFMPTimeAdvanceSources.PrisonRelease ||
+                   source == DFMPTimeAdvanceSources.VampirismCure ||
+                   source == DFMPTimeAdvanceSources.LycanthropyCure;
         }
     }
 }

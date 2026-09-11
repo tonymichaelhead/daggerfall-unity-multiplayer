@@ -25,6 +25,8 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 | M6-TIME-TRAIN-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallGuildServiceTraining.cs` | `TrainSkill()` before the three-hour training advance | Preserve paid guild training while preventing the client from advancing shared server time. | 2026-09-10 |
 | M6-TIME-PRISON-001 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallCourtWindow.cs` | `UpdatePrisonScreen()` before sentence-time advance | Preserve prison completion while preventing the client from advancing shared server time. | 2026-09-10 |
 | M6-TIME-PRISON-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallCourtWindow.cs` | `ReleaseFromPrison()` before release-time advance | Preserve prison release while preventing the client from advancing shared server time. | 2026-09-10 |
+| M6-TIME-CURE-001 | `Assets/Scripts/Game/MagicAndEffects/Effects/Special/VampirismEffect.cs` | `CureVampirism()` before one-minute cleanup advance | Preserve vampirism cure while preventing the client from advancing shared server time. | 2026-09-10 |
+| M6-TIME-CURE-002 | `Assets/Scripts/Game/MagicAndEffects/Effects/Special/LycanthropyEffect.cs` | `CureLycanthropy()` before one-minute cleanup advance | Preserve lycanthropy cure while preventing the client from advancing shared server time. | 2026-09-10 |
 | DFMP-STARTUP-001 | `Assets/Scripts/Game/Utility/SceneControl.cs` | `Start()` before the startup-scene vs game-scene branch | Allow DFMP to keep the launcher menu reachable so the single-player game scene is never auto-loaded. | 2026-09-09 |
 | DFMP-STARTUP-004 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `Setup()` startup-stage selection | When DFMP forces the startup menu and the game-data path is valid, open the options/Join Server page instead of the first-time game-folder page. | 2026-09-09 |
 | DFMP-STARTUP-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | End of `ShowOptionsPanel()` | Allow DFMP to relabel and resize the launcher's confirm button ("Play" -> "Join Server"). | 2026-09-09 |
@@ -36,7 +38,7 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 
 The upstream rest window has no separate wait-until-dawn action. Its only client-side time-advance entry points are timed rest, rest-until-healed, and loiter, all covered by `M6-REST-001`. Server-mediated rest and healing remains a separate M6.10 implementation task.
 
-Additional `RaiseTime()` paths were audited in upstream DFU. Fast travel is already covered by `M6-FAST-TRAVEL-001`, and the vanilla rest tick cannot start after `M6-REST-001` consumes the rest action. Quest training (`TrainPc`), guild training, prison/court time, and vampirism or lycanthropy transitions remain separate player or effect workflows; they must not be blanket-blocked by the rest hook. Each requires a future server-mediated policy before it may advance global time in multiplayer.
+Additional `RaiseTime()` paths were audited in upstream DFU. Fast travel is already covered by `M6-FAST-TRAVEL-001`, and the vanilla rest tick cannot start after `M6-REST-001` consumes the rest action. Quest training, guild training, prison/court time, and one-minute vampirism or lycanthropy cure cleanup advances are now blocked in multiplayer while preserving their surrounding effects. The two-week vampirism transformation transition remains separate because it also relocates the player and requires a server-owned transition design.
 
 ## Hook Interface Definitions
 

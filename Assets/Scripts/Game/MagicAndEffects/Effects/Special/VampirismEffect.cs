@@ -305,7 +305,8 @@ namespace DaggerfallWorkshop.Game.MagicAndEffects.MagicEffects
         {
             forcedRoundsRemaining = 0;
             ResignAsIncumbent();
-            DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(60);
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance == null || !DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance("VampirismCure", 60))
+                DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(60);
             GameManager.Instance.PlayerEntity.PreviousVampireClan = vampireClan;
             GameManager.Instance.PlayerEntity.DeleteTaggedSpells(PlayerEntity.vampireSpellTag);
             EndVampireQuests();

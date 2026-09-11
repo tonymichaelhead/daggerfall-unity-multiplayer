@@ -484,7 +484,8 @@ namespace DaggerfallWorkshop.Game.MagicAndEffects.MagicEffects
             // End effect and cleanup
             forcedRoundsRemaining = 0;
             ResignAsIncumbent();
-            DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(60);
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance == null || !DFMP.Hooks.DaggerfallHooks.TryHandleTimeAdvance("LycanthropyCure", 60))
+                DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(60);
             GameManager.Instance.PlayerEntity.DeleteTaggedSpells(PlayerEntity.lycanthropySpellTag);
             EndLycanthropyQuests();
         }
