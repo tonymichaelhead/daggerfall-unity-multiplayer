@@ -3,6 +3,9 @@ using DaggerfallConnect.Arena2;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;
+using DaggerfallWorkshop.Game.Entity;
+using DaggerfallWorkshop.Game.MagicAndEffects;
+using DaggerfallWorkshop.Game.MagicAndEffects.MagicEffects;
 using DaggerfallWorkshop.Game.Serialization;
 using DaggerfallWorkshop.Game.Utility;
 using DFMP.Hooks;
@@ -480,6 +483,9 @@ namespace DFMP.Runtime
                         return;
                 }
 
+                if (transitionState.Assignment.Kind == DFMPTransitionKind.VampirismTransformation && !ApplyVampirismTransformation())
+                    return;
+
                 transitionApplied = true;
                 return;
             }
@@ -499,6 +505,21 @@ namespace DFMP.Runtime
             NetworkClient.Send(acknowledgement);
             SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Transition] Client acknowledged assigned transition: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");
+        }
+
+        bool ApplyVampirismTransformation()
+        {
+            if (!GameManager.HasInstance || GameObject.FindGameObjectWithTag("Player") == null)
+                return false;
+
+            VampirismInfection infection = (VampirismInfection)GameManager.Instance.PlayerEffectManager.FindIncumbentEffect<VampirismInfection>();
+            VampireClans clan = infection != null ? infection.InfectionVampireClan : VampireClans.Lyrezi;
+            GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
+            GameManager.Instance.PlayerEntity.AssignPlayerVampireSpells(clan);
+            EntityEffectBundle bundle = GameManager.Instance.PlayerEffectManager.CreateVampirismCurse();
+            GameManager.Instance.PlayerEffectManager.AssignBundle(bundle, AssignBundleFlags.BypassSavingThrows);
+            Debug.Log($"[DFMP Transition] Applied vampirism transformation after assigned relocation: clan={clan}.");
+            return true;
         }
 
         void UpdateDoorTransitionAssignment(StreamingWorld streamingWorld)

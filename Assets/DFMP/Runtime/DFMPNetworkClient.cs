@@ -135,6 +135,12 @@ namespace DFMP.Runtime
                 NetworkClient.Send(new DFMPRestRequest { RestModeName = restModeName });
         }
 
+        public static void RequestVampirismTransformation()
+        {
+            if (NetworkClient.isConnected && NetworkClient.ready)
+                NetworkClient.Send(new DFMPVampirismTransformationRequest());
+        }
+
         static void OnRestResponseReceived(DFMPRestResponse message)
         {
             if (message.Accepted)
