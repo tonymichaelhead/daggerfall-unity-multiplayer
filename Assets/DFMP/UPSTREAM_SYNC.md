@@ -4,14 +4,25 @@ This document describes how to pull changes from upstream `Interkarma/daggerfall
 into DFMP. Follow it exactly; the ordering exists to keep the fork rebasable and to
 avoid force-pushing a branch that other contributors have cloned.
 
-## Policy: merge `master`, rebase `coop/hooks`
+## Policy: merge, never rebase
 
-| Branch | Strategy | Reason |
-|---|---|---|
-| `master` | **Merge** upstream in | Published branch. Rebasing rewrites every SHA, requires `git push --force`, and breaks every clone, open PR, and commit reference. A merge resolves conflicts once; a rebase replays them once per commit. |
-| `coop/hooks` | **Rebase** onto upstream | Small, isolated, additive commits by design. Rebasing is cheap here, and rebase pain is a deliberate smoke alarm: it means multiplayer logic has leaked into Layer 1. |
+`master` is published. Upstream is merged into it, never rebased onto it.
 
-Never rebase `master`. Never merge into `coop/hooks`.
+Rebasing rewrites every SHA, requires `git push --force`, and breaks every clone, open
+PR, and commit reference. It also replays conflicts once per commit instead of once
+total. A merge resolves each conflict a single time and pushes normally.
+
+Never rebase or force-push `master`.
+
+There is deliberately no separate branch for the Layer 1 hook edits. The complete hook
+patch against upstream is derivable at any time:
+
+```sh
+git diff upstream/master..master -- Assets/Scripts
+```
+
+That is strictly better than a long-lived branch: it is always accurate, costs nothing
+to maintain, and cannot drift. See the Layer 1 audit in step 9.
 
 ## One-time setup per clone
 
@@ -180,16 +191,24 @@ git branch -d integrate/upstream-YYYY-MM-DD
 If `--ff-only` fails, `master` moved while you were working. Merge the new `master`
 into your integration branch, re-verify, and try again.
 
-## Step 9 - Rebase the hooks branch
+## Step 9 - Re-audit Layer 1
+
+An upstream sync is the moment the hook layer is most likely to have grown. Measure it:
 
 ```sh
-git switch coop/hooks
-git rebase upstream/master
+# Complete Layer 1 footprint.
+git diff --stat --ignore-cr-at-eol upstream/master..master -- Assets/Scripts
+
+# Must print nothing. Layer 1 may never depend on a networking library.
+git grep -nE "using Mirror|NetworkBehaviour|NetworkServer|NetworkClient" -- Assets/Scripts
 ```
 
-Resolve, then re-run the verification in step 7. If this rebase is painful, treat it
-as a defect report: logic has leaked out of `Assets/DFMP/` and into Layer 1. Fix the
-leak rather than absorbing the pain again next sync.
+Compare the result against the baseline recorded in `HOOKS.md`. Growth that is not
+explained by a newly registered hook means multiplayer logic has leaked into Layer 1;
+move it back into `Assets/DFMP/` rather than absorbing it.
+
+If upstream restructured a method so a hook no longer fits cleanly, update the entry in
+`HOOKS.md` to match its new location.
 
 ## Cadence and version targeting
 

@@ -7,7 +7,26 @@ This document tracks all modifications made to upstream DFU files (Layer 1).
 1. **Additive only**: Never alter vanilla behavior when multiplayer is inactive or no listener is bound.
 2. **Ultra-lightweight**: Target $\le 5$ lines per hook site.
 3. **No networking dependencies**: NEVER `using Mirror`, `using FishNet`, etc. in `Assets/Scripts/**`.
-4. **Isolated commits**: Each hook or group of related hooks must be a clean commit on branch `coop/hooks`.
+4. **Registered and auditable**: Every hook site must appear in the table below. There is no separate hooks branch; the complete Layer 1 patch is derivable from `master` at any time (see Layer 1 Budget).
+
+---
+
+## Layer 1 Budget
+
+The hook layer is measured, not assumed. Run this before and after every upstream sync:
+
+```sh
+# Complete Layer 1 footprint.
+git diff --stat --ignore-cr-at-eol upstream/master..master -- Assets/Scripts
+
+# Must print nothing.
+git grep -nE "using Mirror|NetworkBehaviour|NetworkServer|NetworkClient" -- Assets/Scripts
+```
+
+Baseline as of 2026-09-12: **12 files, 58 insertions, 9 deletions, 0 networking references.**
+
+Growth not explained by a newly registered hook below means multiplayer logic has leaked
+into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
 
 ---
 
