@@ -37,6 +37,11 @@ namespace DFMP.Runtime
                     "Ask the DFMP server to apply bounded PvP damage to another player.",
                     "dfmp_damage_player <connectionId> <amount>",
                     DamagePlayer);
+                ConsoleCommandsDatabase.RegisterCommand(
+                    "dfmp_damage_self",
+                    "Ask the DFMP server to apply bounded local quest PvE damage to this player.",
+                    "dfmp_damage_self <amount>",
+                    DamageSelf);
                 registered = true;
             }
             catch (Exception ex)
@@ -116,6 +121,18 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Developer] Server accepted PvP damage request: target={response.TargetConnectionId}, amount={response.Amount}. Check the server combat log for application or policy rejection.");
             else
                 Debug.LogWarning($"[DFMP Developer] Server rejected PvP damage: target={response.TargetConnectionId}, amount={response.Amount}, reason={response.Reason}.");
+        }
+
+        static string DamageSelf(params string[] args)
+        {
+            int amount;
+            if (args == null || args.Length != 1 || !int.TryParse(args[0], out amount))
+                return "Usage: dfmp_damage_self <amount>";
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return "DFMP client is not connected and ready.";
+
+            NetworkClient.Send(new DFMPDeveloperDamageSelfRequest { Amount = amount });
+            return $"Requested local quest PvE damage: amount={amount}.";
         }
     }
 }

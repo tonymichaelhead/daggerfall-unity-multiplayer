@@ -320,6 +320,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPDeveloperInfectSelfRequest>(OnDeveloperInfectSelfRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperAdvanceTimeRequest>(OnDeveloperAdvanceTimeRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperDamagePlayerRequest>(OnDeveloperDamagePlayerRequest);
+            NetworkServer.RegisterHandler<DFMPDeveloperDamageSelfRequest>(OnDeveloperDamageSelfRequest);
             NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
             SpawnTimeState();
 
@@ -1348,6 +1349,62 @@ namespace DFMP.Runtime
             {
                 Accepted = true,
                 TargetConnectionId = request.TargetConnectionId,
+                Amount = request.Amount,
+                Reason = accepted ? string.Empty : "damage intent rejected"
+            });
+        }
+
+        private static void OnDeveloperDamageSelfRequest(NetworkConnectionToClient conn, DFMPDeveloperDamageSelfRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            int maximumAmount = Config != null && Config.Combat != null ? Config.Combat.MaximumDamagePerHit : 100;
+            DFMPDeveloperCommandRejectionReason commandReason = DFMPDeveloperCommandPolicy.GetDamageSelfRejectionReason(
+                new DFMPDeveloperCommandContext
+                {
+                    CommandsEnabled = Config != null && Config.Developer != null && Config.Developer.CommandsEnabled,
+                    HasSession = sessionState != null,
+                    SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed
+                },
+                request.Amount,
+                maximumAmount);
+
+            if (commandReason != DFMPDeveloperCommandRejectionReason.None)
+            {
+                conn.Send(new DFMPDeveloperDamagePlayerResponse
+                {
+                    Accepted = false,
+                    TargetConnectionId = conn.connectionId,
+                    Amount = request.Amount,
+                    Reason = commandReason.ToString()
+                });
+                return;
+            }
+
+            uint sequence;
+            if (!lastDamageSequences.TryGetValue(conn.connectionId, out sequence))
+                sequence = 0;
+            ulong requestId;
+            if (!lastDamageRequestIds.TryGetValue(conn.connectionId, out requestId))
+                requestId = 0;
+
+            bool accepted = TryApplyDamageIntent(conn, new DFMPDamageIntent
+            {
+                RequestId = requestId + 1,
+                Sequence = sequence + 1,
+                SourceKind = DFMPDamageSourceKind.LocalQuestPve,
+                VitalKind = DFMPVitalKind.Health,
+                TargetConnectionId = conn.connectionId,
+                Amount = request.Amount
+            });
+
+            conn.Send(new DFMPDeveloperDamagePlayerResponse
+            {
+                Accepted = accepted,
+                TargetConnectionId = conn.connectionId,
                 Amount = request.Amount,
                 Reason = accepted ? string.Empty : "damage intent rejected"
             });

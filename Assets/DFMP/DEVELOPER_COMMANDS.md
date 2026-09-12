@@ -62,6 +62,16 @@ dfmp_damage_player <connectionId> <amount>
 
 This sends a bounded player damage intent through the normal PvP validation and vital application chokepoint. The server derives the source from the requesting connection and still enforces PvP policy, same-world context, range, cooldown, rate limits, and target lifecycle. It is a deterministic PvP smoke-test action, not a replacement for native weapon hit detection or an administrator permission system.
 
+## `dfmp_damage_self`
+
+Run this in the connected DFMP client's DFU console while developer commands are enabled:
+
+```text
+dfmp_damage_self <amount>
+```
+
+This exercises the beta-trusted local quest PvE path. The server derives both source and target from the submitting connection, so the request can only damage its owner. It uses the same bounds, cooldown, rate-limit, persistence, replication, and death/respawn chokepoint as PvP. It does not represent a synchronized quest enemy; actual quest-enemy production remains client-local and future native hooks remain out of scope.
+
 The command is intentionally developer-only and bounded. It accepts only a target connection ID and damage amount for this smoke-test path. Future server actions should use the same validated service boundary:
 
 - R2 scripts call server actions rather than mutating player objects directly.

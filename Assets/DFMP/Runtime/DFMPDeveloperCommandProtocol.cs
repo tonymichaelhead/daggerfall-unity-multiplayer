@@ -38,6 +38,11 @@ namespace DFMP.Runtime
         public string Reason;
     }
 
+    public struct DFMPDeveloperDamageSelfRequest : NetworkMessage
+    {
+        public int Amount;
+    }
+
     public struct DFMPDeveloperCommandContext
     {
         public bool CommandsEnabled;
@@ -88,6 +93,20 @@ namespace DFMP.Runtime
                 return contextReason;
             if (targetConnectionId <= 0)
                 return DFMPDeveloperCommandRejectionReason.InvalidTarget;
+            if (amount <= 0 || amount > maximumAmount)
+                return DFMPDeveloperCommandRejectionReason.InvalidDamage;
+
+            return DFMPDeveloperCommandRejectionReason.None;
+        }
+
+        public static DFMPDeveloperCommandRejectionReason GetDamageSelfRejectionReason(
+            DFMPDeveloperCommandContext context,
+            int amount,
+            int maximumAmount)
+        {
+            DFMPDeveloperCommandRejectionReason contextReason = GetInfectSelfRejectionReason(context);
+            if (contextReason != DFMPDeveloperCommandRejectionReason.None)
+                return contextReason;
             if (amount <= 0 || amount > maximumAmount)
                 return DFMPDeveloperCommandRejectionReason.InvalidDamage;
 

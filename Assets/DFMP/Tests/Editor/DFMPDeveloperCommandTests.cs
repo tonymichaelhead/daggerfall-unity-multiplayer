@@ -87,6 +87,29 @@ namespace DFMP.Tests
                 }, 8, 10, 100));
         }
 
+        [Test]
+        public void DeveloperDamageSelf_RequiresEnabledReadySessionAndBounds()
+        {
+            DFMPDeveloperCommandContext context = new DFMPDeveloperCommandContext
+            {
+                CommandsEnabled = true,
+                HasSession = true,
+                SpawnConfirmed = true
+            };
+
+            Assert.AreEqual(DFMPDeveloperCommandRejectionReason.None,
+                DFMPDeveloperCommandPolicy.GetDamageSelfRejectionReason(context, 10, 100));
+            Assert.AreEqual(DFMPDeveloperCommandRejectionReason.InvalidDamage,
+                DFMPDeveloperCommandPolicy.GetDamageSelfRejectionReason(context, 101, 100));
+            Assert.AreEqual(DFMPDeveloperCommandRejectionReason.CommandsDisabled,
+                DFMPDeveloperCommandPolicy.GetDamageSelfRejectionReason(new DFMPDeveloperCommandContext
+                {
+                    CommandsEnabled = false,
+                    HasSession = true,
+                    SpawnConfirmed = true
+                }, 10, 100));
+        }
+
         [TestCase(false, true, true, DFMPDeveloperCommandRejectionReason.CommandsDisabled)]
         [TestCase(true, false, true, DFMPDeveloperCommandRejectionReason.MissingSession)]
         [TestCase(true, true, false, DFMPDeveloperCommandRejectionReason.SpawnNotConfirmed)]
