@@ -11,12 +11,12 @@
     "EnableBeginnerTutorial": false
   },
   "Combat": {
-  "PvpEnabled": true,
-  "MaximumDamagePerHit": 100,
-  "DamageCooldownSeconds": 0.1,
-  "DamageRateWindowSeconds": 1.0,
-  "MaximumDamageRequestsPerWindow": 10
-},
+    "PvpEnabled": true,
+    "MaximumDamagePerHit": 100,
+    "DamageCooldownSeconds": 0.1,
+    "DamageRateWindowSeconds": 1.0,
+    "MaximumDamageRequestsPerWindow": 10
+  },
   "Developer": {
     "CommandsEnabled": true
   },

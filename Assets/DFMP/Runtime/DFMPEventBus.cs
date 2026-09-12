@@ -62,6 +62,35 @@ namespace DFMP.Runtime
         public string Reason;
     }
 
+    public class DFMPPlayerDamagedEvent
+    {
+        public int SourceConnectionId;
+        public int TargetConnectionId;
+        public DFMPDamageSourceKind SourceKind;
+        public DFMPVitalKind VitalKind;
+        public int RequestedAmount;
+        public int AppliedAmount;
+        public int CurrentValue;
+        public int MaximumValue;
+    }
+
+    public class DFMPPlayerDiedEvent
+    {
+        public int ConnectionId;
+        public DFMPDamageSourceKind SourceKind;
+        public DFMPVitalKind VitalKind;
+        public int AppliedAmount;
+        public DFMPPlayerSessionState SessionState;
+    }
+
+    public class DFMPPlayerRespawnedEvent
+    {
+        public int ConnectionId;
+        public DFMPPlayerSessionState SessionState;
+        public DFMPWorldContextKey Context;
+        public string Reason;
+    }
+
     public sealed class DFMPEventBus
     {
         public static DFMPEventBus Instance { get; } = new DFMPEventBus();
@@ -73,6 +102,9 @@ namespace DFMP.Runtime
         public event Action<DFMPPlayerWorldContextChangedEvent> PlayerWorldContextChanged;
         public event Action<DFMPLocationEnteredEvent> LocationEntered;
         public event Action<DFMPDungeonBlockEnteredEvent> DungeonBlockEntered;
+        public event Action<DFMPPlayerDamagedEvent> PlayerDamaged;
+        public event Action<DFMPPlayerDiedEvent> PlayerDied;
+        public event Action<DFMPPlayerRespawnedEvent> PlayerRespawned;
 
         public void PublishPlayerConnected(DFMPPlayerConnectedEvent e)
         {
@@ -140,6 +172,36 @@ namespace DFMP.Runtime
                 return;
 
             var handler = DungeonBlockEntered;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishPlayerDamaged(DFMPPlayerDamagedEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = PlayerDamaged;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishPlayerDied(DFMPPlayerDiedEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = PlayerDied;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishPlayerRespawned(DFMPPlayerRespawnedEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = PlayerRespawned;
             if (handler != null)
                 handler(e);
         }

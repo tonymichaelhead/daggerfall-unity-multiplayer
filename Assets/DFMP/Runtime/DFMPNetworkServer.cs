@@ -236,6 +236,14 @@ namespace DFMP.Runtime
                 vitalStates[connectionId] = CreateVitalState(joinDecision.CharacterRecord);
             }
 
+            DFMPEventBus.Instance.PublishPlayerRespawned(new DFMPPlayerRespawnedEvent
+            {
+                ConnectionId = connectionId,
+                SessionState = sessionState,
+                Context = context,
+                Reason = "disconnect-death-respawn"
+            });
+
             Debug.Log($"[DFMP Respawn] Finalized pending death respawn on disconnect: connectionId={connectionId}, anchor={context.LocationId ?? string.Empty}, world={position.WorldX}/{position.WorldZ}.");
             return true;
         }
@@ -823,6 +831,13 @@ namespace DFMP.Runtime
                     SendVitalSnapshot(conn, vitalStates[conn.connectionId], false);
                     CharacterStore.Save(deathJoinDecision.CharacterRecord);
                 }
+                DFMPEventBus.Instance.PublishPlayerRespawned(new DFMPPlayerRespawnedEvent
+                {
+                    ConnectionId = conn.connectionId,
+                    SessionState = sessionState,
+                    Context = DFMPSpawnProtocol.GetAssignedContext(assignmentState.Assignment),
+                    Reason = "death-respawn"
+                });
             }
             ConfirmSessionArrival(conn.connectionId, sessionState);
             Debug.Log($"[DFMP Transition] Server confirmed transition: connectionId={conn.connectionId}, assignmentId={acknowledgement.AssignmentId}, kind={assignmentState.Assignment.Kind}, world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
@@ -899,22 +914,42 @@ namespace DFMP.Runtime
                 return;
             }
 
+            DFMPJoinDecision joinDecision;
+            joinDecisions.TryGetValue(conn.connectionId, out joinDecision);
+            TryBeginDeathRespawn(
+                conn,
+                sessionState,
+                joinDecision,
+                DFMPDamageSourceKind.Environmental,
+                DFMPVitalKind.Health,
+                0);
+        }
+
+        static bool TryBeginDeathRespawn(
+            NetworkConnectionToClient conn,
+            DFMPPlayerSessionState sessionState,
+            DFMPJoinDecision joinDecision,
+            DFMPDamageSourceKind sourceKind,
+            DFMPVitalKind vitalKind,
+            int appliedAmount)
+        {
+            if (conn == null || sessionState == null || !sessionState.SpawnConfirmed)
+                return false;
+
             DFMPTransitionAssignmentState assignmentState;
             if (sessionState.IsDead || (transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState) && assignmentState != null && assignmentState.HasPendingAssignment))
             {
-                Debug.LogWarning($"[DFMP Respawn] Rejected death report: connectionId={conn.connectionId}, reason=death-or-transition-already-pending.");
-                return;
+                Debug.LogWarning($"[DFMP Respawn] Rejected death transition: connectionId={conn.connectionId}, reason=death-or-transition-already-pending.");
+                return false;
             }
 
-            DFMPJoinDecision joinDecision;
-            joinDecisions.TryGetValue(conn.connectionId, out joinDecision);
             DFMPWorldPosition position;
             DFMPWorldContextKey context;
             string startMarkerName;
             if (!TryResolveRespawnPosition(joinDecision, out position, out context, out startMarkerName))
             {
-                Debug.LogWarning($"[DFMP Respawn] Rejected death report: connectionId={conn.connectionId}, reason=missing-respawn-position.");
-                return;
+                Debug.LogWarning($"[DFMP Respawn] Rejected death transition: connectionId={conn.connectionId}, reason=missing-respawn-position.");
+                return false;
             }
 
             sessionState.SetDead(true);
@@ -922,10 +957,19 @@ namespace DFMP.Runtime
             {
                 sessionState.SetDead(false);
                 Debug.LogWarning($"[DFMP Respawn] Failed to send death respawn assignment: connectionId={conn.connectionId}.");
-                return;
+                return false;
             }
 
-            Debug.Log($"[DFMP Respawn] Accepted death report: connectionId={conn.connectionId}, anchor={context.LocationId ?? string.Empty}, world={position.WorldX}/{position.WorldZ}.");
+            DFMPEventBus.Instance.PublishPlayerDied(new DFMPPlayerDiedEvent
+            {
+                ConnectionId = conn.connectionId,
+                SourceKind = sourceKind,
+                VitalKind = vitalKind,
+                AppliedAmount = appliedAmount,
+                SessionState = sessionState
+            });
+            Debug.Log($"[DFMP Respawn] Accepted death transition: connectionId={conn.connectionId}, anchor={context.LocationId ?? string.Empty}, world={position.WorldX}/{position.WorldZ}.");
+            return true;
         }
 
         static bool TryResolveRespawnPosition(DFMPJoinDecision joinDecision, out DFMPWorldPosition position, out DFMPWorldContextKey context, out string startMarkerName)
@@ -1092,10 +1136,15 @@ namespace DFMP.Runtime
 
         private static void OnDamageIntent(NetworkConnectionToClient conn, DFMPDamageIntent intent)
         {
+            TryApplyDamageIntent(conn, intent);
+        }
+
+        private static bool TryApplyDamageIntent(NetworkConnectionToClient conn, DFMPDamageIntent intent)
+        {
             if (conn == null || !DFMPCombatProtocol.IsValidDamageIntent(intent))
             {
                 Debug.LogWarning($"[DFMP Combat] Rejected malformed damage intent: connectionId={(conn != null ? conn.connectionId : -1)}.");
-                return;
+            return false;
             }
 
             DFMPPlayerSessionState sourceSession;
@@ -1106,7 +1155,7 @@ namespace DFMP.Runtime
                 !vitalStates.TryGetValue(intent.TargetConnectionId, out targetVitals))
             {
                 Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, reason=missing-session.");
-                return;
+                return false;
             }
 
             uint lastSequence;
@@ -1117,7 +1166,7 @@ namespace DFMP.Runtime
             if (lastDamageRequestIds.TryGetValue(conn.connectionId, out lastRequestId) && lastRequestId == intent.RequestId)
             {
                 Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, requestId={intent.RequestId}, reason=duplicate-request.");
-                return;
+                return false;
             }
 
             DFMPWorldContextKey sourceContext;
@@ -1157,14 +1206,14 @@ namespace DFMP.Runtime
             if (!DFMPDamagePolicy.IsAccepted(rejectionReason))
             {
                 Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, requestId={intent.RequestId}, reason={rejectionReason}.");
-                return;
+                return false;
             }
 
             DFMPVitalApplicationResult applicationResult = targetVitals.ApplyDamage(intent.VitalKind, intent.Amount);
             if (!applicationResult.Accepted)
             {
                 Debug.LogWarning($"[DFMP Combat] Rejected damage application: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, reason={applicationResult.RejectionReason}.");
-                return;
+                return false;
             }
 
             vitalStates[intent.TargetConnectionId] = targetVitals;
@@ -1179,11 +1228,32 @@ namespace DFMP.Runtime
                 CharacterStore.Save(joinDecision.CharacterRecord);
             }
 
+            DFMPEventBus.Instance.PublishPlayerDamaged(new DFMPPlayerDamagedEvent
+            {
+                SourceConnectionId = conn.connectionId,
+                TargetConnectionId = intent.TargetConnectionId,
+                SourceKind = intent.SourceKind,
+                VitalKind = intent.VitalKind,
+                RequestedAmount = intent.Amount,
+                AppliedAmount = applicationResult.AppliedAmount,
+                CurrentValue = applicationResult.CurrentValue,
+                MaximumValue = applicationResult.MaximumValue
+            });
+
+            if (applicationResult.Killed)
+            {
+                joinDecisions.TryGetValue(intent.TargetConnectionId, out joinDecision);
+                NetworkConnectionToClient deathConnection;
+                if (NetworkServer.connections.TryGetValue(intent.TargetConnectionId, out deathConnection))
+                    TryBeginDeathRespawn(deathConnection, targetSession, joinDecision, intent.SourceKind, intent.VitalKind, applicationResult.AppliedAmount);
+            }
+
             NetworkConnectionToClient targetConnection;
             if (NetworkServer.connections.TryGetValue(intent.TargetConnectionId, out targetConnection))
                 SendVitalSnapshot(targetConnection, targetVitals, targetSession.IsDead);
 
             Debug.Log($"[DFMP Combat] Applied damage: source={conn.connectionId}, target={intent.TargetConnectionId}, vital={intent.VitalKind}, requested={intent.Amount}, applied={applicationResult.AppliedAmount}, current={applicationResult.CurrentValue}, killed={applicationResult.Killed}.");
+            return true;
         }
 
         static bool IsWithinPvpRange(DFMPPlayerSessionState sourceSession, DFMPPlayerSessionState targetSession)
@@ -1264,7 +1334,7 @@ namespace DFMP.Runtime
             if (!lastDamageRequestIds.TryGetValue(conn.connectionId, out requestId))
                 requestId = 0;
 
-            OnDamageIntent(conn, new DFMPDamageIntent
+            bool accepted = TryApplyDamageIntent(conn, new DFMPDamageIntent
             {
                 RequestId = requestId + 1,
                 Sequence = sequence + 1,
@@ -1279,7 +1349,7 @@ namespace DFMP.Runtime
                 Accepted = true,
                 TargetConnectionId = request.TargetConnectionId,
                 Amount = request.Amount,
-                Reason = string.Empty
+                Reason = accepted ? string.Empty : "damage intent rejected"
             });
         }
 

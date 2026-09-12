@@ -139,5 +139,77 @@ namespace DFMP.Tests
             Assert.AreEqual(1.0f, config.Combat.DamageRateWindowSeconds);
             Assert.AreEqual(10, config.Combat.MaximumDamageRequestsPerWindow);
         }
+
+        [Test]
+        public void VitalApplication_LethalDamageProducesDamageThenDeathData()
+        {
+            var state = new DFMPVitalState { Health = 5, MaxHealth = 20 };
+
+            DFMPVitalApplicationResult result = state.ApplyDamage(DFMPVitalKind.Health, 5);
+
+            Assert.IsTrue(result.Accepted);
+            Assert.AreEqual(5, result.AppliedAmount);
+            Assert.AreEqual(0, result.CurrentValue);
+            Assert.IsTrue(result.Killed);
+        }
+
+        [Test]
+        public void EventBus_PublishesM7CombatLifecycleEvents()
+        {
+            int damagedCount = 0;
+            int diedCount = 0;
+            int respawnedCount = 0;
+            DFMPPlayerDamagedEvent damaged = null;
+            DFMPPlayerDiedEvent died = null;
+            DFMPPlayerRespawnedEvent respawned = null;
+
+            System.Action<DFMPPlayerDamagedEvent> damagedHandler = value => { damagedCount++; damaged = value; };
+            System.Action<DFMPPlayerDiedEvent> diedHandler = value => { diedCount++; died = value; };
+            System.Action<DFMPPlayerRespawnedEvent> respawnedHandler = value => { respawnedCount++; respawned = value; };
+            DFMPEventBus.Instance.PlayerDamaged += damagedHandler;
+            DFMPEventBus.Instance.PlayerDied += diedHandler;
+            DFMPEventBus.Instance.PlayerRespawned += respawnedHandler;
+
+            try
+            {
+                DFMPEventBus.Instance.PublishPlayerDamaged(new DFMPPlayerDamagedEvent
+                {
+                    SourceConnectionId = 1,
+                    TargetConnectionId = 2,
+                    SourceKind = DFMPDamageSourceKind.Player,
+                    VitalKind = DFMPVitalKind.Health,
+                    RequestedAmount = 5,
+                    AppliedAmount = 5,
+                    CurrentValue = 0,
+                    MaximumValue = 20
+                });
+                DFMPEventBus.Instance.PublishPlayerDied(new DFMPPlayerDiedEvent
+                {
+                    ConnectionId = 2,
+                    SourceKind = DFMPDamageSourceKind.Player,
+                    VitalKind = DFMPVitalKind.Health,
+                    AppliedAmount = 5
+                });
+                DFMPEventBus.Instance.PublishPlayerRespawned(new DFMPPlayerRespawnedEvent
+                {
+                    ConnectionId = 2,
+                    Reason = "death-respawn"
+                });
+
+                Assert.AreEqual(1, damagedCount);
+                Assert.AreEqual(1, diedCount);
+                Assert.AreEqual(1, respawnedCount);
+                Assert.AreEqual(2, damaged.TargetConnectionId);
+                Assert.AreEqual(0, damaged.CurrentValue);
+                Assert.AreEqual(2, died.ConnectionId);
+                Assert.AreEqual("death-respawn", respawned.Reason);
+            }
+            finally
+            {
+                DFMPEventBus.Instance.PlayerDamaged -= damagedHandler;
+                DFMPEventBus.Instance.PlayerDied -= diedHandler;
+                DFMPEventBus.Instance.PlayerRespawned -= respawnedHandler;
+            }
+        }
     }
 }
