@@ -1,0 +1,119 @@
+# DFMP repository line-ending policy.
+#
+# Everything Git detects as text is stored in the index AND checked out with LF
+# on every platform, regardless of a contributor's core.autocrlf / core.eol
+# settings. This is what makes the policy durable for an open-source project:
+# Git for Windows ships with core.autocrlf=true, so without this file every
+# Windows contributor silently reintroduces CRLF.
+#
+# Consequence: CRLF can no longer enter the index. `git add` strips CR via the
+# clean filter, so `git diff --check` will stop reporting carriage returns as
+# "trailing whitespace", and tools that write CRLF on Windows become harmless.
+#
+# When rebasing on upstream DFU, set `git config merge.renormalize true` so that
+# line-ending-only differences never produce conflicts.
+* text=auto eol=lf
+
+# --- Unity text assets -------------------------------------------------------
+# Unity's YAML importer rejects stray CR and a missing final newline with
+# "Parser Failure at line N: Expect ':' between key and value within mapping".
+#
+# Unity itself writes trailing spaces into .meta files ("userData: ",
+# "assetBundleName: "). whitespace=-trailing-space stops `git diff --check` from
+# reporting them, so any warning it does emit is a real one worth acting on.
+*.meta               text eol=lf whitespace=-trailing-space
+*.asmdef             text eol=lf
+*.asmref             text eol=lf
+*.unity              text eol=lf
+*.prefab             text eol=lf
+*.asset              text eol=lf
+*.mat                text eol=lf
+*.anim               text eol=lf
+*.controller         text eol=lf
+*.overrideController text eol=lf
+*.physicMaterial     text eol=lf
+*.playable           text eol=lf
+*.mixer              text eol=lf
+*.shadervariants     text eol=lf
+*.spriteatlas        text eol=lf
+*.terrainlayer       text eol=lf
+*.signal             text eol=lf
+*.guiskin            text eol=lf
+*.flare              text eol=lf
+*.fontsettings       text eol=lf
+*.giparams           text eol=lf
+*.lighting           text eol=lf
+*.cubemap            text eol=lf
+*.brush              text eol=lf
+*.preset             text eol=lf
+*.uss                text eol=lf
+*.uxml               text eol=lf
+
+# --- Source and documentation ------------------------------------------------
+*.cs                 text eol=lf diff=csharp
+*.shader             text eol=lf
+*.cginc              text eol=lf
+*.hlsl               text eol=lf
+*.compute            text eol=lf
+*.md                 text eol=lf
+*.json               text eol=lf
+*.txt                text eol=lf
+*.xml                text eol=lf
+*.yml                text eol=lf
+*.yaml               text eol=lf
+*.csproj             text eol=lf
+*.sln                text eol=lf
+
+# --- Windows batch files need CRLF to execute reliably -----------------------
+*.bat                text eol=crlf
+*.cmd                text eol=crlf
+
+# Upstream DFU quest scripts contain significant/legacy trailing spaces.
+Assets/StreamingAssets/Quests/*.txt         text eol=lf whitespace=-trailing-space
+Assets/StreamingAssets/QuestPacks/**/*.txt  text eol=lf whitespace=-trailing-space
+
+# --- Binaries ----------------------------------------------------------------
+*.dll                binary
+*.so                 binary
+*.dylib              binary
+*.exe                binary
+*.pdb                binary
+*.mdb                binary
+*.a                  binary
+*.bytes              binary
+*.unitypackage       binary
+*.png                binary
+*.jpg                binary
+*.jpeg               binary
+*.gif                binary
+*.bmp                binary
+*.tga                binary
+*.tif                binary
+*.tiff               binary
+*.psd                binary
+*.ico                binary
+*.cur                binary
+*.exr                binary
+*.hdr                binary
+*.dds                binary
+*.ttf                binary
+*.otf                binary
+*.fbx                binary
+*.obj                binary
+*.blend              binary
+*.3ds                binary
+*.ma                 binary
+*.mb                 binary
+*.wav                binary
+*.mp3                binary
+*.ogg                binary
+*.aif                binary
+*.aiff               binary
+*.mp4                binary
+*.mov                binary
+*.webm               binary
+*.zip                binary
+*.7z                 binary
+*.gz                 binary
+*.rar                binary
+*.pdf                binary

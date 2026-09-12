@@ -1,4 +1,13 @@
 {
+    // Line endings: the repository is LF-only. .gitattributes enforces this at
+    // the Git layer; these settings stop the editor from writing CRLF in the
+    // first place. Unity's .meta YAML parser also requires a final newline.
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "[markdown]": {
+        "files.trimTrailingWhitespace": false
+    },
     // File exclusions created by Unity
     "files.exclude": {
         "**/.DS_Store": true,
