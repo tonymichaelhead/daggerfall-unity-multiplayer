@@ -51,6 +51,7 @@ into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
 | DFMP-STARTUP-004 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `Setup()` startup-stage selection | When DFMP forces the startup menu and the game-data path is valid, open the options/Join Server page instead of the first-time game-folder page. | 2026-09-09 |
 | DFMP-STARTUP-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | End of `ShowOptionsPanel()` | Allow DFMP to relabel and resize the launcher's confirm button ("Play" -> "Join Server"). | 2026-09-09 |
 | DFMP-STARTUP-003 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `ShowNextStage()`, `SetupStages.LaunchGame` case | Allow DFMP to consume the launch action and open the server list instead of loading the single-player game scene. | 2026-09-09 |
+| M7-PVP-HIT-001 | `Assets/Scripts/Game/WeaponManager.cs` | `WeaponDamage()` before vanilla entity damage resolution | Allow DFMP to consume a native player weapon hit against a remote-player collider and submit authoritative damage without changing vanilla single-player behavior. | 2026-09-12 |
 
 ---
 

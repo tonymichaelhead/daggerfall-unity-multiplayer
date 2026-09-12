@@ -124,6 +124,16 @@ namespace DFMP.Runtime
         }
     }
 
+    public class DFMPRemotePlayerHitTarget : MonoBehaviour
+    {
+        public int ConnectionId { get; private set; }
+
+        public void Initialize(int connectionId)
+        {
+            ConnectionId = connectionId;
+        }
+    }
+
     public class DFMPRemotePlayerPresentationController : MonoBehaviour
     {
         static DFMPRemotePlayerPresentationController instance;
@@ -214,6 +224,11 @@ namespace DFMP.Runtime
 
             proxy = new GameObject($"DFMP_RemotePlayer_{connectionId}");
             proxy.name = $"DFMP_RemotePlayer_{connectionId}";
+            proxy.AddComponent<DFMPRemotePlayerHitTarget>().Initialize(connectionId);
+            var collider = proxy.AddComponent<CapsuleCollider>();
+            collider.center = new Vector3(0f, 0.9f, 0f);
+            collider.radius = 0.35f;
+            collider.height = 1.8f;
             CreateDaggerfallAvatar(proxy.transform);
             CreateLabel(proxy.transform, connectionId);
             proxy.SetActive(false);

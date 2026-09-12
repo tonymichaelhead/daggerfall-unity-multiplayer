@@ -308,6 +308,7 @@ Status: Planned.
 - **Client-local quest PvE exception.** A client may report damage from its own local quest enemy only against its own character. The server cannot verify that source entity in Phase 1, so this is an explicit beta trust exception, but the normal damage chokepoint still enforces numeric bounds, rate limits, source-session ownership, and an owner-only target. Local quest enemies can never damage another player.
 - PvP is a server configuration flag. When disabled, the server rejects player-versus-player damage at the same chokepoint.
 - Event bus raises `PlayerDamaged`, `PlayerDied`, and `PlayerRespawned`.
+- **Authoritative vital restoration is not damage.** Applying a persisted join snapshot or a server respawn snapshot must preserve the stored vital values without triggering DFU damage flash, pain audio, or other damage presentation. Only an accepted damage application may produce damage feedback.
 
 #### M7 Implementation Order
 
@@ -321,6 +322,7 @@ Verification:
 
 - EditMode tests for damage validation, the owner-only local quest PvE path, PvP policy, death and respawn lifecycle, and vitals replication.
 - Two-client graphical smoke test first proves PvP damage with PvP enabled and disabled, then covers the owner-only local quest PvE exception. Server-owned dungeon enemy combat is verified separately in M8.
+- Reconnect and respawn smoke coverage confirms that persisted low health restores without a damage-like visual or audio effect, while accepted damage still produces normal feedback.
 
 ### M8: Server-Owned Dungeon Enemies
 

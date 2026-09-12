@@ -18,6 +18,7 @@ namespace DFMP.Hooks
         public static Func<string, int, bool> TryHandleTimeAdvance;
         public static Func<bool> TryHandleVampirismTransformation;
         public static Func<bool> TryHandlePlayerDeath;
+        public static Func<object, object, object, bool> TryHandlePlayerWeaponHit;
         public static Func<object, object, object, bool, bool, bool> TryHandleBuildingInteriorTransition;
         public static Func<object, bool, bool> TryHandleBuildingExteriorTransition;
         public static Func<object, object, object, object, bool, bool> TryHandleDungeonInteriorTransition;

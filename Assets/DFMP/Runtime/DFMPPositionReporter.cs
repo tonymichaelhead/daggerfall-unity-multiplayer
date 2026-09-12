@@ -17,8 +17,8 @@ namespace DFMP.Runtime
         float nextChangeReportTime;
         int lastContextSignature;
         int lastInventorySignature;
-        ulong nextDamageRequestId = 1;
-        uint nextDamageSequence = 1;
+        static ulong nextDamageRequestId = 1;
+        static uint nextDamageSequence = 1;
         WeaponStates lastWeaponState = WeaponStates.Idle;
         bool wasCastingSpell;
 
@@ -30,6 +30,7 @@ namespace DFMP.Runtime
             GameObject reporterGo = new GameObject("DFMP_PositionReporter");
             Object.DontDestroyOnLoad(reporterGo);
             instance = reporterGo.AddComponent<DFMPPositionReporter>();
+            DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = TryHandlePlayerWeaponHit;
         }
 
         public static void Reset()
@@ -37,6 +38,9 @@ namespace DFMP.Runtime
             if (instance != null)
                 Destroy(instance.gameObject);
 
+            DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = null;
+            nextDamageRequestId = 1;
+            nextDamageSequence = 1;
             instance = null;
         }
 
@@ -110,7 +114,6 @@ namespace DFMP.Runtime
                         ? DFMPPlayerActionKind.RangedAttack
                         : DFMPPlayerActionKind.PrimaryAttack;
                     NetworkClient.Send(new DFMPPlayerActionReport { Kind = action });
-                    TrySendPlayerDamageIntent(streamingWorld);
                 }
 
                 lastWeaponState = weaponState;
@@ -123,40 +126,15 @@ namespace DFMP.Runtime
             wasCastingSpell = isCastingSpell;
         }
 
-        void TrySendPlayerDamageIntent(StreamingWorld streamingWorld)
+        static bool TryHandlePlayerWeaponHit(object hitTransformObject, object impactPositionObject, object directionObject)
         {
-            Camera mainCamera = Camera.main;
-            if (mainCamera == null || streamingWorld == null || streamingWorld.LocalPlayerGPS == null)
-                return;
+            Transform hitTransform = hitTransformObject as Transform;
+            if (hitTransform == null || !NetworkClient.isConnected || !NetworkClient.ready)
+                return false;
 
-            Vector3 attackerPosition = mainCamera.transform.position;
-            var sessions = FindObjectsOfType<DFMPPlayerSessionState>();
-            var candidates = new System.Collections.Generic.List<DFMPCombatTargetCandidate>();
-            for (int index = 0; index < sessions.Length; index++)
-            {
-                DFMPPlayerSessionState session = sessions[index];
-                if (!DFMPRemotePlayerPresentation.IsRemoteSession(session, DFMPSpawnAssignmentController.LocalConnectionId) || session.IsDead)
-                    continue;
-
-                Vector3 targetPosition = DFMPRemotePlayerPresentation.WorldToScenePosition(
-                    streamingWorld.LocalPlayerGPS,
-                    streamingWorld.LocalPlayerGPS.transform.position,
-                    session.WorldX,
-                    session.WorldZ);
-                candidates.Add(new DFMPCombatTargetCandidate
-                {
-                    ConnectionId = session.ConnectionId,
-                    ScenePosition = targetPosition
-                });
-            }
-
-            int targetConnectionId;
-            if (!DFMPCombatProtocol.TrySelectTarget(
-                attackerPosition,
-                mainCamera.transform.forward,
-                candidates.ToArray(),
-                out targetConnectionId))
-                return;
+            DFMPRemotePlayerHitTarget hitTarget = hitTransform.GetComponentInParent<DFMPRemotePlayerHitTarget>();
+            if (hitTarget == null || hitTarget.ConnectionId == DFMPSpawnAssignmentController.LocalConnectionId)
+                return false;
 
             NetworkClient.Send(new DFMPDamageIntent
             {
@@ -164,10 +142,11 @@ namespace DFMP.Runtime
                 Sequence = nextDamageSequence++,
                 SourceKind = DFMPDamageSourceKind.Player,
                 VitalKind = DFMPVitalKind.Health,
-                TargetConnectionId = targetConnectionId,
+                TargetConnectionId = hitTarget.ConnectionId,
                 Amount = 5
             });
-            Debug.Log($"[DFMP Combat] Submitted player attack intent: target={targetConnectionId}, amount=5.");
+            Debug.Log($"[DFMP Combat] Submitted weapon-hit intent: target={hitTarget.ConnectionId}, amount=5.");
+            return true;
         }
 
         void SendIdentityReport()

@@ -490,6 +490,10 @@ namespace DaggerfallWorkshop.Game
         // Returns true if hit an enemy entity
         public bool WeaponDamage(DaggerfallUnityItem strikingWeapon, bool arrowHit, bool arrowSummoned, Transform hitTransform, Vector3 impactPosition, Vector3 direction)
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit(hitTransform, impactPosition, direction))
+                return true;
+
             DaggerfallEntityBehaviour entityBehaviour = hitTransform.GetComponent<DaggerfallEntityBehaviour>();
             var entityMobileUnit = hitTransform.GetComponentInChildren<MobileUnit>();
             EnemyMotor enemyMotor = hitTransform.GetComponent<EnemyMotor>();
