@@ -52,12 +52,24 @@ dfmp_advance_time 4320
 
 This changes shared server time and replicates the result to clients. It does not call `RaiseTime` locally. For the vampirism test, use `dfmp_advance_time 1440` followed by `dfmp_advance_time 4320`; the infection videos still close according to their normal DFU lifecycle.
 
-## Design Boundary
+## `dfmp_damage_player`
 
-The command is intentionally self-targeted and developer-only. It does not accept a client-selected target, destination, time, or effect payload. Future server actions should use the same validated service boundary:
+Run this in the connected DFMP client's DFU console while developer commands are enabled:
+
+```text
+dfmp_damage_player <connectionId> <amount>
+```
+
+This sends a bounded player damage intent through the normal PvP validation and vital application chokepoint. The server derives the source from the requesting connection and still enforces PvP policy, same-world context, range, cooldown, rate limits, and target lifecycle. It is a deterministic PvP smoke-test action, not a replacement for native weapon hit detection or an administrator permission system.
+
+The command is intentionally developer-only and bounded. It accepts only a target connection ID and damage amount for this smoke-test path. Future server actions should use the same validated service boundary:
 
 - R2 scripts call server actions rather than mutating player objects directly.
 - R3 admin/GM commands send authorized server requests and use the same action implementation.
 - The future R3 GM menu should expose an `Advance World Time` action using this same server implementation, with a bounded amount input, role/permission checks, confirmation for large jumps, and audit logging.
 
 All future world-control actions should return structured rejection reasons and produce an audit event before they are exposed to broader roles.
+
+## Design Boundary
+
+Developer commands are server-authorized tools for repeatable testing, not an administrator permission system. They must remain disabled on servers that accept untrusted players.

@@ -1,3 +1,4 @@
+using DaggerfallWorkshop.Game;
 using kcp2k;
 using Mirror;
 using System;
@@ -74,6 +75,7 @@ namespace DFMP.Runtime
             NetworkClient.RegisterHandler<DFMPAdminKickNotice>(OnAdminKickNoticeReceived);
             NetworkClient.RegisterHandler<DFMPJoinResultMessage>(OnJoinResultReceived);
             NetworkClient.RegisterHandler<DFMPCharacterSnapshotMessage>(OnCharacterSnapshotReceived);
+            NetworkClient.RegisterHandler<DFMPVitalSnapshot>(OnVitalSnapshotReceived);
             NetworkClient.RegisterHandler<DFMPRestResponse>(OnRestResponseReceived);
             DFMPPositionReporter.EnsureInstance();
             DFMPRemotePlayerPresentationController.EnsureInstance();
@@ -136,6 +138,16 @@ namespace DFMP.Runtime
                 NetworkClient.Send(new DFMPRestRequest { RestModeName = restModeName });
         }
 
+        public static void RequestPlayerDamage(int targetConnectionId, int amount)
+        {
+            if (NetworkClient.isConnected && NetworkClient.ready)
+                NetworkClient.Send(new DFMPDeveloperDamagePlayerRequest
+                {
+                    TargetConnectionId = targetConnectionId,
+                    Amount = amount
+                });
+        }
+
         public static void RequestVampirismTransformation()
         {
             if (NetworkClient.isConnected && NetworkClient.ready)
@@ -190,6 +202,29 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Join] Received inventory snapshot: bytes={message.InventoryJson.Length}.");
                 DFMPClientJoinFlowController.Instance.ApplyCharacterSnapshot(message);
             }
+        }
+
+        static void OnVitalSnapshotReceived(DFMPVitalSnapshot message)
+        {
+            if (!DFMPCombatProtocol.IsValidVitalSnapshot(message) ||
+                message.ConnectionId != DFMPSpawnAssignmentController.LocalConnectionId)
+            {
+                Debug.LogWarning("[DFMP Combat] Rejected invalid or non-owner vital snapshot.");
+                return;
+            }
+
+            if (!GameManager.HasInstance || GameObject.FindGameObjectWithTag("Player") == null)
+            {
+                Debug.LogWarning("[DFMP Combat] Cannot apply vital snapshot because the local player is unavailable.");
+                return;
+            }
+
+            var playerEntity = GameManager.Instance.PlayerEntity;
+            playerEntity.MaxHealth = message.MaxHealth;
+            playerEntity.CurrentHealth = message.Health;
+            playerEntity.CurrentMagicka = message.SpellPoints;
+            playerEntity.CurrentFatigue = message.Fatigue;
+            Debug.Log($"[DFMP Combat] Applied authoritative vital snapshot: health={message.Health}/{message.MaxHealth}, fatigue={message.Fatigue}/{message.MaxFatigue}, spellPoints={message.SpellPoints}/{message.MaxSpellPoints}, dead={message.IsDead}.");
         }
 
         static string GetDefaultAccountId()

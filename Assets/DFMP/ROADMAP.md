@@ -309,10 +309,18 @@ Status: Planned.
 - PvP is a server configuration flag. When disabled, the server rejects player-versus-player damage at the same chokepoint.
 - Event bus raises `PlayerDamaged`, `PlayerDied`, and `PlayerRespawned`.
 
+#### M7 Implementation Order
+
+M7 is implemented as a sequence of vertical slices. The first end-to-end combat slice is player-versus-player combat because existing synchronized player sessions provide visible source and target actors, authoritative positions, world contexts, and a deterministic two-client smoke-test surface.
+
+1. **PvP vertical slice.** Complete client damage-intent production, server validation, PvP enabled/disabled policy, same-context and range checks, cooldown and rate limits, authoritative vital replication, persistence, death/respawn integration, and combat lifecycle events. All damage continues through the source-agnostic server chokepoint.
+2. **Local quest PvE exception.** Reuse the same chokepoint for client-local quest enemies. Restrict the target to the submitting player, retain bounded and rate-limited validation, and keep the source explicitly beta-trusted and non-shared.
+3. **Server-owned dungeon enemies.** Continue into M8 only after the PvP damage, vital replication, death/respawn, and policy-toggle paths are proven. Enemy entities, AI, attack timing, navigation, kill credit, and loot remain M8 concerns and must submit server-originated damage through the existing chokepoint rather than create a second combat path.
+
 Verification:
 
 - EditMode tests for damage validation, the owner-only local quest PvE path, PvP policy, death and respawn lifecycle, and vitals replication.
-- Two-client graphical smoke test for PvE damage, PvP enabled, and PvP disabled.
+- Two-client graphical smoke test first proves PvP damage with PvP enabled and disabled, then covers the owner-only local quest PvE exception. Server-owned dungeon enemy combat is verified separately in M8.
 
 ### M8: Server-Owned Dungeon Enemies
 

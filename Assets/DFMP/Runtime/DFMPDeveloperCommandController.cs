@@ -31,6 +31,12 @@ namespace DFMP.Runtime
                     "Ask the DFMP server to advance shared time by minutes.",
                     "dfmp_advance_time <minutes>",
                     AdvanceTime);
+                NetworkClient.RegisterHandler<DFMPDeveloperDamagePlayerResponse>(OnDamagePlayerResponse);
+                ConsoleCommandsDatabase.RegisterCommand(
+                    "dfmp_damage_player",
+                    "Ask the DFMP server to apply bounded PvP damage to another player.",
+                    "dfmp_damage_player <connectionId> <amount>",
+                    DamagePlayer);
                 registered = true;
             }
             catch (Exception ex)
@@ -85,6 +91,31 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Developer] Server advanced shared time: minutes={response.Minutes}.");
             else
                 Debug.LogWarning($"[DFMP Developer] Server rejected time advance: reason={response.Reason}.");
+        }
+
+        static string DamagePlayer(params string[] args)
+        {
+            int targetConnectionId;
+            int amount;
+            if (args == null || args.Length != 2 || !int.TryParse(args[0], out targetConnectionId) || !int.TryParse(args[1], out amount))
+                return "Usage: dfmp_damage_player <connectionId> <amount>";
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return "DFMP client is not connected and ready.";
+
+            NetworkClient.Send(new DFMPDeveloperDamagePlayerRequest
+            {
+                TargetConnectionId = targetConnectionId,
+                Amount = amount
+            });
+            return $"Requested PvP damage: target={targetConnectionId}, amount={amount}.";
+        }
+
+        static void OnDamagePlayerResponse(DFMPDeveloperDamagePlayerResponse response)
+        {
+            if (response.Accepted)
+                Debug.Log($"[DFMP Developer] Server accepted PvP damage request: target={response.TargetConnectionId}, amount={response.Amount}. Check the server combat log for application or policy rejection.");
+            else
+                Debug.LogWarning($"[DFMP Developer] Server rejected PvP damage: target={response.TargetConnectionId}, amount={response.Amount}, reason={response.Reason}.");
         }
     }
 }

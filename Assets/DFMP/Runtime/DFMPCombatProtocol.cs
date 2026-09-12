@@ -27,6 +27,8 @@ namespace DFMP.Runtime
 
     public static class DFMPCombatProtocol
     {
+        public const float MaximumPvpRange = 1024f;
+
         public static bool IsValidDamageIntent(DFMPDamageIntent intent)
         {
             return intent.RequestId != 0 &&

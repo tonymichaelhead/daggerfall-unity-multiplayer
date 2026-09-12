@@ -41,6 +41,9 @@ namespace DFMP.Runtime
         static readonly HashSet<int> initializedIdentityReportConnections = new HashSet<int>();
         static readonly Dictionary<int, uint> lastDamageSequences = new Dictionary<int, uint>();
         static readonly Dictionary<int, ulong> lastDamageRequestIds = new Dictionary<int, ulong>();
+        static readonly Dictionary<int, float> lastDamageTimes = new Dictionary<int, float>();
+        static readonly Dictionary<int, float> damageWindowStartTimes = new Dictionary<int, float>();
+        static readonly Dictionary<int, int> damageWindowCounts = new Dictionary<int, int>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly Dictionary<int, float> lastActionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
@@ -308,6 +311,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPAdminKickAcknowledgement>(OnAdminKickAcknowledgement);
             NetworkServer.RegisterHandler<DFMPDeveloperInfectSelfRequest>(OnDeveloperInfectSelfRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperAdvanceTimeRequest>(OnDeveloperAdvanceTimeRequest);
+            NetworkServer.RegisterHandler<DFMPDeveloperDamagePlayerRequest>(OnDeveloperDamagePlayerRequest);
             NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
             SpawnTimeState();
 
@@ -1141,9 +1145,9 @@ namespace DFMP.Runtime
                 TargetIsDead = targetSession.IsDead || targetVitals.Health <= 0,
                 HasPendingTransition = hasPendingTransition,
                 SameWorldContext = hasSourceContext && hasTargetContext && sourceContext.Equals(targetContext),
-                InRange = true,
+                InRange = hasSourceContext && hasTargetContext && IsWithinPvpRange(sourceSession, targetSession),
                 PvpEnabled = Config != null && Config.Combat != null && Config.Combat.PvpEnabled,
-                CooldownElapsed = true,
+                CooldownElapsed = IsDamageCooldownElapsed(conn.connectionId) && IsDamageRateAvailable(conn.connectionId),
                 AuthoritativeSourceConnectionId = conn.connectionId,
                 LastAcceptedSequence = lastSequence,
                 MaximumAmount = Config != null && Config.Combat != null ? Config.Combat.MaximumDamagePerHit : 100
@@ -1166,6 +1170,7 @@ namespace DFMP.Runtime
             vitalStates[intent.TargetConnectionId] = targetVitals;
             lastDamageSequences[conn.connectionId] = intent.Sequence;
             lastDamageRequestIds[conn.connectionId] = intent.RequestId;
+            RecordAcceptedDamage(conn.connectionId);
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(intent.TargetConnectionId, out joinDecision) && joinDecision.CharacterRecord != null)
@@ -1179,6 +1184,103 @@ namespace DFMP.Runtime
                 SendVitalSnapshot(targetConnection, targetVitals, targetSession.IsDead);
 
             Debug.Log($"[DFMP Combat] Applied damage: source={conn.connectionId}, target={intent.TargetConnectionId}, vital={intent.VitalKind}, requested={intent.Amount}, applied={applicationResult.AppliedAmount}, current={applicationResult.CurrentValue}, killed={applicationResult.Killed}.");
+        }
+
+        static bool IsWithinPvpRange(DFMPPlayerSessionState sourceSession, DFMPPlayerSessionState targetSession)
+        {
+            long deltaX = (long)sourceSession.WorldX - targetSession.WorldX;
+            long deltaZ = (long)sourceSession.WorldZ - targetSession.WorldZ;
+            long maximumRange = (long)DFMPCombatProtocol.MaximumPvpRange;
+            return deltaX * deltaX + deltaZ * deltaZ <= maximumRange * maximumRange;
+        }
+
+        static bool IsDamageCooldownElapsed(int connectionId)
+        {
+            float lastDamageTime;
+            float cooldown = Config != null && Config.Combat != null ? Config.Combat.DamageCooldownSeconds : 0.1f;
+            return !lastDamageTimes.TryGetValue(connectionId, out lastDamageTime) || Time.unscaledTime - lastDamageTime >= cooldown;
+        }
+
+        static bool IsDamageRateAvailable(int connectionId)
+        {
+            float windowStart;
+            int requestCount;
+            float window = Config != null && Config.Combat != null ? Config.Combat.DamageRateWindowSeconds : 1.0f;
+            int maximumRequests = Config != null && Config.Combat != null ? Config.Combat.MaximumDamageRequestsPerWindow : 10;
+            if (!damageWindowStartTimes.TryGetValue(connectionId, out windowStart) || Time.unscaledTime - windowStart >= window)
+                return true;
+
+            return !damageWindowCounts.TryGetValue(connectionId, out requestCount) || requestCount < maximumRequests;
+        }
+
+        static void RecordAcceptedDamage(int connectionId)
+        {
+            float windowStart;
+            if (!damageWindowStartTimes.TryGetValue(connectionId, out windowStart) || Time.unscaledTime - windowStart >= (Config != null && Config.Combat != null ? Config.Combat.DamageRateWindowSeconds : 1.0f))
+            {
+                damageWindowStartTimes[connectionId] = Time.unscaledTime;
+                damageWindowCounts[connectionId] = 0;
+            }
+
+            damageWindowCounts[connectionId]++;
+            lastDamageTimes[connectionId] = Time.unscaledTime;
+        }
+
+        private static void OnDeveloperDamagePlayerRequest(NetworkConnectionToClient conn, DFMPDeveloperDamagePlayerRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            int maximumAmount = Config != null && Config.Combat != null ? Config.Combat.MaximumDamagePerHit : 100;
+            DFMPDeveloperCommandRejectionReason commandReason = DFMPDeveloperCommandPolicy.GetDamagePlayerRejectionReason(
+                new DFMPDeveloperCommandContext
+                {
+                    CommandsEnabled = Config != null && Config.Developer != null && Config.Developer.CommandsEnabled,
+                    HasSession = sessionState != null,
+                    SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed
+                },
+                request.TargetConnectionId,
+                request.Amount,
+                maximumAmount);
+
+            if (commandReason != DFMPDeveloperCommandRejectionReason.None)
+            {
+                conn.Send(new DFMPDeveloperDamagePlayerResponse
+                {
+                    Accepted = false,
+                    TargetConnectionId = request.TargetConnectionId,
+                    Amount = request.Amount,
+                    Reason = commandReason.ToString()
+                });
+                return;
+            }
+
+            uint sequence;
+            if (!lastDamageSequences.TryGetValue(conn.connectionId, out sequence))
+                sequence = 0;
+            ulong requestId;
+            if (!lastDamageRequestIds.TryGetValue(conn.connectionId, out requestId))
+                requestId = 0;
+
+            OnDamageIntent(conn, new DFMPDamageIntent
+            {
+                RequestId = requestId + 1,
+                Sequence = sequence + 1,
+                SourceKind = DFMPDamageSourceKind.Player,
+                VitalKind = DFMPVitalKind.Health,
+                TargetConnectionId = request.TargetConnectionId,
+                Amount = request.Amount
+            });
+
+            conn.Send(new DFMPDeveloperDamagePlayerResponse
+            {
+                Accepted = true,
+                TargetConnectionId = request.TargetConnectionId,
+                Amount = request.Amount,
+                Reason = string.Empty
+            });
         }
 
         private static void OnPlayerIdentityReport(NetworkConnectionToClient conn, DFMPPlayerIdentityReport report)
@@ -1510,6 +1612,9 @@ namespace DFMP.Runtime
             initializedIdentityReportConnections.Remove(conn.connectionId);
             lastDamageSequences.Remove(conn.connectionId);
             lastDamageRequestIds.Remove(conn.connectionId);
+            lastDamageTimes.Remove(conn.connectionId);
+            damageWindowStartTimes.Remove(conn.connectionId);
+            damageWindowCounts.Remove(conn.connectionId);
             lastPositionReportTimes.Remove(conn.connectionId);
             lastActionReportTimes.Remove(conn.connectionId);
             activePositionReportConnections.Remove(conn.connectionId);
@@ -1546,6 +1651,9 @@ namespace DFMP.Runtime
             initializedIdentityReportConnections.Clear();
             lastDamageSequences.Clear();
             lastDamageRequestIds.Clear();
+            lastDamageTimes.Clear();
+            damageWindowStartTimes.Clear();
+            damageWindowCounts.Clear();
             lastPositionReportTimes.Clear();
             lastActionReportTimes.Clear();
             activePositionReportConnections.Clear();

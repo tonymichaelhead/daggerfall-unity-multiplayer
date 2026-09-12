@@ -24,6 +24,20 @@ namespace DFMP.Runtime
         public string Reason;
     }
 
+    public struct DFMPDeveloperDamagePlayerRequest : NetworkMessage
+    {
+        public int TargetConnectionId;
+        public int Amount;
+    }
+
+    public struct DFMPDeveloperDamagePlayerResponse : NetworkMessage
+    {
+        public bool Accepted;
+        public int TargetConnectionId;
+        public int Amount;
+        public string Reason;
+    }
+
     public struct DFMPDeveloperCommandContext
     {
         public bool CommandsEnabled;
@@ -39,7 +53,9 @@ namespace DFMP.Runtime
         SpawnNotConfirmed,
         InvalidMinutes,
         MinutesLimitExceeded,
-        TimeUnavailable
+        TimeUnavailable,
+        InvalidTarget,
+        InvalidDamage
     }
 
     public static class DFMPDeveloperCommandPolicy
@@ -59,6 +75,23 @@ namespace DFMP.Runtime
         public static bool IsAccepted(DFMPDeveloperCommandRejectionReason reason)
         {
             return reason == DFMPDeveloperCommandRejectionReason.None;
+        }
+
+        public static DFMPDeveloperCommandRejectionReason GetDamagePlayerRejectionReason(
+            DFMPDeveloperCommandContext context,
+            int targetConnectionId,
+            int amount,
+            int maximumAmount)
+        {
+            DFMPDeveloperCommandRejectionReason contextReason = GetInfectSelfRejectionReason(context);
+            if (contextReason != DFMPDeveloperCommandRejectionReason.None)
+                return contextReason;
+            if (targetConnectionId <= 0)
+                return DFMPDeveloperCommandRejectionReason.InvalidTarget;
+            if (amount <= 0 || amount > maximumAmount)
+                return DFMPDeveloperCommandRejectionReason.InvalidDamage;
+
+            return DFMPDeveloperCommandRejectionReason.None;
         }
 
         public static DFMPDeveloperCommandRejectionReason GetAdvanceTimeRejectionReason(
