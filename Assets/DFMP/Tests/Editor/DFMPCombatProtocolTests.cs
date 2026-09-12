@@ -1,5 +1,6 @@
 using DFMP.Runtime;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace DFMP.Tests
 {
@@ -20,6 +21,41 @@ namespace DFMP.Tests
             };
 
             Assert.IsTrue(DFMPCombatProtocol.IsValidDamageIntent(intent));
+        }
+
+        [Test]
+        public void TargetSelection_PicksClosestAlignedRemotePlayer()
+        {
+            int connectionId;
+            bool selected = DFMPCombatProtocol.TrySelectTarget(
+                Vector3.zero,
+                Vector3.forward,
+                new[]
+                {
+                    new DFMPCombatTargetCandidate { ConnectionId = 8, ScenePosition = new Vector3(0f, 0f, 8f) },
+                    new DFMPCombatTargetCandidate { ConnectionId = 9, ScenePosition = new Vector3(0f, 0f, 4f) }
+                },
+                out connectionId);
+
+            Assert.IsTrue(selected);
+            Assert.AreEqual(9, connectionId);
+        }
+
+        [Test]
+        public void TargetSelection_RejectsOutOfConeAndOutOfRangePlayers()
+        {
+            int connectionId;
+            Assert.IsFalse(DFMPCombatProtocol.TrySelectTarget(
+                Vector3.zero,
+                Vector3.forward,
+                new[] { new DFMPCombatTargetCandidate { ConnectionId = 8, ScenePosition = Vector3.right * 4f } },
+                out connectionId));
+
+            Assert.IsFalse(DFMPCombatProtocol.TrySelectTarget(
+                Vector3.zero,
+                Vector3.forward,
+                new[] { new DFMPCombatTargetCandidate { ConnectionId = 8, ScenePosition = Vector3.forward * 5f } },
+                out connectionId));
         }
 
         [Test]

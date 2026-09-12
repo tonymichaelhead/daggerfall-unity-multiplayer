@@ -17,6 +17,8 @@ namespace DFMP.Runtime
         float nextChangeReportTime;
         int lastContextSignature;
         int lastInventorySignature;
+        ulong nextDamageRequestId = 1;
+        uint nextDamageSequence = 1;
         WeaponStates lastWeaponState = WeaponStates.Idle;
         bool wasCastingSpell;
 
@@ -55,8 +57,6 @@ namespace DFMP.Runtime
             if (!IsLocalPlayerAvailable())
                 return;
 
-            ReportPlayerAction();
-
             if (Time.unscaledTime < nextReportTime)
                 return;
 
@@ -64,6 +64,7 @@ namespace DFMP.Runtime
             if (streamingWorld == null || !streamingWorld.IsReady || streamingWorld.LocalPlayerGPS == null)
                 return;
 
+            ReportPlayerAction(streamingWorld);
             nextReportTime = Time.unscaledTime + DFMPPositionProtocol.MinimumReportInterval;
             SendIdentityReport();
             SendWorldContextReport(streamingWorld);
@@ -94,7 +95,7 @@ namespace DFMP.Runtime
             return GameManager.HasInstance && GameObject.FindGameObjectWithTag("Player") != null;
         }
 
-        void ReportPlayerAction()
+        void ReportPlayerAction(StreamingWorld streamingWorld)
         {
             if (GameManager.Instance == null || GameManager.Instance.WeaponManager == null)
                 return;
@@ -109,6 +110,7 @@ namespace DFMP.Runtime
                         ? DFMPPlayerActionKind.RangedAttack
                         : DFMPPlayerActionKind.PrimaryAttack;
                     NetworkClient.Send(new DFMPPlayerActionReport { Kind = action });
+                    TrySendPlayerDamageIntent(streamingWorld);
                 }
 
                 lastWeaponState = weaponState;
@@ -119,6 +121,53 @@ namespace DFMP.Runtime
                 NetworkClient.Send(new DFMPPlayerActionReport { Kind = DFMPPlayerActionKind.Spell });
 
             wasCastingSpell = isCastingSpell;
+        }
+
+        void TrySendPlayerDamageIntent(StreamingWorld streamingWorld)
+        {
+            Camera mainCamera = Camera.main;
+            if (mainCamera == null || streamingWorld == null || streamingWorld.LocalPlayerGPS == null)
+                return;
+
+            Vector3 attackerPosition = mainCamera.transform.position;
+            var sessions = FindObjectsOfType<DFMPPlayerSessionState>();
+            var candidates = new System.Collections.Generic.List<DFMPCombatTargetCandidate>();
+            for (int index = 0; index < sessions.Length; index++)
+            {
+                DFMPPlayerSessionState session = sessions[index];
+                if (!DFMPRemotePlayerPresentation.IsRemoteSession(session, DFMPSpawnAssignmentController.LocalConnectionId) || session.IsDead)
+                    continue;
+
+                Vector3 targetPosition = DFMPRemotePlayerPresentation.WorldToScenePosition(
+                    streamingWorld.LocalPlayerGPS,
+                    streamingWorld.LocalPlayerGPS.transform.position,
+                    session.WorldX,
+                    session.WorldZ);
+                candidates.Add(new DFMPCombatTargetCandidate
+                {
+                    ConnectionId = session.ConnectionId,
+                    ScenePosition = targetPosition
+                });
+            }
+
+            int targetConnectionId;
+            if (!DFMPCombatProtocol.TrySelectTarget(
+                attackerPosition,
+                mainCamera.transform.forward,
+                candidates.ToArray(),
+                out targetConnectionId))
+                return;
+
+            NetworkClient.Send(new DFMPDamageIntent
+            {
+                RequestId = nextDamageRequestId++,
+                Sequence = nextDamageSequence++,
+                SourceKind = DFMPDamageSourceKind.Player,
+                VitalKind = DFMPVitalKind.Health,
+                TargetConnectionId = targetConnectionId,
+                Amount = 5
+            });
+            Debug.Log($"[DFMP Combat] Submitted player attack intent: target={targetConnectionId}, amount=5.");
         }
 
         void SendIdentityReport()

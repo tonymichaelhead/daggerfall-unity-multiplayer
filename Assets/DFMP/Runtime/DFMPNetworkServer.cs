@@ -1253,7 +1253,7 @@ namespace DFMP.Runtime
             if (NetworkServer.connections.TryGetValue(intent.TargetConnectionId, out targetConnection))
                 SendVitalSnapshot(targetConnection, targetVitals, targetSession.IsDead);
 
-            Debug.Log($"[DFMP Combat] Applied damage: source={conn.connectionId}, target={intent.TargetConnectionId}, vital={intent.VitalKind}, requested={intent.Amount}, applied={applicationResult.AppliedAmount}, current={applicationResult.CurrentValue}, killed={applicationResult.Killed}.");
+            Debug.Log($"[DFMP Combat] Applied damage: source={conn.connectionId}, target={intent.TargetConnectionId}, sourceKind={intent.SourceKind}, vital={intent.VitalKind}, requested={intent.Amount}, applied={applicationResult.AppliedAmount}, current={applicationResult.CurrentValue}, killed={applicationResult.Killed}.");
             return true;
         }
 

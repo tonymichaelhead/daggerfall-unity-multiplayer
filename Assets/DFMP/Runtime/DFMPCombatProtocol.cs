@@ -1,5 +1,6 @@
 using System;
 using Mirror;
+using UnityEngine;
 
 namespace DFMP.Runtime
 {
@@ -25,9 +26,49 @@ namespace DFMP.Runtime
         public bool IsDead;
     }
 
+    public struct DFMPCombatTargetCandidate
+    {
+        public int ConnectionId;
+        public Vector3 ScenePosition;
+    }
+
     public static class DFMPCombatProtocol
     {
-        public const float MaximumPvpRange = 1024f;
+        // DFU maps 40 native world units to one Unity scene unit. Keep the client
+        // target cone and server authority range aligned at roughly four scene units.
+        public const float MaximumPvpRange = 160f;
+        public const float MaximumClientTargetDistance = 4f;
+        public const float MinimumTargetAlignment = 0.5f;
+
+        public static bool TrySelectTarget(
+            Vector3 attackerPosition,
+            Vector3 aimDirection,
+            DFMPCombatTargetCandidate[] candidates,
+            out int connectionId)
+        {
+            connectionId = -1;
+            if (candidates == null || candidates.Length == 0 || aimDirection.sqrMagnitude < 0.0001f)
+                return false;
+
+            Vector3 normalizedAim = aimDirection.normalized;
+            float closestDistance = float.MaxValue;
+            for (int index = 0; index < candidates.Length; index++)
+            {
+                Vector3 offset = candidates[index].ScenePosition - attackerPosition;
+                float distance = offset.magnitude;
+                if (distance <= 0.0001f || distance > MaximumClientTargetDistance)
+                    continue;
+
+                float alignment = Vector3.Dot(normalizedAim, offset / distance);
+                if (alignment < MinimumTargetAlignment || distance >= closestDistance)
+                    continue;
+
+                closestDistance = distance;
+                connectionId = candidates[index].ConnectionId;
+            }
+
+            return connectionId >= 0;
+        }
 
         public static bool IsValidDamageIntent(DFMPDamageIntent intent)
         {

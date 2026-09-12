@@ -13,7 +13,7 @@
   "Combat": {
     "PvpEnabled": true,
     "MaximumDamagePerHit": 100,
-    "DamageCooldownSeconds": 3,
+    "DamageCooldownSeconds": 0.1,
     "DamageRateWindowSeconds": 1.0,
     "MaximumDamageRequestsPerWindow": 10
   },
