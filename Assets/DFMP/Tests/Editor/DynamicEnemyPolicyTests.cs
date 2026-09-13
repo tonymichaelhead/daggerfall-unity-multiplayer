@@ -195,6 +195,58 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRosterService_DelayedDespawn_CancelsOnReentryAndDespawnsOnTimer()
+        {
+            GameObject serviceObject = new GameObject("DFMP_DelayedDespawnTest");
+            GameObject sessionObject = new GameObject("DFMP_DelayedDespawnSession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "delayed-seed", DungeonRosterSize = 2, DespawnDelaySeconds = 10f });
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext();
+                DFMPWorldContextKey exterior = dungeon;
+                exterior.Kind = DFMPWorldContextKind.Exterior;
+                exterior.DungeonBlockName = string.Empty;
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(91, session, dungeon, "test"));
+                DFMPDynamicEnemyRecord[] expectedRoster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("delayed-seed"), dungeon, 2, out expectedRoster));
+                Assert.AreEqual(DFMPDynamicEnemyLifecycleState.SpawnedAlive, GetRecord(service, expectedRoster[0].Identity.EnemyId).LifecycleState);
+
+                // Vacate dungeon -> should schedule delayed despawn, not immediately despawn
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(91, session, exterior, "test"));
+                Assert.IsTrue(service.HasPendingDespawn(dungeon));
+                Assert.AreEqual(DFMPDynamicEnemyLifecycleState.SpawnedAlive, GetRecord(service, expectedRoster[0].Identity.EnemyId).LifecycleState);
+
+                // Re-enter before timer -> cancels pending despawn
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(91, session, dungeon, "test"));
+                Assert.IsFalse(service.HasPendingDespawn(dungeon));
+                Assert.AreEqual(DFMPDynamicEnemyLifecycleState.SpawnedAlive, GetRecord(service, expectedRoster[0].Identity.EnemyId).LifecycleState);
+
+                // Vacate again -> pending despawn scheduled
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(91, session, exterior, "test"));
+                Assert.IsTrue(service.HasPendingDespawn(dungeon));
+
+                // Process timers before elapsed -> still pending
+                service.ProcessPendingDespawns(Time.unscaledTime + 5f);
+                Assert.IsTrue(service.HasPendingDespawn(dungeon));
+                Assert.AreEqual(DFMPDynamicEnemyLifecycleState.SpawnedAlive, GetRecord(service, expectedRoster[0].Identity.EnemyId).LifecycleState);
+
+                // Process timers after elapsed -> despawns roster
+                service.ProcessPendingDespawns(Time.unscaledTime + 11f);
+                Assert.IsFalse(service.HasPendingDespawn(dungeon));
+                Assert.AreEqual(DFMPDynamicEnemyLifecycleState.DespawnedAlive, GetRecord(service, expectedRoster[0].Identity.EnemyId).LifecycleState);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonRoster_ScanSpawnMarkers_ExtractsScaledCoordinatesAndFailsClosedWhenEmpty()
         {
             var validFlat = new DFBlock.RdbObject

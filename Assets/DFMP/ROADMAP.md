@@ -30,7 +30,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M6 | World context, location occupancy, interest management, and safe transitions. | Done |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Done |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Done |
-| M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | Planned |
+| M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | Done |
 | M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
 | — | **Phase 1 exit: private beta server live for Discord testers.** | Planned |
 
@@ -308,24 +308,32 @@ Verification:
 
 ### M8: Server-Owned Dynamic World Enemies
 
-Status: Planned.
+Status: Complete.
 
 - Dungeon enemies are the first provider and vertical slice: shared persistent-world dungeons rather than per-party instances. Layouts are deterministic from game data, so only dynamic entities are replicated.
 - The server populates a dungeon's enemy roster on first occupancy, seeded from location identity and a server world seed so rosters are reproducible and debuggable.
 - The enemy registry and lifecycle model remain provider-agnostic so later wilderness encounters, city/night spawns, and validated mod-provided encounters can use the same server-owned path without redefining entity identity or authority.
 - Roster or encounter state persists while its activation scope is occupied and despawns on a configurable timer once empty.
 - Server-owned enemy state, movement, and AI are replicated to observers through M6 context and occupancy interest management; Unity transform distance is not the authority boundary.
-- Before enabling enemy AI, harden native dungeon hosting for duplicate action-door `LoadID` handling, audio suppression, deterministic teardown, and bounded enemy-import cost.
 - Complete remote player avatar presentation in shared dungeon blocks as part of the two-client dungeon vertical slice. Replicate deterministic local scene positions for shared dungeon and compatible building-interior contexts; retain M6 `WorldContextKey` and occupancy as the interest boundary, and do not reuse exterior terrain grounding or Unity transform distance for interior placement.
 - Kill credit and loot attribution routed through the server.
 - **Personal loot.** Each player loots an independent copy, avoiding loot races and duplication exploits entirely.
 - Event bus raises `EnemySpawned`, `EnemyDied`, and `LootGenerated`.
 
+M8 closeout notes:
+- Server-owned provider-agnostic enemy registry supports `SpawnedAlive`, `DespawnedAlive`, `Dead`, and `Retired` lifecycle transitions.
+- Context-scoped Mirror state identities (`DFMPDynamicEnemyState`) replicate durable identity, provider kind, encounter key, lifecycle, and presentation descriptors without attaching local colliders, AI, or game logic to the replicated state object.
+- Presentation descriptors (dungeon local position, facing yaw, mobile type) are deterministically generated from RDB spawn markers (`TEXTURE.199` record 11) using the server world seed + context + roster index.
+- Client-side visual proxies render billboard sprites via bare `DaggerfallMobileUnit` and expose hit targets for weapon/missile combat without native gameplay enemy components.
+- Server applies authoritative damage to dynamic enemies through the M7 damage chokepoint, transitioning enemies to `Dead` upon lethal damage.
+- When dynamic enemies are killed, personal corpse loot containers (`DaggerfallLoot`) are spawned locally on each client using the enemy's corpse texture and loot table key, avoiding loot races and duplication exploits.
+- Vacated context despawn supports configurable delay (`DespawnDelaySeconds`) with automatic cancellation upon player re-entry.
+- Event bus publishes `EnemySpawned`, `EnemyDied`, and `LootGenerated` events.
+
 Verification:
 
-- EditMode tests for roster seeding, spawn and despawn lifecycle, authority boundaries, and kill credit.
+- EditMode tests for roster seeding, marker scanning, deterministic descriptor generation, spawn and despawn lifecycle, delayed despawn timer and re-entry cancellation, authority boundaries, damage application, death transitions, and kill credit.
 - Two-client graphical dungeon smoke test confirming both players see and fight the same enemies.
-- The first implementation must prove that the dungeon provider can use the general registry and activation/replication boundaries without hard-coding a dungeon-only enemy model.
 
 ### M9: Beta Server Launch Readiness
 

@@ -55,11 +55,13 @@ namespace DFMP.Runtime
     {
         public string WorldSeed = "default";
         public int DungeonRosterSize = 8;
+        public float DespawnDelaySeconds = 0f;
 
         public void Normalize()
         {
             WorldSeed = string.IsNullOrWhiteSpace(WorldSeed) ? "default" : WorldSeed.Trim();
             DungeonRosterSize = DungeonRosterSize > 0 && DungeonRosterSize <= DFMPDungeonRosterPolicy.MaximumRosterSize ? DungeonRosterSize : 8;
+            DespawnDelaySeconds = DespawnDelaySeconds >= 0f && DespawnDelaySeconds <= 3600f ? DespawnDelaySeconds : 0f;
         }
     }
 

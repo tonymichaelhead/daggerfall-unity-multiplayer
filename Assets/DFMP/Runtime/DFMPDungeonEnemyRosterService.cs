@@ -9,8 +9,10 @@ namespace DFMP.Runtime
         readonly DFMPDynamicEnemyRegistry registry = new DFMPDynamicEnemyRegistry();
         readonly Dictionary<DFMPWorldContextKey, string[]> enemyIdsByContext = new Dictionary<DFMPWorldContextKey, string[]>();
         readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
+        readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         ulong serverWorldSeed;
         int dungeonRosterSize;
+        float despawnDelaySeconds;
         bool isSubscribed;
 
         public int RosterCount
@@ -24,12 +26,55 @@ namespace DFMP.Runtime
             config.Normalize();
             serverWorldSeed = DFMPDungeonRosterPolicy.CreateServerWorldSeed(config.WorldSeed);
             dungeonRosterSize = config.DungeonRosterSize;
+            despawnDelaySeconds = config.DespawnDelaySeconds;
             Subscribe();
         }
 
         void Awake()
         {
             Subscribe();
+        }
+
+        void Update()
+        {
+            if (pendingDespawnTimes.Count == 0)
+                return;
+
+            ProcessPendingDespawns(Time.unscaledTime);
+        }
+
+        public void ProcessPendingDespawns(float currentTime)
+        {
+            if (pendingDespawnTimes.Count == 0)
+                return;
+
+            List<DFMPWorldContextKey> readyContexts = null;
+            foreach (var kvp in pendingDespawnTimes)
+            {
+                if (currentTime >= kvp.Value)
+                {
+                    if (readyContexts == null)
+                        readyContexts = new List<DFMPWorldContextKey>();
+
+                    readyContexts.Add(kvp.Key);
+                }
+            }
+
+            if (readyContexts != null)
+            {
+                for (int index = 0; index < readyContexts.Count; index++)
+                {
+                    DFMPWorldContextKey context = readyContexts[index];
+                    pendingDespawnTimes.Remove(context);
+                    if (DFMPNetworkServer.GetConnectionsInWorldContext(context).Length == 0)
+                        DespawnContext(context);
+                }
+            }
+        }
+
+        public bool HasPendingDespawn(DFMPWorldContextKey context)
+        {
+            return pendingDespawnTimes.ContainsKey(context);
         }
 
         void Subscribe()
@@ -43,6 +88,7 @@ namespace DFMP.Runtime
 
         void OnDestroy()
         {
+            pendingDespawnTimes.Clear();
             if (!isSubscribed)
                 return;
 
@@ -113,11 +159,28 @@ namespace DFMP.Runtime
         public void HandleContextVacated(DFMPWorldContextKey context)
         {
             if (IsDungeonBlock(context) && DFMPNetworkServer.GetConnectionsInWorldContext(context).Length == 0)
-                DespawnContext(context);
+            {
+                if (despawnDelaySeconds <= 0f)
+                {
+                    pendingDespawnTimes.Remove(context);
+                    DespawnContext(context);
+                }
+                else
+                {
+                    pendingDespawnTimes[context] = Time.unscaledTime + despawnDelaySeconds;
+                    Debug.Log($"[DFMP Enemy] Scheduled dungeon roster despawn: context={context}, delay={despawnDelaySeconds}s.");
+                }
+            }
         }
 
         void ActivateContext(DFMPWorldContextKey context)
         {
+            if (pendingDespawnTimes.ContainsKey(context))
+            {
+                pendingDespawnTimes.Remove(context);
+                Debug.Log($"[DFMP Enemy] Cancelled pending dungeon roster despawn on re-entry: context={context}.");
+            }
+
             string[] enemyIds;
             if (!enemyIdsByContext.TryGetValue(context, out enemyIds))
             {
