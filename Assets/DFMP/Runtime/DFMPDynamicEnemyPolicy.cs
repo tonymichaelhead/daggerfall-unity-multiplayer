@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using DaggerfallConnect;
+using DaggerfallWorkshop;
+using DaggerfallWorkshop.Utility;
+using UnityEngine;
 
 namespace DFMP.Runtime
 {
@@ -29,6 +33,37 @@ namespace DFMP.Runtime
         ConflictingRoster,
         MissingEnemy,
         InvalidTransition
+    }
+
+    [Serializable]
+    public struct DFMPDynamicEnemyDescriptor : IEquatable<DFMPDynamicEnemyDescriptor>
+    {
+        public Vector3 DungeonLocalPosition;
+        public float FacingYaw;
+        public int MobileType;
+
+        public bool Equals(DFMPDynamicEnemyDescriptor other)
+        {
+            return DungeonLocalPosition == other.DungeonLocalPosition &&
+                Mathf.Approximately(FacingYaw, other.FacingYaw) &&
+                MobileType == other.MobileType;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is DFMPDynamicEnemyDescriptor && Equals((DFMPDynamicEnemyDescriptor)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = DungeonLocalPosition.GetHashCode();
+                hash = (hash * 397) ^ FacingYaw.GetHashCode();
+                hash = (hash * 397) ^ MobileType;
+                return hash;
+            }
+        }
     }
 
     public struct DFMPDynamicEncounterKey : IEquatable<DFMPDynamicEncounterKey>
@@ -95,11 +130,24 @@ namespace DFMP.Runtime
     {
         public DFMPDynamicEnemyIdentity Identity;
         public DFMPDynamicEnemyLifecycleState LifecycleState;
+        public DFMPDynamicEnemyDescriptor Descriptor;
     }
 
     public static class DFMPDungeonRosterPolicy
     {
         public const int MaximumRosterSize = 64;
+        public const int SpawnMarkerTextureArchive = 199;
+        public const int SpawnMarkerTextureRecord = 11;
+
+        public static readonly MobileTypes[] CuratedDungeonMobileTypes = new MobileTypes[]
+        {
+            MobileTypes.Rat,
+            MobileTypes.GiantBat,
+            MobileTypes.Spider,
+            MobileTypes.SkeletalWarrior,
+            MobileTypes.Zombie,
+            MobileTypes.Orc
+        };
 
         public static ulong CreateServerWorldSeed(string configuredSeed)
         {
@@ -124,16 +172,95 @@ namespace DFMP.Runtime
             return true;
         }
 
-        public static bool TryCreateRoster(ulong serverWorldSeed, DFMPWorldContextKey context, int rosterSize, out DFMPDynamicEnemyRecord[] roster)
+        public static bool TryScanSpawnMarkers(DFBlock blockData, int blockX, int blockZ, out Vector3[] candidatePositions)
+        {
+            candidatePositions = new Vector3[0];
+            if (blockData.RdbBlock.ObjectRootList == null || blockData.RdbBlock.ObjectRootList.Length == 0)
+                return false;
+
+            var candidates = new List<Vector3>();
+            Vector3 blockOffset = new Vector3(blockX * RDBLayout.RDBSide, 0f, blockZ * RDBLayout.RDBSide);
+
+            for (int groupIndex = 0; groupIndex < blockData.RdbBlock.ObjectRootList.Length; groupIndex++)
+            {
+                var group = blockData.RdbBlock.ObjectRootList[groupIndex];
+                if (group.RdbObjects == null)
+                    continue;
+
+                for (int objIndex = 0; objIndex < group.RdbObjects.Length; objIndex++)
+                {
+                    var obj = group.RdbObjects[objIndex];
+                    if (obj.Type == DFBlock.RdbResourceTypes.Flat &&
+                        obj.Resources.FlatResource.TextureArchive == SpawnMarkerTextureArchive &&
+                        obj.Resources.FlatResource.TextureRecord == SpawnMarkerTextureRecord)
+                    {
+                        Vector3 markerPosition = new Vector3(obj.XPos, -obj.YPos, obj.ZPos) * MeshReader.GlobalScale;
+                        candidates.Add(blockOffset + markerPosition);
+                    }
+                }
+            }
+
+            if (candidates.Count == 0)
+                return false;
+
+            candidatePositions = candidates.ToArray();
+            return true;
+        }
+
+        public static bool TryCreateDescriptor(
+            ulong serverWorldSeed,
+            DFMPWorldContextKey context,
+            int rosterIndex,
+            Vector3[] candidatePositions,
+            out DFMPDynamicEnemyDescriptor descriptor)
+        {
+            descriptor = new DFMPDynamicEnemyDescriptor();
+            if (candidatePositions == null || candidatePositions.Length == 0 || rosterIndex < 0)
+                return false;
+
+            ulong hash = ComputeStableHash(CreateDungeonDescriptorSeedMaterial(serverWorldSeed, context, rosterIndex));
+            int positionIndex = (int)(hash % (ulong)candidatePositions.Length);
+            Vector3 position = candidatePositions[positionIndex];
+
+            float facingYaw = (float)((hash >> 16) % 360UL);
+            int typeIndex = (int)((hash >> 32) % (ulong)CuratedDungeonMobileTypes.Length);
+            int mobileType = (int)CuratedDungeonMobileTypes[typeIndex];
+
+            descriptor = new DFMPDynamicEnemyDescriptor
+            {
+                DungeonLocalPosition = position,
+                FacingYaw = facingYaw,
+                MobileType = mobileType
+            };
+            return true;
+        }
+
+        public static bool TryCreateRoster(
+            ulong serverWorldSeed,
+            DFMPWorldContextKey context,
+            int rosterSize,
+            Vector3[] candidatePositions,
+            out DFMPDynamicEnemyRecord[] roster)
         {
             roster = new DFMPDynamicEnemyRecord[0];
             DFMPDynamicEncounterKey encounter;
-            if (!TryCreateEncounterKey(serverWorldSeed, context, out encounter) || rosterSize <= 0 || rosterSize > MaximumRosterSize)
+            if (!TryCreateEncounterKey(serverWorldSeed, context, out encounter) ||
+                rosterSize <= 0 ||
+                rosterSize > MaximumRosterSize ||
+                candidatePositions == null ||
+                candidatePositions.Length == 0)
                 return false;
 
             roster = new DFMPDynamicEnemyRecord[rosterSize];
             for (int rosterIndex = 0; rosterIndex < roster.Length; rosterIndex++)
             {
+                DFMPDynamicEnemyDescriptor descriptor;
+                if (!TryCreateDescriptor(serverWorldSeed, context, rosterIndex, candidatePositions, out descriptor))
+                {
+                    roster = new DFMPDynamicEnemyRecord[0];
+                    return false;
+                }
+
                 roster[rosterIndex] = new DFMPDynamicEnemyRecord
                 {
                     Identity = new DFMPDynamicEnemyIdentity
@@ -142,11 +269,67 @@ namespace DFMP.Runtime
                         RosterIndex = rosterIndex,
                         EnemyId = encounter.EncounterId + "-enemy-" + rosterIndex.ToString(CultureInfo.InvariantCulture)
                     },
-                    LifecycleState = DFMPDynamicEnemyLifecycleState.SpawnedAlive
+                    LifecycleState = DFMPDynamicEnemyLifecycleState.SpawnedAlive,
+                    Descriptor = descriptor
                 };
             }
 
             return true;
+        }
+
+        public static bool TryCreateRoster(ulong serverWorldSeed, DFMPWorldContextKey context, int rosterSize, out DFMPDynamicEnemyRecord[] roster)
+        {
+            Vector3[] candidatePositions;
+            if (TryScanContextSpawnMarkers(context, out candidatePositions))
+                return TryCreateRoster(serverWorldSeed, context, rosterSize, candidatePositions, out roster);
+
+            roster = new DFMPDynamicEnemyRecord[0];
+            return false;
+        }
+
+        public static Func<DFMPWorldContextKey, Vector3[]> MarkerProviderForTesting;
+
+        public static bool TryScanContextSpawnMarkers(DFMPWorldContextKey context, out Vector3[] candidatePositions)
+        {
+            candidatePositions = new Vector3[0];
+            if (MarkerProviderForTesting != null)
+            {
+                Vector3[] testCandidates = MarkerProviderForTesting(context);
+                if (testCandidates != null && testCandidates.Length > 0)
+                {
+                    candidatePositions = testCandidates;
+                    return true;
+                }
+            }
+
+            if (context.Kind != DFMPWorldContextKind.Dungeon ||
+                string.IsNullOrWhiteSpace(context.DungeonBlockName) ||
+                context.DungeonBlockIndex < 0 ||
+                DaggerfallUnity.Instance == null ||
+                DaggerfallUnity.Instance.ContentReader == null)
+                return false;
+
+            ContentReader contentReader = DaggerfallUnity.Instance.ContentReader;
+            if (contentReader.MapFileReader == null || contentReader.BlockFileReader == null)
+                return false;
+
+            DFLocation location = contentReader.MapFileReader.GetLocation(context.RegionIndex, context.LocationIndex);
+            if (!location.Loaded || !location.HasDungeon || location.Dungeon.Blocks == null || context.DungeonBlockIndex >= location.Dungeon.Blocks.Length)
+                return false;
+
+            var dungeonBlock = location.Dungeon.Blocks[context.DungeonBlockIndex];
+            DFBlock blockData = contentReader.BlockFileReader.GetBlock(dungeonBlock.BlockName);
+            return TryScanSpawnMarkers(blockData, dungeonBlock.X, dungeonBlock.Z, out candidatePositions);
+        }
+
+        static string CreateDungeonDescriptorSeedMaterial(ulong serverWorldSeed, DFMPWorldContextKey context, int rosterIndex)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "dfmp-dungeon-descriptor-v1|{0}|{1}|{2}",
+                serverWorldSeed,
+                CreateDungeonSeedMaterial(serverWorldSeed, context),
+                rosterIndex);
         }
 
         static string CreateDungeonSeedMaterial(ulong serverWorldSeed, DFMPWorldContextKey context)

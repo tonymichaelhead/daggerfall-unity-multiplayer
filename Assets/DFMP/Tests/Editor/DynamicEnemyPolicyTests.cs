@@ -1,14 +1,35 @@
+using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using DFMP.Runtime;
+using DaggerfallConnect;
+using DaggerfallWorkshop;
+using DaggerfallWorkshop.Utility;
 using Mirror;
 using UnityEngine;
+using UnityObject = UnityEngine.Object;
 
 namespace DFMP.Tests
 {
     [TestFixture]
     public class DynamicEnemyPolicyTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            DFMPDungeonRosterPolicy.MarkerProviderForTesting = _ => new Vector3[]
+            {
+                new Vector3(10f, 0f, 20f),
+                new Vector3(30f, 0f, 40f)
+            };
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            DFMPDungeonRosterPolicy.MarkerProviderForTesting = null;
+        }
+
         [Test]
         public void DungeonRoster_IsDeterministicForEquivalentDungeonContext()
         {
@@ -30,6 +51,7 @@ namespace DFMP.Tests
                 Assert.AreEqual(firstRoster[index].Identity.Encounter, secondRoster[index].Identity.Encounter);
                 Assert.AreEqual(index, firstRoster[index].Identity.RosterIndex);
                 Assert.AreEqual(DFMPDynamicEnemyLifecycleState.SpawnedAlive, firstRoster[index].LifecycleState);
+                Assert.AreEqual(firstRoster[index].Descriptor, secondRoster[index].Descriptor);
             }
         }
 
@@ -165,10 +187,146 @@ namespace DFMP.Tests
             }
             finally
             {
-                Object.DestroyImmediate(serviceObject);
-                Object.DestroyImmediate(firstSessionObject);
-                Object.DestroyImmediate(secondSessionObject);
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(firstSessionObject);
+                UnityObject.DestroyImmediate(secondSessionObject);
                 DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonRoster_ScanSpawnMarkers_ExtractsScaledCoordinatesAndFailsClosedWhenEmpty()
+        {
+            var validFlat = new DFBlock.RdbObject
+            {
+                Type = DFBlock.RdbResourceTypes.Flat,
+                XPos = 512,
+                YPos = -256,
+                ZPos = 1024,
+                Resources = new DFBlock.RdbResources
+                {
+                    FlatResource = new DFBlock.RdbFlatResource
+                    {
+                        TextureArchive = DFMPDungeonRosterPolicy.SpawnMarkerTextureArchive,
+                        TextureRecord = DFMPDungeonRosterPolicy.SpawnMarkerTextureRecord
+                    }
+                }
+            };
+
+            var nonMarkerFlat = new DFBlock.RdbObject
+            {
+                Type = DFBlock.RdbResourceTypes.Flat,
+                XPos = 100,
+                YPos = 0,
+                ZPos = 200,
+                Resources = new DFBlock.RdbResources
+                {
+                    FlatResource = new DFBlock.RdbFlatResource
+                    {
+                        TextureArchive = 199,
+                        TextureRecord = 15 // random enemy flat, not 11
+                    }
+                }
+            };
+
+            var modelObj = new DFBlock.RdbObject
+            {
+                Type = DFBlock.RdbResourceTypes.Model
+            };
+
+            var blockData = new DFBlock
+            {
+                RdbBlock = new DFBlock.RdbBlockDesc
+                {
+                    ObjectRootList = new DFBlock.RdbObjectRoot[]
+                    {
+                        new DFBlock.RdbObjectRoot { RdbObjects = new DFBlock.RdbObject[] { validFlat, nonMarkerFlat } },
+                        new DFBlock.RdbObjectRoot { RdbObjects = new DFBlock.RdbObject[] { modelObj } }
+                    }
+                }
+            };
+
+            Vector3[] candidates;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryScanSpawnMarkers(blockData, 2, 3, out candidates));
+            Assert.AreEqual(1, candidates.Length);
+
+            Vector3 expectedBlockOffset = new Vector3(2 * RDBLayout.RDBSide, 0f, 3 * RDBLayout.RDBSide);
+            Vector3 expectedMarkerOffset = new Vector3(512, 256, 1024) * MeshReader.GlobalScale;
+            Vector3 expectedPosition = expectedBlockOffset + expectedMarkerOffset;
+            Assert.AreEqual(expectedPosition, candidates[0]);
+
+            var emptyBlock = new DFBlock
+            {
+                RdbBlock = new DFBlock.RdbBlockDesc
+                {
+                    ObjectRootList = new DFBlock.RdbObjectRoot[0]
+                }
+            };
+            Assert.IsFalse(DFMPDungeonRosterPolicy.TryScanSpawnMarkers(emptyBlock, 0, 0, out candidates));
+            Assert.AreEqual(0, candidates.Length);
+        }
+
+        [Test]
+        public void DungeonRoster_Descriptor_IsDeterministicAndSelectsCuratedMobileType()
+        {
+            Vector3[] candidates = new Vector3[]
+            {
+                new Vector3(10f, 0f, 20f),
+                new Vector3(30f, 0f, 40f)
+            };
+
+            DFMPWorldContextKey context = CreateDungeonContext();
+            DFMPDynamicEnemyDescriptor desc1;
+            DFMPDynamicEnemyDescriptor desc2;
+
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateDescriptor(123456UL, context, 0, candidates, out desc1));
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateDescriptor(123456UL, context, 0, candidates, out desc2));
+
+            Assert.AreEqual(desc1, desc2);
+            Assert.IsTrue(desc1.FacingYaw >= 0f && desc1.FacingYaw < 360f);
+            Assert.IsTrue(Array.IndexOf(DFMPDungeonRosterPolicy.CuratedDungeonMobileTypes, (MobileTypes)desc1.MobileType) >= 0);
+
+            DFMPDynamicEnemyDescriptor invalidDesc;
+            Assert.IsFalse(DFMPDungeonRosterPolicy.TryCreateDescriptor(123456UL, context, 0, null, out invalidDesc));
+            Assert.IsFalse(DFMPDungeonRosterPolicy.TryCreateDescriptor(123456UL, context, 0, new Vector3[0], out invalidDesc));
+        }
+
+        [Test]
+        public void DynamicEnemyPresentation_CalculatesLocalPositionsAndVisualEligibility()
+        {
+            Vector3 dungeonRoot = new Vector3(100f, 50f, 200f);
+            Vector3 localPosition = new Vector3(10f, -2f, 30f);
+            Vector3 scenePosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(dungeonRoot, localPosition);
+            Assert.AreEqual(new Vector3(110f, 48f, 230f), scenePosition);
+
+            Assert.IsTrue(DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(dungeonRoot, dungeonRoot + new Vector3(10f, 0f, 10f), 20f));
+            Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(dungeonRoot, dungeonRoot + new Vector3(50f, 0f, 50f), 20f));
+
+            GameObject enemyObject = new GameObject("DFMP_PresentationEligibilityTest");
+            try
+            {
+                enemyObject.AddComponent<NetworkIdentity>();
+                var carrier = enemyObject.AddComponent<DFMPWorldContextCarrier>();
+                var state = enemyObject.AddComponent<DFMPDynamicEnemyState>();
+                DFMPDynamicEnemyRecord record = CreateRoster()[0];
+                carrier.Initialize(record.Identity.Encounter.Context);
+                state.Initialize(record);
+
+                DFMPWorldContextKey matchingContext = record.Identity.Encounter.Context;
+                DFMPWorldContextKey otherContext = matchingContext;
+                otherContext.DungeonBlockIndex = 99;
+
+                Assert.IsTrue(DFMPDynamicEnemyPresentation.IsVisualEligible(state, true, matchingContext));
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisualEligible(state, false, matchingContext));
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisualEligible(state, true, otherContext));
+
+                record.LifecycleState = DFMPDynamicEnemyLifecycleState.DespawnedAlive;
+                state.Initialize(record);
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisualEligible(state, true, matchingContext));
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(enemyObject);
             }
         }
 
@@ -194,11 +352,15 @@ namespace DFMP.Tests
                 Assert.AreEqual(record.Identity.RosterIndex, state.RosterIndex);
                 Assert.AreEqual(record.Identity.EnemyId, state.EnemyId);
                 Assert.AreEqual(DFMPDynamicEnemyLifecycleState.DespawnedAlive, state.LifecycleState);
+                Assert.AreEqual(record.Descriptor.DungeonLocalPosition, state.DungeonLocalPosition);
+                Assert.AreEqual(record.Descriptor.FacingYaw, state.FacingYaw);
+                Assert.AreEqual(record.Descriptor.MobileType, state.MobileType);
+                Assert.AreEqual(record.Descriptor, state.Descriptor);
                 Assert.AreEqual(4, enemyObject.GetComponents<Component>().Length);
             }
             finally
             {
-                Object.DestroyImmediate(enemyObject);
+                UnityObject.DestroyImmediate(enemyObject);
             }
         }
 

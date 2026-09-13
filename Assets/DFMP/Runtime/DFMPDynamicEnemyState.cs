@@ -22,11 +22,24 @@ namespace DFMP.Runtime
         [SyncVar]
         int lifecycleState;
 
+        [SyncVar]
+        Vector3 dungeonLocalPosition;
+
+        [SyncVar]
+        float facingYaw;
+
+        [SyncVar]
+        int mobileType;
+
         public DFMPDynamicEnemyProviderKind ProviderKind { get { return (DFMPDynamicEnemyProviderKind)providerKind; } }
         public string EncounterId { get { return encounterId; } }
         public int RosterIndex { get { return rosterIndex; } }
         public string EnemyId { get { return enemyId; } }
         public DFMPDynamicEnemyLifecycleState LifecycleState { get { return (DFMPDynamicEnemyLifecycleState)lifecycleState; } }
+        public Vector3 DungeonLocalPosition { get { return dungeonLocalPosition; } }
+        public float FacingYaw { get { return facingYaw; } }
+        public int MobileType { get { return mobileType; } }
+        public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType }; } }
 
         public void Initialize(DFMPDynamicEnemyRecord record)
         {
@@ -35,6 +48,9 @@ namespace DFMP.Runtime
             rosterIndex = record.Identity.RosterIndex;
             enemyId = record.Identity.EnemyId ?? string.Empty;
             lifecycleState = (int)record.LifecycleState;
+            dungeonLocalPosition = record.Descriptor.DungeonLocalPosition;
+            facingYaw = record.Descriptor.FacingYaw;
+            mobileType = record.Descriptor.MobileType;
         }
 
         public override void OnStartClient()

@@ -80,6 +80,7 @@ namespace DFMP.Runtime
             NetworkClient.RegisterHandler<DFMPRestResponse>(OnRestResponseReceived);
             DFMPPositionReporter.EnsureInstance();
             DFMPRemotePlayerPresentationController.EnsureInstance();
+            DFMPDynamicEnemyPresentationController.EnsureInstance();
 
             UnityEngine.Object.DontDestroyOnLoad(networkGo);
             networkGo.SetActive(true);
@@ -246,6 +247,7 @@ namespace DFMP.Runtime
             DFMPSpawnAssignmentController.Reset();
             DFMPPositionReporter.Reset();
             DFMPRemotePlayerPresentationController.Reset();
+            DFMPDynamicEnemyPresentationController.Reset();
             Manager = null;
             Transport = null;
             Address = "127.0.0.1";
