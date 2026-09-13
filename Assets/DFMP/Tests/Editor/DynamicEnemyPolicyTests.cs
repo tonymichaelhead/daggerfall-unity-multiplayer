@@ -461,7 +461,9 @@ namespace DFMP.Tests
                 string enemyId = roster[0].Identity.EnemyId;
 
                 DFMPEnemyDiedEvent deathEvent = null;
+                DFMPLootGeneratedEvent lootEvent = null;
                 DFMPEventBus.Instance.EnemyDied += e => deathEvent = e;
+                DFMPEventBus.Instance.LootGenerated += e => lootEvent = e;
 
                 DFMPDynamicEnemyRecord updatedRecord;
                 int appliedAmount;
@@ -475,12 +477,51 @@ namespace DFMP.Tests
                 Assert.AreEqual(enemyId, deathEvent.EnemyId);
                 Assert.AreEqual(55, deathEvent.KillerConnectionId);
                 Assert.AreEqual(appliedAmount, deathEvent.DamageAmount);
+
+                Assert.IsNotNull(lootEvent);
+                Assert.AreEqual(enemyId, lootEvent.EnemyId);
+                Assert.AreEqual(55, lootEvent.KillerConnectionId);
             }
             finally
             {
                 UnityObject.DestroyImmediate(serviceObject);
                 UnityObject.DestroyImmediate(sessionObject);
                 DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DynamicEnemyPresentation_CalculatesCorpseEligibility()
+        {
+            GameObject enemyObject = new GameObject("DFMP_CorpseEligibilityTest");
+            try
+            {
+                enemyObject.AddComponent<NetworkIdentity>();
+                var carrier = enemyObject.AddComponent<DFMPWorldContextCarrier>();
+                var state = enemyObject.AddComponent<DFMPDynamicEnemyState>();
+                DFMPDynamicEnemyRecord record = CreateRoster()[0];
+                carrier.Initialize(record.Identity.Encounter.Context);
+                state.Initialize(record);
+
+                DFMPWorldContextKey matchingContext = record.Identity.Encounter.Context;
+                DFMPWorldContextKey otherContext = matchingContext;
+                otherContext.DungeonBlockIndex = 99;
+
+                // When alive, corpse is not eligible
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, matchingContext));
+
+                // When dead and co-located in dungeon, corpse is eligible
+                record.LifecycleState = DFMPDynamicEnemyLifecycleState.Dead;
+                state.Initialize(record);
+                Assert.IsTrue(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, matchingContext));
+
+                // When player is not in dungeon or in another context
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, false, matchingContext));
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, otherContext));
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(enemyObject);
             }
         }
 

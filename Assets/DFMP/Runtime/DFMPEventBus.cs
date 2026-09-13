@@ -107,6 +107,14 @@ namespace DFMP.Runtime
         public int DamageAmount;
     }
 
+    public class DFMPLootGeneratedEvent
+    {
+        public string EnemyId;
+        public DFMPDynamicEncounterKey Encounter;
+        public int KillerConnectionId;
+        public string LootTableKey;
+    }
+
     public sealed class DFMPEventBus
     {
         public static DFMPEventBus Instance { get; } = new DFMPEventBus();
@@ -123,6 +131,7 @@ namespace DFMP.Runtime
         public event Action<DFMPPlayerRespawnedEvent> PlayerRespawned;
         public event Action<DFMPEnemySpawnedEvent> EnemySpawned;
         public event Action<DFMPEnemyDiedEvent> EnemyDied;
+        public event Action<DFMPLootGeneratedEvent> LootGenerated;
 
         public void PublishPlayerConnected(DFMPPlayerConnectedEvent e)
         {
@@ -240,6 +249,16 @@ namespace DFMP.Runtime
                 return;
 
             var handler = EnemyDied;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishLootGenerated(DFMPLootGeneratedEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = LootGenerated;
             if (handler != null)
                 handler(e);
         }

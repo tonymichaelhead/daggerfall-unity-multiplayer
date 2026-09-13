@@ -43,6 +43,68 @@ namespace DFMP.Runtime
                 carrier.Context.LocationIndex == playerContext.LocationIndex &&
                 carrier.Context.DungeonBlockIndex == playerContext.DungeonBlockIndex;
         }
+
+        public static bool IsCorpseEligible(
+            DFMPDynamicEnemyState state,
+            bool isPlayerInsideDungeon,
+            DFMPWorldContextKey playerContext)
+        {
+            if (state == null || !isPlayerInsideDungeon)
+                return false;
+
+            if (state.LifecycleState != DFMPDynamicEnemyLifecycleState.Dead)
+                return false;
+
+            var carrier = state.GetComponent<DFMPWorldContextCarrier>();
+            if (carrier == null)
+                return true;
+
+            return carrier.Context.Kind == DFMPWorldContextKind.Dungeon &&
+                carrier.Context.RegionIndex == playerContext.RegionIndex &&
+                carrier.Context.LocationIndex == playerContext.LocationIndex &&
+                carrier.Context.DungeonBlockIndex == playerContext.DungeonBlockIndex;
+        }
+
+        public static bool TryCreateCorpseLootContainer(
+            int mobileType,
+            Vector3 scenePosition,
+            Transform parent,
+            out DaggerfallLoot loot)
+        {
+            loot = null;
+            if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.Option_LootContainerPrefab == null)
+                return false;
+
+            MobileEnemy enemy;
+            if (!EnemyBasics.GetEnemy((MobileTypes)mobileType, out enemy))
+                return false;
+
+            int archive, record;
+            EnemyBasics.ReverseCorpseTexture(enemy.CorpseTexture, out archive, out record);
+            if (archive <= 0)
+                return false;
+
+            loot = GameObjectHelper.CreateLootContainer(
+                LootContainerTypes.CorpseMarker,
+                InventoryContainerImages.Corpse2,
+                scenePosition,
+                parent,
+                archive,
+                record);
+
+            if (loot != null)
+            {
+                if (!string.IsNullOrWhiteSpace(enemy.LootTableKey))
+                    DaggerfallLoot.GenerateItems(enemy.LootTableKey, loot.Items);
+
+                loot.entityName = TextManager.Instance != null
+                    ? TextManager.Instance.GetLocalizedEnemyName(enemy.ID)
+                    : enemy.ID.ToString();
+                return true;
+            }
+
+            return false;
+        }
     }
 
     public class DFMPDynamicEnemyHitTarget : MonoBehaviour
@@ -84,6 +146,7 @@ namespace DFMP.Runtime
     {
         static DFMPDynamicEnemyPresentationController instance;
         readonly Dictionary<int, GameObject> proxies = new Dictionary<int, GameObject>();
+        readonly Dictionary<int, GameObject> corpses = new Dictionary<int, GameObject>();
 
         public static void EnsureInstance()
         {
@@ -111,7 +174,14 @@ namespace DFMP.Runtime
                     Destroy(proxy);
             }
 
+            foreach (GameObject corpse in corpses.Values)
+            {
+                if (corpse != null)
+                    Destroy(corpse);
+            }
+
             proxies.Clear();
+            corpses.Clear();
             if (instance == this)
                 instance = null;
         }
@@ -166,6 +236,30 @@ namespace DFMP.Runtime
                     if (proxies.TryGetValue(stateId, out proxy) && proxy != null)
                         proxy.SetActive(false);
                 }
+
+                bool isCorpseEligible = DFMPDynamicEnemyPresentation.IsCorpseEligible(state, isInsideDungeon, playerContext);
+                if (isCorpseEligible)
+                {
+                    GameObject corpse = GetOrCreateCorpse(stateId, state, playerEnterExit.Dungeon.transform);
+                    if (corpse != null)
+                    {
+                        Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
+                            playerEnterExit.Dungeon.transform.position,
+                            state.DungeonLocalPosition);
+
+                        bool isVisible = DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(
+                            playerEnterExit.transform.position,
+                            targetPosition);
+
+                        corpse.SetActive(isVisible);
+                    }
+                }
+                else
+                {
+                    GameObject corpse;
+                    if (corpses.TryGetValue(stateId, out corpse) && corpse != null)
+                        corpse.SetActive(false);
+                }
             }
 
             RemoveStaleProxies(liveStateIds);
@@ -189,6 +283,34 @@ namespace DFMP.Runtime
             proxies[stateId] = proxy;
             Debug.Log($"[DFMP Enemy] Created client enemy visual proxy: enemyId={enemyId}.");
             return proxy;
+        }
+
+        GameObject GetOrCreateCorpse(int stateId, DFMPDynamicEnemyState state, Transform dungeonTransform)
+        {
+            GameObject corpse;
+            if (corpses.TryGetValue(stateId, out corpse) && corpse != null)
+                return corpse;
+
+            Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
+                dungeonTransform.position,
+                state.DungeonLocalPosition);
+
+            DaggerfallLoot loot;
+            if (DFMPDynamicEnemyPresentation.TryCreateCorpseLootContainer(state.MobileType, targetPosition, dungeonTransform, out loot) && loot != null)
+            {
+                corpse = loot.gameObject;
+            }
+            else
+            {
+                corpse = new GameObject($"DFMP_DynamicEnemyCorpse_{state.EnemyId}");
+                corpse.transform.position = targetPosition;
+                corpse.transform.SetParent(dungeonTransform, true);
+            }
+
+            Object.DontDestroyOnLoad(corpse);
+            corpses[stateId] = corpse;
+            Debug.Log($"[DFMP Enemy] Created client corpse loot proxy: enemyId={state.EnemyId}.");
+            return corpse;
         }
 
         static void CreateAvatarHierarchy(Transform parent)
@@ -219,6 +341,23 @@ namespace DFMP.Runtime
                     Destroy(proxy);
 
                 proxies.Remove(staleKey);
+            }
+
+            staleKeys.Clear();
+            foreach (var kvp in corpses)
+            {
+                if (!liveStateIds.Contains(kvp.Key))
+                    staleKeys.Add(kvp.Key);
+            }
+
+            for (int index = 0; index < staleKeys.Count; index++)
+            {
+                int staleKey = staleKeys[index];
+                GameObject corpse = corpses[staleKey];
+                if (corpse != null)
+                    Destroy(corpse);
+
+                corpses.Remove(staleKey);
             }
         }
     }

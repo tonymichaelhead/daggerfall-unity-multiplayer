@@ -79,6 +79,19 @@ namespace DFMP.Runtime
                     DamageAmount = appliedAmount
                 });
 
+                DaggerfallWorkshop.MobileEnemy enemyDef;
+                string lootTableKey = DaggerfallWorkshop.Utility.EnemyBasics.GetEnemy((DaggerfallWorkshop.MobileTypes)updatedRecord.Descriptor.MobileType, out enemyDef)
+                    ? enemyDef.LootTableKey
+                    : string.Empty;
+
+                DFMPEventBus.Instance.PublishLootGenerated(new DFMPLootGeneratedEvent
+                {
+                    EnemyId = enemyId,
+                    Encounter = updatedRecord.Identity.Encounter,
+                    KillerConnectionId = killerConnectionId,
+                    LootTableKey = lootTableKey
+                });
+
                 Debug.Log($"[DFMP Enemy] Enemy killed: enemyId={enemyId}, killer={killerConnectionId}, amount={appliedAmount}.");
             }
 
@@ -194,6 +207,14 @@ namespace DFMP.Runtime
                 NetworkServer.Spawn(enemyGo, DFMPDynamicEnemyState.AssetId);
                 stateObjectsByEnemyId.Add(record.Identity.EnemyId, enemyGo);
                 spawnedStateCount++;
+
+                DFMPEventBus.Instance.PublishEnemySpawned(new DFMPEnemySpawnedEvent
+                {
+                    EnemyId = record.Identity.EnemyId,
+                    Encounter = record.Identity.Encounter,
+                    RosterIndex = record.Identity.RosterIndex,
+                    Descriptor = record.Descriptor
+                });
             }
 
             if (spawnedStateCount > 0)
