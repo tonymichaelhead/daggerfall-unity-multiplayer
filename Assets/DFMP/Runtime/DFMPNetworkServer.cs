@@ -1195,7 +1195,7 @@ namespace DFMP.Runtime
                 TargetIsDead = targetSession.IsDead || targetVitals.Health <= 0,
                 HasPendingTransition = hasPendingTransition,
                 SameWorldContext = hasSourceContext && hasTargetContext && sourceContext.Equals(targetContext),
-                InRange = hasSourceContext && hasTargetContext && IsWithinPvpRange(sourceSession, targetSession),
+                InRange = hasSourceContext && hasTargetContext && IsWithinPvpRange(sourceSession, targetSession, intent.AttackKind),
                 PvpEnabled = Config != null && Config.Combat != null && Config.Combat.PvpEnabled,
                 CooldownElapsed = IsDamageCooldownElapsed(conn.connectionId) && IsDamageRateAvailable(conn.connectionId),
                 AuthoritativeSourceConnectionId = conn.connectionId,
@@ -1206,7 +1206,7 @@ namespace DFMP.Runtime
             DFMPDamageRejectionReason rejectionReason = DFMPDamagePolicy.GetRejectionReason(validationRequest, validationContext);
             if (!DFMPDamagePolicy.IsAccepted(rejectionReason))
             {
-                Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, requestId={intent.RequestId}, reason={rejectionReason}.");
+                Debug.LogWarning($"[DFMP Combat] Rejected damage intent: connectionId={conn.connectionId}, target={intent.TargetConnectionId}, requestId={intent.RequestId}, attack={intent.AttackKind}, reason={rejectionReason}.");
                 return false;
             }
 
@@ -1257,11 +1257,13 @@ namespace DFMP.Runtime
             return true;
         }
 
-        static bool IsWithinPvpRange(DFMPPlayerSessionState sourceSession, DFMPPlayerSessionState targetSession)
+        static bool IsWithinPvpRange(DFMPPlayerSessionState sourceSession, DFMPPlayerSessionState targetSession, DFMPCombatAttackKind attackKind)
         {
             long deltaX = (long)sourceSession.WorldX - targetSession.WorldX;
             long deltaZ = (long)sourceSession.WorldZ - targetSession.WorldZ;
-            long maximumRange = (long)DFMPCombatProtocol.MaximumPvpRange;
+            long maximumRange = attackKind == DFMPCombatAttackKind.Ranged && Config != null && Config.Combat != null
+                ? Config.Combat.MaximumRangedPvpRange
+                : (long)DFMPCombatProtocol.MaximumPvpRange;
             return deltaX * deltaX + deltaZ * deltaZ <= maximumRange * maximumRange;
         }
 

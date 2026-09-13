@@ -5,7 +5,7 @@
 // Source Code:     https://github.com/Interkarma/daggerfall-unity
 // Original Author: Gavin Clayton (interkarma@dfworkshop.net)
 // Contributors:    Allofich, Numidium
-// 
+//
 // Notes:
 //
 
@@ -659,10 +659,13 @@ namespace DaggerfallWorkshop.Game
 
         void AssignBowDamageToTarget(Collider arrowHitCollider)
         {
-            if (!isArrow || targetEntities.Count == 0)
-            {
+            if (isArrow && caster == gm.PlayerEntityBehaviour &&
+                DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit(arrowHitCollider))
                 return;
-            }
+
+            if (!isArrow || targetEntities.Count == 0)
+                return;
 
             if (caster != gm.PlayerEntityBehaviour)
             {

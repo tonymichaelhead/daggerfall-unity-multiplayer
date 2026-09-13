@@ -10,8 +10,15 @@ namespace DFMP.Runtime
         public uint Sequence;
         public DFMPDamageSourceKind SourceKind;
         public DFMPVitalKind VitalKind;
+        public DFMPCombatAttackKind AttackKind;
         public int TargetConnectionId;
         public int Amount;
+    }
+
+    public enum DFMPCombatAttackKind
+    {
+        Melee,
+        Ranged
     }
 
     public struct DFMPVitalSnapshot : NetworkMessage
@@ -34,9 +41,10 @@ namespace DFMP.Runtime
 
     public static class DFMPCombatProtocol
     {
-        // DFU maps 40 native world units to one Unity scene unit. Keep the client
-        // target cone and server authority range aligned at roughly four scene units.
+        // DFU maps 40 native world units to one Unity scene unit.
+        // The ranged value is the default and can be tuned by server config.
         public const float MaximumPvpRange = 160f;
+        public const float MaximumRangedPvpRange = 800f;
         public const float MaximumClientTargetDistance = 4f;
         public const float MinimumTargetAlignment = 0.5f;
 
@@ -76,6 +84,7 @@ namespace DFMP.Runtime
                 intent.Sequence != 0 &&
                 Enum.IsDefined(typeof(DFMPDamageSourceKind), intent.SourceKind) &&
                 Enum.IsDefined(typeof(DFMPVitalKind), intent.VitalKind) &&
+                Enum.IsDefined(typeof(DFMPCombatAttackKind), intent.AttackKind) &&
                 intent.Amount > 0;
         }
 

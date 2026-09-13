@@ -76,6 +76,10 @@ namespace DFMP.Tests
             intent.SourceKind = DFMPDamageSourceKind.LocalQuestPve;
             intent.VitalKind = (DFMPVitalKind)99;
             Assert.IsFalse(DFMPCombatProtocol.IsValidDamageIntent(intent));
+
+            intent.VitalKind = DFMPVitalKind.Health;
+            intent.AttackKind = (DFMPCombatAttackKind)99;
+            Assert.IsFalse(DFMPCombatProtocol.IsValidDamageIntent(intent));
         }
 
         [Test]
@@ -91,6 +95,22 @@ namespace DFMP.Tests
             };
 
             Assert.IsFalse(DFMPCombatProtocol.IsValidDamageIntent(intent));
+        }
+
+        [Test]
+        public void DamageIntent_PlayerRangedHitUsesHealthVital()
+        {
+            var intent = new DFMPDamageIntent
+            {
+                RequestId = 1,
+                Sequence = 1,
+                SourceKind = DFMPDamageSourceKind.Player,
+                VitalKind = DFMPVitalKind.Health,
+                TargetConnectionId = 7,
+                Amount = 5
+            };
+
+            Assert.IsTrue(DFMPCombatProtocol.IsValidDamageIntent(intent));
         }
 
         [Test]
@@ -147,6 +167,7 @@ namespace DFMP.Tests
 
             Assert.IsFalse(combat.PvpEnabled);
             Assert.AreEqual(100, combat.MaximumDamagePerHit);
+            Assert.AreEqual(800, combat.MaximumRangedPvpRange);
             Assert.AreEqual(0.1f, combat.DamageCooldownSeconds);
             Assert.AreEqual(1.0f, combat.DamageRateWindowSeconds);
             Assert.AreEqual(10, combat.MaximumDamageRequestsPerWindow);
@@ -161,6 +182,7 @@ namespace DFMP.Tests
                 {
                     PvpEnabled = true,
                     MaximumDamagePerHit = -1,
+                    MaximumRangedPvpRange = 159,
                     DamageCooldownSeconds = 0f,
                     DamageRateWindowSeconds = 301f,
                     MaximumDamageRequestsPerWindow = 1001
@@ -171,6 +193,7 @@ namespace DFMP.Tests
 
             Assert.IsTrue(config.Combat.PvpEnabled);
             Assert.AreEqual(100, config.Combat.MaximumDamagePerHit);
+            Assert.AreEqual(800, config.Combat.MaximumRangedPvpRange);
             Assert.AreEqual(0.1f, config.Combat.DamageCooldownSeconds);
             Assert.AreEqual(1.0f, config.Combat.DamageRateWindowSeconds);
             Assert.AreEqual(10, config.Combat.MaximumDamageRequestsPerWindow);

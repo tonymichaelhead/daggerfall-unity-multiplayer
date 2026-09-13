@@ -30,6 +30,7 @@ namespace DFMP.Runtime
             GameObject reporterGo = new GameObject("DFMP_PositionReporter");
             Object.DontDestroyOnLoad(reporterGo);
             instance = reporterGo.AddComponent<DFMPPositionReporter>();
+            DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit = TryHandlePlayerMissileHit;
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = TryHandlePlayerWeaponHit;
         }
 
@@ -38,6 +39,7 @@ namespace DFMP.Runtime
             if (instance != null)
                 Destroy(instance.gameObject);
 
+            DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit = null;
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = null;
             nextDamageRequestId = 1;
             nextDamageSequence = 1;
@@ -126,7 +128,7 @@ namespace DFMP.Runtime
             wasCastingSpell = isCastingSpell;
         }
 
-        static bool TryHandlePlayerWeaponHit(object hitTransformObject, object impactPositionObject, object directionObject)
+        static bool TryHandlePlayerWeaponHit(object hitTransformObject, object impactPositionObject, object directionObject, bool arrowHit, bool arrowSummoned)
         {
             Transform hitTransform = hitTransformObject as Transform;
             if (hitTransform == null || !NetworkClient.isConnected || !NetworkClient.ready)
@@ -142,10 +144,36 @@ namespace DFMP.Runtime
                 Sequence = nextDamageSequence++,
                 SourceKind = DFMPDamageSourceKind.Player,
                 VitalKind = DFMPVitalKind.Health,
+                AttackKind = arrowHit ? DFMPCombatAttackKind.Ranged : DFMPCombatAttackKind.Melee,
                 TargetConnectionId = hitTarget.ConnectionId,
                 Amount = 5
             });
-            Debug.Log($"[DFMP Combat] Submitted weapon-hit intent: target={hitTarget.ConnectionId}, amount=5.");
+            string hitKind = arrowHit ? "ranged" : "melee";
+            Debug.Log($"[DFMP Combat] Submitted {hitKind} weapon-hit intent: target={hitTarget.ConnectionId}, amount=5, summonedArrow={arrowSummoned}.");
+            return true;
+        }
+
+        static bool TryHandlePlayerMissileHit(object hitColliderObject)
+        {
+            Collider hitCollider = hitColliderObject as Collider;
+            if (hitCollider == null || !NetworkClient.isConnected || !NetworkClient.ready)
+                return false;
+
+            DFMPRemotePlayerHitTarget hitTarget = hitCollider.transform.GetComponentInParent<DFMPRemotePlayerHitTarget>();
+            if (hitTarget == null || hitTarget.ConnectionId == DFMPSpawnAssignmentController.LocalConnectionId)
+                return false;
+
+            NetworkClient.Send(new DFMPDamageIntent
+            {
+                RequestId = nextDamageRequestId++,
+                Sequence = nextDamageSequence++,
+                SourceKind = DFMPDamageSourceKind.Player,
+                VitalKind = DFMPVitalKind.Health,
+                AttackKind = DFMPCombatAttackKind.Ranged,
+                TargetConnectionId = hitTarget.ConnectionId,
+                Amount = 5
+            });
+            Debug.Log($"[DFMP Combat] Submitted ranged missile-hit intent: target={hitTarget.ConnectionId}, amount=5.");
             return true;
         }
 

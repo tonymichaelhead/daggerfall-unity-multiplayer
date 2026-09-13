@@ -455,6 +455,7 @@ Ship DFMP as a separate client application that reuses the player's existing Dag
 - Launcher owns client version management and update integrity.
 - Launcher provides a server list and launches the client with connect arguments.
 - No game files are copied, moved, or patched. The player's vanilla DFU install keeps working side by side.
+- Client-release polish: synchronize remote-player bow draw, held-draw, release, and cancellation state so holding the bow without releasing is not presented to other players as an immediate fire. This is presentation-only and does not change ranged hit authority.
 
 Verification:
 

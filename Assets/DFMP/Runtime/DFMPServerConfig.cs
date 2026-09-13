@@ -35,6 +35,7 @@ namespace DFMP.Runtime
     {
         public bool PvpEnabled;
         public int MaximumDamagePerHit = 100;
+        public int MaximumRangedPvpRange = 800;
         public float DamageCooldownSeconds = 0.1f;
         public float DamageRateWindowSeconds = 1.0f;
         public int MaximumDamageRequestsPerWindow = 10;
@@ -42,6 +43,7 @@ namespace DFMP.Runtime
         public void Normalize()
         {
             MaximumDamagePerHit = MaximumDamagePerHit > 0 && MaximumDamagePerHit <= 10000 ? MaximumDamagePerHit : 100;
+            MaximumRangedPvpRange = MaximumRangedPvpRange >= 160 && MaximumRangedPvpRange <= 5000 ? MaximumRangedPvpRange : 800;
             DamageCooldownSeconds = DamageCooldownSeconds > 0f && DamageCooldownSeconds <= 60f ? DamageCooldownSeconds : 0.1f;
             DamageRateWindowSeconds = DamageRateWindowSeconds > 0f && DamageRateWindowSeconds <= 300f ? DamageRateWindowSeconds : 1.0f;
             MaximumDamageRequestsPerWindow = MaximumDamageRequestsPerWindow > 0 && MaximumDamageRequestsPerWindow <= 1000 ? MaximumDamageRequestsPerWindow : 10;

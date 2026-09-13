@@ -23,7 +23,7 @@ git diff --stat --ignore-cr-at-eol upstream/master..master -- Assets/Scripts
 git grep -nE "using Mirror|NetworkBehaviour|NetworkServer|NetworkClient" -- Assets/Scripts
 ```
 
-Baseline as of 2026-09-12: **12 files, 58 insertions, 9 deletions, 0 networking references.**
+Current baseline as of 2026-09-12: **13 files, 62 insertions, 9 deletions, 0 networking references.**
 
 Growth not explained by a newly registered hook below means multiplayer logic has leaked
 into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
@@ -51,7 +51,8 @@ into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
 | DFMP-STARTUP-004 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `Setup()` startup-stage selection | When DFMP forces the startup menu and the game-data path is valid, open the options/Join Server page instead of the first-time game-folder page. | 2026-09-09 |
 | DFMP-STARTUP-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | End of `ShowOptionsPanel()` | Allow DFMP to relabel and resize the launcher's confirm button ("Play" -> "Join Server"). | 2026-09-09 |
 | DFMP-STARTUP-003 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `ShowNextStage()`, `SetupStages.LaunchGame` case | Allow DFMP to consume the launch action and open the server list instead of loading the single-player game scene. | 2026-09-09 |
-| M7-PVP-HIT-001 | `Assets/Scripts/Game/WeaponManager.cs` | `WeaponDamage()` before vanilla entity damage resolution | Allow DFMP to consume a native player weapon hit against a remote-player collider and submit authoritative damage without changing vanilla single-player behavior. | 2026-09-12 |
+| M7-PVP-HIT-001 | `Assets/Scripts/Game/WeaponManager.cs` | `WeaponDamage()` before vanilla entity damage resolution | Allow DFMP to consume native player melee and bow hits against a remote-player collider and submit authoritative damage without changing vanilla single-player behavior. The hook receives native arrow flags so DFMP can distinguish ranged hit production in diagnostics; vanilla missile collision and ordinary enemy handling remain untouched. | 2026-09-12 |
+| M7-PVP-MISSILE-001 | `Assets/Scripts/Game/DaggerfallMissile.cs` | `AssignBowDamageToTarget()` before the vanilla `targetEntities` guard | Allow DFMP to consume a player-fired arrow that hit a rendering-only remote-player collider, which has no `DaggerfallEntityBehaviour` and therefore cannot enter the vanilla target list. Returning false preserves the existing `WeaponManager.WeaponDamage()` path for ordinary DFU entities. | 2026-09-12 |
 
 ---
 
