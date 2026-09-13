@@ -41,6 +41,11 @@ namespace DFMP.Runtime
         public int MobileType { get { return mobileType; } }
         public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType }; } }
 
+        public void SetLifecycleState(DFMPDynamicEnemyLifecycleState state)
+        {
+            lifecycleState = (int)state;
+        }
+
         public void Initialize(DFMPDynamicEnemyRecord record)
         {
             providerKind = (int)record.Identity.Encounter.ProviderKind;

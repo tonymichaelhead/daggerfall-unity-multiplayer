@@ -49,6 +49,7 @@ namespace DFMP.Runtime
         public DFMPVitalKind VitalKind;
         public int SourceConnectionId;
         public int TargetConnectionId;
+        public string TargetEnemyId;
         public int Amount;
     }
 
@@ -66,6 +67,7 @@ namespace DFMP.Runtime
         public int AuthoritativeSourceConnectionId;
         public uint LastAcceptedSequence;
         public int MaximumAmount;
+        public bool IsDynamicEnemyTarget;
     }
 
     public struct DFMPVitalState
@@ -205,24 +207,34 @@ namespace DFMP.Runtime
             if (!context.CooldownElapsed)
                 return DFMPDamageRejectionReason.RateLimited;
 
-            switch (intent.SourceKind)
+            if (context.IsDynamicEnemyTarget)
             {
-                case DFMPDamageSourceKind.LocalQuestPve:
-                    if (intent.TargetConnectionId != intent.SourceConnectionId)
-                        return DFMPDamageRejectionReason.LocalQuestTargetMismatch;
-                    break;
-                case DFMPDamageSourceKind.Player:
-                    if (!context.PvpEnabled)
-                        return DFMPDamageRejectionReason.PvpDisabled;
-                    if (intent.TargetConnectionId == intent.SourceConnectionId)
-                        return DFMPDamageRejectionReason.SelfTarget;
-                    if (!context.SameWorldContext)
-                        return DFMPDamageRejectionReason.ContextMismatch;
-                    if (!context.InRange)
-                        return DFMPDamageRejectionReason.OutOfRange;
-                    break;
-                default:
-                    return DFMPDamageRejectionReason.InvalidSource;
+                if (!context.SameWorldContext)
+                    return DFMPDamageRejectionReason.ContextMismatch;
+                if (!context.InRange)
+                    return DFMPDamageRejectionReason.OutOfRange;
+            }
+            else
+            {
+                switch (intent.SourceKind)
+                {
+                    case DFMPDamageSourceKind.LocalQuestPve:
+                        if (intent.TargetConnectionId != intent.SourceConnectionId)
+                            return DFMPDamageRejectionReason.LocalQuestTargetMismatch;
+                        break;
+                    case DFMPDamageSourceKind.Player:
+                        if (!context.PvpEnabled)
+                            return DFMPDamageRejectionReason.PvpDisabled;
+                        if (intent.TargetConnectionId == intent.SourceConnectionId)
+                            return DFMPDamageRejectionReason.SelfTarget;
+                        if (!context.SameWorldContext)
+                            return DFMPDamageRejectionReason.ContextMismatch;
+                        if (!context.InRange)
+                            return DFMPDamageRejectionReason.OutOfRange;
+                        break;
+                    default:
+                        return DFMPDamageRejectionReason.InvalidSource;
+                }
             }
 
             return DFMPDamageRejectionReason.None;

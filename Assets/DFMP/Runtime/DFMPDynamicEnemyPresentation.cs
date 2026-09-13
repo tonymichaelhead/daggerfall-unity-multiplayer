@@ -45,6 +45,16 @@ namespace DFMP.Runtime
         }
     }
 
+    public class DFMPDynamicEnemyHitTarget : MonoBehaviour
+    {
+        public string EnemyId { get; private set; }
+
+        public void Initialize(string enemyId)
+        {
+            EnemyId = enemyId ?? string.Empty;
+        }
+    }
+
     public class DFMPDynamicEnemyAppearance : MonoBehaviour
     {
         int mobileType = int.MinValue;
@@ -168,6 +178,11 @@ namespace DFMP.Runtime
                 return proxy;
 
             proxy = new GameObject($"DFMP_DynamicEnemyProxy_{enemyId}");
+            proxy.AddComponent<DFMPDynamicEnemyHitTarget>().Initialize(enemyId);
+            var collider = proxy.AddComponent<CapsuleCollider>();
+            collider.center = new Vector3(0f, 0.9f, 0f);
+            collider.radius = 0.4f;
+            collider.height = 1.8f;
             CreateAvatarHierarchy(proxy.transform);
             proxy.SetActive(false);
             Object.DontDestroyOnLoad(proxy);

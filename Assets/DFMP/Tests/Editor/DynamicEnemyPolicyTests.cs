@@ -364,6 +364,126 @@ namespace DFMP.Tests
             }
         }
 
+        [Test]
+        public void Registry_AppliesDamageToEnemyHealth_AndTransitionsToDeadOnLethalDamage()
+        {
+            DFMPDynamicEnemyRecord[] roster = CreateRoster();
+            var registry = new DFMPDynamicEnemyRegistry();
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, registry.RegisterRoster(true, roster));
+            string enemyId = roster[0].Identity.EnemyId;
+            int initialHealth = roster[0].Health;
+            Assert.IsTrue(initialHealth > 0);
+
+            DFMPDynamicEnemyRecord updatedRecord;
+            int appliedAmount;
+            bool killed;
+
+            // Non-lethal damage (1 HP)
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, registry.TryApplyDamage(true, enemyId, 1, out updatedRecord, out appliedAmount, out killed));
+            Assert.AreEqual(1, appliedAmount);
+            Assert.IsFalse(killed);
+            Assert.AreEqual(initialHealth - 1, updatedRecord.Health);
+            Assert.AreEqual(DFMPDynamicEnemyLifecycleState.SpawnedAlive, updatedRecord.LifecycleState);
+
+            // Lethal damage
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, registry.TryApplyDamage(true, enemyId, initialHealth * 2, out updatedRecord, out appliedAmount, out killed));
+            Assert.AreEqual(initialHealth - 1, appliedAmount);
+            Assert.IsTrue(killed);
+            Assert.AreEqual(0, updatedRecord.Health);
+            Assert.AreEqual(DFMPDynamicEnemyLifecycleState.Dead, updatedRecord.LifecycleState);
+
+            // Cannot damage already dead enemy
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.InvalidTransition, registry.TryApplyDamage(true, enemyId, 5, out updatedRecord, out appliedAmount, out killed));
+        }
+
+        [Test]
+        public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
+        {
+            var request = new DFMPDamageValidationRequest
+            {
+                RequestId = 101,
+                Sequence = 1,
+                SourceKind = DFMPDamageSourceKind.Player,
+                VitalKind = DFMPVitalKind.Health,
+                SourceConnectionId = 42,
+                TargetConnectionId = 0,
+                TargetEnemyId = "test-enemy-0",
+                Amount = 10
+            };
+
+            var context = new DFMPDamageValidationContext
+            {
+                HasSession = true,
+                SpawnConfirmed = true,
+                TargetExists = true,
+                TargetIsDead = false,
+                HasPendingTransition = false,
+                SameWorldContext = true,
+                InRange = true,
+                PvpEnabled = false, // Dynamic enemy damage works even when PvP is disabled!
+                CooldownElapsed = true,
+                AuthoritativeSourceConnectionId = 42,
+                LastAcceptedSequence = 0,
+                MaximumAmount = 100,
+                IsDynamicEnemyTarget = true
+            };
+
+            Assert.AreEqual(DFMPDamageRejectionReason.None, DFMPDamagePolicy.GetRejectionReason(request, context));
+
+            context.SameWorldContext = false;
+            Assert.AreEqual(DFMPDamageRejectionReason.ContextMismatch, DFMPDamagePolicy.GetRejectionReason(request, context));
+
+            context.SameWorldContext = true;
+            context.InRange = false;
+            Assert.AreEqual(DFMPDamageRejectionReason.OutOfRange, DFMPDamagePolicy.GetRejectionReason(request, context));
+
+            context.InRange = true;
+            context.TargetIsDead = true;
+            Assert.AreEqual(DFMPDamageRejectionReason.TargetDead, DFMPDamagePolicy.GetRejectionReason(request, context));
+        }
+
+        [Test]
+        public void DungeonRosterService_AppliesDamageAndPublishesEnemyDiedEvent()
+        {
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceDamageTest");
+            GameObject sessionObject = new GameObject("DFMP_RosterSession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "damage-test-seed", DungeonRosterSize = 2 });
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext();
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(55, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("damage-test-seed"), dungeon, 2, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+
+                DFMPEnemyDiedEvent deathEvent = null;
+                DFMPEventBus.Instance.EnemyDied += e => deathEvent = e;
+
+                DFMPDynamicEnemyRecord updatedRecord;
+                int appliedAmount;
+                bool killed;
+                Assert.IsTrue(service.TryApplyDamage(enemyId, 999, 55, out updatedRecord, out appliedAmount, out killed));
+                Assert.IsTrue(killed);
+                Assert.AreEqual(0, updatedRecord.Health);
+                Assert.AreEqual(DFMPDynamicEnemyLifecycleState.Dead, updatedRecord.LifecycleState);
+
+                Assert.IsNotNull(deathEvent);
+                Assert.AreEqual(enemyId, deathEvent.EnemyId);
+                Assert.AreEqual(55, deathEvent.KillerConnectionId);
+                Assert.AreEqual(appliedAmount, deathEvent.DamageAmount);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
         static DFMPDynamicEnemyRecord[] CreateRoster()
         {
             DFMPDynamicEnemyRecord[] roster;

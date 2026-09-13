@@ -1154,9 +1154,112 @@ namespace DFMP.Runtime
             if (conn == null || !DFMPCombatProtocol.IsValidDamageIntent(intent))
             {
                 Debug.LogWarning($"[DFMP Combat] Rejected malformed damage intent: connectionId={(conn != null ? conn.connectionId : -1)}.");
-            return false;
+                return false;
             }
 
+            if (!string.IsNullOrWhiteSpace(intent.TargetEnemyId))
+                return TryApplyDynamicEnemyDamageIntent(conn, intent);
+
+            return TryApplyPlayerDamageIntent(conn, intent);
+        }
+
+        private static bool TryApplyDynamicEnemyDamageIntent(NetworkConnectionToClient conn, DFMPDamageIntent intent)
+        {
+            DFMPPlayerSessionState sourceSession;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sourceSession) || sourceSession == null)
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected enemy damage intent: connectionId={conn.connectionId}, enemyId={intent.TargetEnemyId}, reason=missing-session.");
+                return false;
+            }
+
+            if (DungeonEnemyRosterService == null)
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected enemy damage intent: connectionId={conn.connectionId}, enemyId={intent.TargetEnemyId}, reason=roster-service-unavailable.");
+                return false;
+            }
+
+            DFMPDynamicEnemyRecord enemyRecord;
+            bool enemyExists = DungeonEnemyRosterService.TryGetRecord(intent.TargetEnemyId, out enemyRecord);
+            bool enemyIsDead = !enemyExists || enemyRecord.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive || enemyRecord.Health <= 0;
+
+            uint lastSequence;
+            if (!lastDamageSequences.TryGetValue(conn.connectionId, out lastSequence))
+                lastSequence = 0;
+
+            ulong lastRequestId;
+            if (lastDamageRequestIds.TryGetValue(conn.connectionId, out lastRequestId) && lastRequestId == intent.RequestId)
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected enemy damage intent: connectionId={conn.connectionId}, requestId={intent.RequestId}, reason=duplicate-request.");
+                return false;
+            }
+
+            DFMPWorldContextKey sourceContext;
+            bool hasSourceContext = worldOccupancy.TryGetContext(conn.connectionId, out sourceContext);
+            bool sameWorldContext = hasSourceContext && enemyExists && sourceContext.Equals(enemyRecord.Identity.Encounter.Context);
+            bool inRange = sameWorldContext && sourceSession.HasDungeonLocalPosition &&
+                IsWithinEnemyRange(sourceSession.DungeonLocalPosition, enemyRecord.Descriptor.DungeonLocalPosition, intent.AttackKind);
+
+            DFMPDamageValidationRequest validationRequest = new DFMPDamageValidationRequest
+            {
+                RequestId = intent.RequestId,
+                Sequence = intent.Sequence,
+                SourceKind = intent.SourceKind,
+                VitalKind = intent.VitalKind,
+                SourceConnectionId = conn.connectionId,
+                TargetConnectionId = 0,
+                TargetEnemyId = intent.TargetEnemyId,
+                Amount = intent.Amount
+            };
+
+            DFMPDamageValidationContext validationContext = new DFMPDamageValidationContext
+            {
+                HasSession = sourceSession != null,
+                SpawnConfirmed = sourceSession.SpawnConfirmed,
+                TargetExists = enemyExists,
+                TargetIsDead = enemyIsDead,
+                HasPendingTransition = false,
+                SameWorldContext = sameWorldContext,
+                InRange = inRange,
+                PvpEnabled = true,
+                CooldownElapsed = IsDamageCooldownElapsed(conn.connectionId) && IsDamageRateAvailable(conn.connectionId),
+                AuthoritativeSourceConnectionId = conn.connectionId,
+                LastAcceptedSequence = lastSequence,
+                MaximumAmount = Config != null && Config.Combat != null ? Config.Combat.MaximumDamagePerHit : 100,
+                IsDynamicEnemyTarget = true
+            };
+
+            DFMPDamageRejectionReason rejectionReason = DFMPDamagePolicy.GetRejectionReason(validationRequest, validationContext);
+            if (!DFMPDamagePolicy.IsAccepted(rejectionReason))
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected enemy damage intent: connectionId={conn.connectionId}, enemyId={intent.TargetEnemyId}, requestId={intent.RequestId}, attack={intent.AttackKind}, reason={rejectionReason}.");
+                return false;
+            }
+
+            DFMPDynamicEnemyRecord updatedRecord;
+            int appliedAmount;
+            bool killed;
+            if (!DungeonEnemyRosterService.TryApplyDamage(intent.TargetEnemyId, intent.Amount, conn.connectionId, out updatedRecord, out appliedAmount, out killed))
+            {
+                Debug.LogWarning($"[DFMP Combat] Failed to apply damage to dynamic enemy: connectionId={conn.connectionId}, enemyId={intent.TargetEnemyId}.");
+                return false;
+            }
+
+            lastDamageSequences[conn.connectionId] = intent.Sequence;
+            lastDamageRequestIds[conn.connectionId] = intent.RequestId;
+            RecordAcceptedDamage(conn.connectionId);
+
+            Debug.Log($"[DFMP Combat] Applied damage to dynamic enemy: source={conn.connectionId}, enemyId={intent.TargetEnemyId}, amount={appliedAmount}, remainingHealth={updatedRecord.Health}, killed={killed}.");
+            return true;
+        }
+
+        static bool IsWithinEnemyRange(Vector3 sourceDungeonPos, Vector3 enemyDungeonPos, DFMPCombatAttackKind attackKind)
+        {
+            float maxRange = attackKind == DFMPCombatAttackKind.Ranged ? 25f : 6f;
+            return Vector3.Distance(sourceDungeonPos, enemyDungeonPos) <= maxRange;
+        }
+
+        private static bool TryApplyPlayerDamageIntent(NetworkConnectionToClient conn, DFMPDamageIntent intent)
+        {
             DFMPPlayerSessionState sourceSession;
             DFMPPlayerSessionState targetSession;
             DFMPVitalState targetVitals;

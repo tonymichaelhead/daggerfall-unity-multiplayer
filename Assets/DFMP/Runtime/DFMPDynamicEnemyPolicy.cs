@@ -131,6 +131,8 @@ namespace DFMP.Runtime
         public DFMPDynamicEnemyIdentity Identity;
         public DFMPDynamicEnemyLifecycleState LifecycleState;
         public DFMPDynamicEnemyDescriptor Descriptor;
+        public int Health;
+        public int MaxHealth;
     }
 
     public static class DFMPDungeonRosterPolicy
@@ -235,6 +237,15 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static int GetInitialEnemyHealth(int mobileType)
+        {
+            MobileEnemy enemy;
+            if (EnemyBasics.GetEnemy((MobileTypes)mobileType, out enemy) && enemy.MaxHealth > 0)
+                return Math.Max(1, (enemy.MinHealth + enemy.MaxHealth) / 2);
+
+            return 20;
+        }
+
         public static bool TryCreateRoster(
             ulong serverWorldSeed,
             DFMPWorldContextKey context,
@@ -261,6 +272,7 @@ namespace DFMP.Runtime
                     return false;
                 }
 
+                int health = GetInitialEnemyHealth(descriptor.MobileType);
                 roster[rosterIndex] = new DFMPDynamicEnemyRecord
                 {
                     Identity = new DFMPDynamicEnemyIdentity
@@ -270,7 +282,9 @@ namespace DFMP.Runtime
                         EnemyId = encounter.EncounterId + "-enemy-" + rosterIndex.ToString(CultureInfo.InvariantCulture)
                     },
                     LifecycleState = DFMPDynamicEnemyLifecycleState.SpawnedAlive,
-                    Descriptor = descriptor
+                    Descriptor = descriptor,
+                    Health = health,
+                    MaxHealth = health
                 };
             }
 
@@ -426,6 +440,42 @@ namespace DFMP.Runtime
 
             record.LifecycleState = nextState;
             recordsByEnemyId[enemyId] = record;
+            return DFMPDynamicEnemyRegistryResult.Accepted;
+        }
+
+        public DFMPDynamicEnemyRegistryResult TryApplyDamage(
+            bool isServerAuthority,
+            string enemyId,
+            int amount,
+            out DFMPDynamicEnemyRecord updatedRecord,
+            out int appliedAmount,
+            out bool killed)
+        {
+            updatedRecord = default(DFMPDynamicEnemyRecord);
+            appliedAmount = 0;
+            killed = false;
+
+            if (!isServerAuthority)
+                return DFMPDynamicEnemyRegistryResult.InvalidAuthority;
+            if (amount <= 0)
+                return DFMPDynamicEnemyRegistryResult.InvalidTransition;
+
+            DFMPDynamicEnemyRecord record;
+            if (!recordsByEnemyId.TryGetValue(enemyId ?? string.Empty, out record))
+                return DFMPDynamicEnemyRegistryResult.MissingEnemy;
+            if (record.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
+                return DFMPDynamicEnemyRegistryResult.InvalidTransition;
+
+            appliedAmount = Math.Min(amount, Math.Max(0, record.Health));
+            record.Health = Math.Max(0, record.Health - appliedAmount);
+            if (record.Health == 0)
+            {
+                record.LifecycleState = DFMPDynamicEnemyLifecycleState.Dead;
+                killed = true;
+            }
+
+            recordsByEnemyId[enemyId] = record;
+            updatedRecord = record;
             return DFMPDynamicEnemyRegistryResult.Accepted;
         }
 

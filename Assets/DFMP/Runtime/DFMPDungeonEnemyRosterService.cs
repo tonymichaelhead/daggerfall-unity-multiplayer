@@ -55,6 +55,36 @@ namespace DFMP.Runtime
             return registry.TryGetRecord(enemyId, out record);
         }
 
+        public bool TryApplyDamage(string enemyId, int amount, int killerConnectionId, out DFMPDynamicEnemyRecord updatedRecord, out int appliedAmount, out bool killed)
+        {
+            DFMPDynamicEnemyRegistryResult result = registry.TryApplyDamage(true, enemyId, amount, out updatedRecord, out appliedAmount, out killed);
+            if (result != DFMPDynamicEnemyRegistryResult.Accepted)
+                return false;
+
+            if (killed)
+            {
+                GameObject enemyGo;
+                if (stateObjectsByEnemyId.TryGetValue(enemyId, out enemyGo) && enemyGo != null)
+                {
+                    var state = enemyGo.GetComponent<DFMPDynamicEnemyState>();
+                    if (state != null)
+                        state.SetLifecycleState(DFMPDynamicEnemyLifecycleState.Dead);
+                }
+
+                DFMPEventBus.Instance.PublishEnemyDied(new DFMPEnemyDiedEvent
+                {
+                    EnemyId = enemyId,
+                    Encounter = updatedRecord.Identity.Encounter,
+                    KillerConnectionId = killerConnectionId,
+                    DamageAmount = appliedAmount
+                });
+
+                Debug.Log($"[DFMP Enemy] Enemy killed: enemyId={enemyId}, killer={killerConnectionId}, amount={appliedAmount}.");
+            }
+
+            return true;
+        }
+
         void OnPlayerWorldContextChanged(DFMPPlayerWorldContextChangedEvent contextChange)
         {
             if (contextChange == null)

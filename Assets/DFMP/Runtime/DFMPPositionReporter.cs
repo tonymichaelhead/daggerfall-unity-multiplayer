@@ -160,22 +160,42 @@ namespace DFMP.Runtime
                 return false;
 
             DFMPRemotePlayerHitTarget hitTarget = hitTransform.GetComponentInParent<DFMPRemotePlayerHitTarget>();
-            if (hitTarget == null || hitTarget.ConnectionId == DFMPSpawnAssignmentController.LocalConnectionId)
-                return false;
-
-            NetworkClient.Send(new DFMPDamageIntent
+            if (hitTarget != null && hitTarget.ConnectionId != DFMPSpawnAssignmentController.LocalConnectionId)
             {
-                RequestId = nextDamageRequestId++,
-                Sequence = nextDamageSequence++,
-                SourceKind = DFMPDamageSourceKind.Player,
-                VitalKind = DFMPVitalKind.Health,
-                AttackKind = arrowHit ? DFMPCombatAttackKind.Ranged : DFMPCombatAttackKind.Melee,
-                TargetConnectionId = hitTarget.ConnectionId,
-                Amount = 5
-            });
-            string hitKind = arrowHit ? "ranged" : "melee";
-            Debug.Log($"[DFMP Combat] Submitted {hitKind} weapon-hit intent: target={hitTarget.ConnectionId}, amount=5, summonedArrow={arrowSummoned}.");
-            return true;
+                NetworkClient.Send(new DFMPDamageIntent
+                {
+                    RequestId = nextDamageRequestId++,
+                    Sequence = nextDamageSequence++,
+                    SourceKind = DFMPDamageSourceKind.Player,
+                    VitalKind = DFMPVitalKind.Health,
+                    AttackKind = arrowHit ? DFMPCombatAttackKind.Ranged : DFMPCombatAttackKind.Melee,
+                    TargetConnectionId = hitTarget.ConnectionId,
+                    Amount = 5
+                });
+                string hitKind = arrowHit ? "ranged" : "melee";
+                Debug.Log($"[DFMP Combat] Submitted {hitKind} weapon-hit intent: target={hitTarget.ConnectionId}, amount=5, summonedArrow={arrowSummoned}.");
+                return true;
+            }
+
+            DFMPDynamicEnemyHitTarget enemyTarget = hitTransform.GetComponentInParent<DFMPDynamicEnemyHitTarget>();
+            if (enemyTarget != null && !string.IsNullOrWhiteSpace(enemyTarget.EnemyId))
+            {
+                NetworkClient.Send(new DFMPDamageIntent
+                {
+                    RequestId = nextDamageRequestId++,
+                    Sequence = nextDamageSequence++,
+                    SourceKind = DFMPDamageSourceKind.Player,
+                    VitalKind = DFMPVitalKind.Health,
+                    AttackKind = arrowHit ? DFMPCombatAttackKind.Ranged : DFMPCombatAttackKind.Melee,
+                    TargetEnemyId = enemyTarget.EnemyId,
+                    Amount = 5
+                });
+                string hitKind = arrowHit ? "ranged" : "melee";
+                Debug.Log($"[DFMP Combat] Submitted {hitKind} weapon-hit intent on dynamic enemy: enemyId={enemyTarget.EnemyId}, amount=5, summonedArrow={arrowSummoned}.");
+                return true;
+            }
+
+            return false;
         }
 
         static bool TryHandlePlayerMissileHit(object hitColliderObject)
@@ -185,21 +205,40 @@ namespace DFMP.Runtime
                 return false;
 
             DFMPRemotePlayerHitTarget hitTarget = hitCollider.transform.GetComponentInParent<DFMPRemotePlayerHitTarget>();
-            if (hitTarget == null || hitTarget.ConnectionId == DFMPSpawnAssignmentController.LocalConnectionId)
-                return false;
-
-            NetworkClient.Send(new DFMPDamageIntent
+            if (hitTarget != null && hitTarget.ConnectionId != DFMPSpawnAssignmentController.LocalConnectionId)
             {
-                RequestId = nextDamageRequestId++,
-                Sequence = nextDamageSequence++,
-                SourceKind = DFMPDamageSourceKind.Player,
-                VitalKind = DFMPVitalKind.Health,
-                AttackKind = DFMPCombatAttackKind.Ranged,
-                TargetConnectionId = hitTarget.ConnectionId,
-                Amount = 5
-            });
-            Debug.Log($"[DFMP Combat] Submitted ranged missile-hit intent: target={hitTarget.ConnectionId}, amount=5.");
-            return true;
+                NetworkClient.Send(new DFMPDamageIntent
+                {
+                    RequestId = nextDamageRequestId++,
+                    Sequence = nextDamageSequence++,
+                    SourceKind = DFMPDamageSourceKind.Player,
+                    VitalKind = DFMPVitalKind.Health,
+                    AttackKind = DFMPCombatAttackKind.Ranged,
+                    TargetConnectionId = hitTarget.ConnectionId,
+                    Amount = 5
+                });
+                Debug.Log($"[DFMP Combat] Submitted ranged missile-hit intent: target={hitTarget.ConnectionId}, amount=5.");
+                return true;
+            }
+
+            DFMPDynamicEnemyHitTarget enemyTarget = hitCollider.transform.GetComponentInParent<DFMPDynamicEnemyHitTarget>();
+            if (enemyTarget != null && !string.IsNullOrWhiteSpace(enemyTarget.EnemyId))
+            {
+                NetworkClient.Send(new DFMPDamageIntent
+                {
+                    RequestId = nextDamageRequestId++,
+                    Sequence = nextDamageSequence++,
+                    SourceKind = DFMPDamageSourceKind.Player,
+                    VitalKind = DFMPVitalKind.Health,
+                    AttackKind = DFMPCombatAttackKind.Ranged,
+                    TargetEnemyId = enemyTarget.EnemyId,
+                    Amount = 5
+                });
+                Debug.Log($"[DFMP Combat] Submitted ranged missile-hit intent on dynamic enemy: enemyId={enemyTarget.EnemyId}, amount=5.");
+                return true;
+            }
+
+            return false;
         }
 
         void SendIdentityReport()

@@ -91,6 +91,22 @@ namespace DFMP.Runtime
         public string Reason;
     }
 
+    public class DFMPEnemySpawnedEvent
+    {
+        public string EnemyId;
+        public DFMPDynamicEncounterKey Encounter;
+        public int RosterIndex;
+        public DFMPDynamicEnemyDescriptor Descriptor;
+    }
+
+    public class DFMPEnemyDiedEvent
+    {
+        public string EnemyId;
+        public DFMPDynamicEncounterKey Encounter;
+        public int KillerConnectionId;
+        public int DamageAmount;
+    }
+
     public sealed class DFMPEventBus
     {
         public static DFMPEventBus Instance { get; } = new DFMPEventBus();
@@ -105,6 +121,8 @@ namespace DFMP.Runtime
         public event Action<DFMPPlayerDamagedEvent> PlayerDamaged;
         public event Action<DFMPPlayerDiedEvent> PlayerDied;
         public event Action<DFMPPlayerRespawnedEvent> PlayerRespawned;
+        public event Action<DFMPEnemySpawnedEvent> EnemySpawned;
+        public event Action<DFMPEnemyDiedEvent> EnemyDied;
 
         public void PublishPlayerConnected(DFMPPlayerConnectedEvent e)
         {
@@ -202,6 +220,26 @@ namespace DFMP.Runtime
                 return;
 
             var handler = PlayerRespawned;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishEnemySpawned(DFMPEnemySpawnedEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = EnemySpawned;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishEnemyDied(DFMPEnemyDiedEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = EnemyDied;
             if (handler != null)
                 handler(e);
         }
