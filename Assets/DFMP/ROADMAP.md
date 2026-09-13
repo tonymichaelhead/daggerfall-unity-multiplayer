@@ -29,7 +29,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M5 | First-join character creation, account identity, whitelist, and server-side character persistence. | Done |
 | M6 | World context, location occupancy, interest management, and safe transitions. | Done |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Done |
-| M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Planned |
+| M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Done |
 | M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | Planned |
 | M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
 | — | **Phase 1 exit: private beta server live for Discord testers.** | Planned |
@@ -156,10 +156,6 @@ Complete slices:
 - M3.7: Accepted authoritative movement reports derive a replicated moving/idle state and drive `MobilePersonBillboard.IsIdle`.
 - M3.8: Spawn re-anchoring resets stale movement state, and rejected position reports expose concise server-side rejection reasons.
 
-Remaining M3 work:
-
-- M3 close-out: Two graphical clients connect, spawn, see grounded named avatars, observe movement and facing, and hide remote avatars outside presentation scope.
-
 Verification:
 
 - Focused EditMode tests for spawn, position, appearance, and remote-presentation rules.
@@ -181,7 +177,7 @@ One global MMO-style text channel, plus the configuration and event surfaces tha
 - Expand `dfmp-server.json` into a structured server configuration document covering server identity, connection limits, chat rate limits, and world rules. This is the baseline surface only; the exhaustive, documented configuration surface for third-party owners is R1.
 - Introduce a server-side event bus raising `PlayerConnected`, `PlayerDisconnected`, `PlayerSpawned`, `ChatMessageReceived`, and `LocationEntered`. No scripting engine is bound in this milestone; the bus exists so later systems publish through it by default and R2 can bind to it rather than retrofitting finished systems.
 
-Out of scope: private messages, party or proximity channels, chat history persistence, moderation roles, and chat commands.
+Out of scope: private messages, party or proximity channels, chat history persistence, moderation roles, and chat commands. These are owned by R3 and P-VOICE.
 
 Verification:
 
@@ -258,7 +254,7 @@ Everything the server needs to know where players are before it can own entities
 
   - Exterior, building-interior, and dungeon contexts are persisted per character and tracked in server occupancy.
   - Door entry and exit, dungeon entry and exit, fast travel, save load, reconnect, vampirism transformation, and death respawn use server-issued transition assignments with validated acknowledgements.
-  - Saved tavern anchors are recorded on confirmed inn entry. A saved interior anchor currently falls back to the configured exterior starting location during death respawn because the generic transition controller does not yet reopen saved interiors through a door assignment. No invalid interior teleport is attempted.
+  - Saved tavern anchors are recorded on confirmed inn entry. M6 intentionally falls back to the configured exterior starting location during death respawn rather than attempting an invalid interior teleport; server-issued saved-interior reopening is owned by P-WORLD.
   - Death handling is server-owned and no-wipe: duplicate or pending reports are rejected, pre-spawn deaths are not intercepted on the client, stale acknowledgements are rejected, and a pending death respawn is finalized before disconnect cleanup.
   - Vampirism is a live-session transformation only. Persistence across reconnect, restart, and character restore remains explicitly deferred to Phase 2. Lycanthropy remains fully deferred.
 
@@ -269,37 +265,23 @@ Verification:
 - Graphical transition smoke tests covered doors, dungeon entry and exit, fast travel, reconnect, death respawn, repeated death, and disconnect during a pending death respawn. Expected evidence includes accepted `DeathRespawn` assignments, validated acknowledgements, restored vitals, and `Finalized pending death respawn on disconnect` before disconnect cleanup.
 - Vampirism transformation smoke evidence covers server-owned time advancement, cemetery relocation, client effect application, and transition acknowledgement. Vampirism persistence is not an M6 acceptance criterion.
 
-### Post-MVP: Server-Managed Rest and Recovery
-
-Status: Deferred until after the MVP beta.
-
-When enabled by the server's `Rest.Policy = ServerManaged` setting:
-
-- Rest happens in place without advancing global server time, including in dungeons.
-- The server computes vanilla-compatible health, fatigue, and spell-point recovery over compressed real time using a configurable multiplier.
-- Resting does not make a player safe. Hostiles may attack, and damage or movement interrupts active recovery.
-- Vanilla rest-driven skill practice and resulting level progression are server-owned.
-- Inn rental can provide an immediate full restore, while temple and guild restoration services remain distinct paid paths.
-
-The MVP uses `Rest.Policy = Disabled`; clients still block all vanilla rest and loiter time advancement in both policies.
-
 ### M6.5: Spike — Headless Dungeon Geometry
 
 Status: Complete. Timeboxed investigation, not a shipped feature.
 
 Server-side enemy AI needs navigation, collision, and raycasts against real dungeon meshes, but the M0 headless path intentionally starts DFU in `StartMethods.Void` with world suppression. This spike answers whether the dedicated server can selectively instantiate dungeon geometry for occupied locations without cameras, audio, or UI, and at what CPU and memory cost per occupied dungeon.
 
-The outcome gates the design of M7 and M8. If full geometry proves too expensive, the fallback is a simplified server-side enemy simulation running against a precomputed navigation representation.
+The outcome informed M7 and is an M8 prerequisite. If full geometry proves too expensive, M8 retains a simplified server-side enemy simulation running against a precomputed navigation representation.
 
 Verification:
 
 - Headless run instantiating one and several dungeons, with recorded startup time, frame cost, and memory footprint.
 - Native DFU geometry generated one dungeon with 5 blocks in 413 ms and three dungeons with 44 blocks in 1,206 ms; the headless server remained near 30 FPS after both runs.
-- Written recommendation and caveats are recorded in [Dungeon Geometry Spike](DUNGEON_GEOMETRY_SPIKE.md) before M8 design begins. Native geometry is viable as a server-hosting foundation, but duplicate action-door `LoadID` warnings, audio behavior, teardown, and enemy-import cost require separate hardening before M8.
+- Written recommendation and caveats are recorded in [Dungeon Geometry Spike](DUNGEON_GEOMETRY_SPIKE.md). Native geometry is viable as a server-hosting foundation; its action-door, audio, teardown, and enemy-import concerns are owned by M8.
 
 ### M7: Vitals and Combat Authority
 
-Status: Planned.
+Status: Complete.
 
 - Server-authoritative health, spell points, and fatigue.
 - Server-owned death and respawn.
@@ -333,6 +315,8 @@ Status: Planned.
 - The enemy registry and lifecycle model remain provider-agnostic so later wilderness encounters, city/night spawns, and validated mod-provided encounters can use the same server-owned path without redefining entity identity or authority.
 - Roster or encounter state persists while its activation scope is occupied and despawns on a configurable timer once empty.
 - Server-owned enemy state, movement, and AI are replicated to observers through M6 context and occupancy interest management; Unity transform distance is not the authority boundary.
+- Before enabling enemy AI, harden native dungeon hosting for duplicate action-door `LoadID` handling, audio suppression, deterministic teardown, and bounded enemy-import cost.
+- Complete remote player avatar presentation in shared dungeon blocks as part of the two-client dungeon vertical slice. Replicate deterministic local scene positions for shared dungeon and compatible building-interior contexts; retain M6 `WorldContextKey` and occupancy as the interest boundary, and do not reuse exterior terrain grounding or Unity transform distance for interior placement.
 - Kill credit and loot attribution routed through the server.
 - **Personal loot.** Each player loots an independent copy, avoiding loot races and duplication exploits entirely.
 - Event bus raises `EnemySpawned`, `EnemyDied`, and `LootGenerated`.
@@ -354,6 +338,7 @@ The smallest amount of non-gameplay work required to actually put testers on the
 - Whitelist administered by hand, out of band via Discord, using the M5 whitelist store.
 - Manual operations are acceptable: file-copy character backups, restart by hand, read logs on disk.
 - Beta stability pass: run the server continuously for a multi-day soak, watch for leaks, unbounded growth in session or roster state, and reconnect edge cases.
+- Record the two-client exterior remote-presentation smoke: grounded named avatars, movement and facing, and presentation-scope culling.
 - A short tester-facing setup note and a bug reporting channel. This is not the Phase 2 documentation set.
 
 Out of scope: launcher, auto-update, server browser, mod provisioning, in-game admin commands, metrics dashboards.
@@ -398,6 +383,7 @@ Status: Planned.
 - Startup validation that rejects malformed values with a specific, actionable message and exits, rather than silently falling back to defaults.
 - Config reload for the subset of values that are safe to change on a running server, with the rest clearly marked restart-only.
 - A documented, fully commented reference config shipped with the build.
+- Implement and document `Rest.Policy = ServerManaged`: in-place, interruptible recovery over compressed real time without advancing global time, including server-owned rest-driven practice and progression.
 
 Verification:
 
@@ -436,6 +422,7 @@ An early F12 administration prototype now provides a server-authored connected-p
 - GM/world-control commands should expose the same server action service used by R2 scripts, including an `Advance World Time` action, player infection/cure, player teleport, and later enemy spawn/despawn. The client menu is only a request UI; authority, validation, permission checks, confirmation for large jumps, and audit remain server-side.
 - Audit log of moderation actions, keyed to account identity.
 - Additional chat channels beyond the single global channel, at minimum a staff channel and private messages.
+- Add bounded, server-persisted global chat history with explicit retention and access policy.
 
 Verification:
 
@@ -536,6 +523,7 @@ Status: Future.
 
 - Shared quest progression for parties, building on the personal quest model rather than replacing it.
 - Shared and persistent world state options: doors, containers, loot mode selection, and a shared economy with server-owned shop inventories and prices.
+- Reopen saved building interiors through validated server-issued door assignments for death-respawn anchors, retaining the exterior fallback when reopening is impossible.
 - Optional citizen and ambient NPC synchronization, only if it proves to matter in practice.
 - Server-owned weather and seasonal events beyond the Phase 1 time and weather baseline.
 
