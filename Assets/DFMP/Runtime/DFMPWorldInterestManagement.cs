@@ -53,6 +53,13 @@ namespace DFMP.Runtime
             if (identity == null)
                 return false;
 
+            DFMPWorldContextCarrier contextCarrier = identity.GetComponent<DFMPWorldContextCarrier>();
+            if (contextCarrier != null)
+            {
+                context = contextCarrier.Context;
+                return true;
+            }
+
             DFMPPlayerSessionState sessionState = identity.GetComponent<DFMPPlayerSessionState>();
             return sessionState != null && DFMPNetworkServer.TryGetSessionWorldContext(sessionState.ConnectionId, out context);
         }

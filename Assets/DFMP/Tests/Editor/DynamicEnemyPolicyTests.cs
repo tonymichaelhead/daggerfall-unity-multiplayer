@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using DFMP.Runtime;
+using Mirror;
 using UnityEngine;
 
 namespace DFMP.Tests
@@ -156,6 +157,36 @@ namespace DFMP.Tests
                 Object.DestroyImmediate(firstSessionObject);
                 Object.DestroyImmediate(secondSessionObject);
                 DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DynamicEnemyState_ReplicatesDurableIdentityAndLifecycleWithoutGameplayComponents()
+        {
+            GameObject enemyObject = new GameObject("DFMP_DynamicEnemyStateTest");
+            try
+            {
+                enemyObject.AddComponent<NetworkIdentity>();
+                var carrier = enemyObject.AddComponent<DFMPWorldContextCarrier>();
+                var state = enemyObject.AddComponent<DFMPDynamicEnemyState>();
+                DFMPDynamicEnemyRecord[] roster = CreateRoster();
+                DFMPDynamicEnemyRecord record = roster[0];
+                record.LifecycleState = DFMPDynamicEnemyLifecycleState.DespawnedAlive;
+
+                carrier.Initialize(record.Identity.Encounter.Context);
+                state.Initialize(record);
+
+                Assert.AreEqual(record.Identity.Encounter.Context, carrier.Context);
+                Assert.AreEqual(record.Identity.Encounter.ProviderKind, state.ProviderKind);
+                Assert.AreEqual(record.Identity.Encounter.EncounterId, state.EncounterId);
+                Assert.AreEqual(record.Identity.RosterIndex, state.RosterIndex);
+                Assert.AreEqual(record.Identity.EnemyId, state.EnemyId);
+                Assert.AreEqual(DFMPDynamicEnemyLifecycleState.DespawnedAlive, state.LifecycleState);
+                Assert.AreEqual(4, enemyObject.GetComponents<Component>().Length);
+            }
+            finally
+            {
+                Object.DestroyImmediate(enemyObject);
             }
         }
 

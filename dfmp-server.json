@@ -20,7 +20,7 @@
   },
   "Enemies": {
     "WorldSeed": "default",
-    "DungeonRosterSize": 8
+    "DungeonRosterSize": 2
   },
   "Developer": {
     "CommandsEnabled": true

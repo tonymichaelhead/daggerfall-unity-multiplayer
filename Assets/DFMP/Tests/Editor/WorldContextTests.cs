@@ -508,5 +508,56 @@ namespace DFMP.Tests
                 DFMPNetworkServer.Stop();
             }
         }
+
+        [Test]
+        public void WorldInterestManagement_AllowsOnlyMatchingContextCarrierObservers()
+        {
+            GameObject interestGo = new GameObject("DFMP_CarrierInterestManagementTest");
+            GameObject identityGo = new GameObject("DFMP_ContextCarrierIdentityTest");
+            try
+            {
+                var interest = interestGo.AddComponent<DFMPWorldInterestManagement>();
+                var identity = identityGo.AddComponent<NetworkIdentity>();
+                var carrier = identityGo.AddComponent<DFMPWorldContextCarrier>();
+                var context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    RegionIndex = 3,
+                    LocationIndex = 42,
+                    LocationId = "Daggerfall Dungeon",
+                    DungeonBlockIndex = 7,
+                    DungeonBlockName = "S0000161.RDB",
+                    InstanceId = "shared"
+                };
+                carrier.Initialize(context);
+                var matchingConnection = new NetworkConnectionToClient(91);
+                matchingConnection.isReady = true;
+                var differentBlockConnection = new NetworkConnectionToClient(92);
+                differentBlockConnection.isReady = true;
+                var differentInstanceConnection = new NetworkConnectionToClient(93);
+                differentInstanceConnection.isReady = true;
+                var differentBlock = context;
+                differentBlock.DungeonBlockIndex = 8;
+                var differentInstance = context;
+                differentInstance.InstanceId = "other";
+
+                DFMPNetworkServer.SetSessionWorldContext(91, null, context, "test");
+                DFMPNetworkServer.SetSessionWorldContext(92, null, differentBlock, "test");
+                DFMPNetworkServer.SetSessionWorldContext(93, null, differentInstance, "test");
+
+                Assert.AreEqual(context, carrier.Context);
+                Assert.IsTrue(interest.ShouldObserve(identity, matchingConnection));
+                Assert.IsFalse(interest.ShouldObserve(identity, differentBlockConnection));
+                Assert.IsFalse(interest.ShouldObserve(identity, differentInstanceConnection));
+            }
+            finally
+            {
+                Object.DestroyImmediate(identityGo);
+                Object.DestroyImmediate(interestGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
     }
 }

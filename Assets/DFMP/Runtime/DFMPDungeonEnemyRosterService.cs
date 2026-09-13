@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Mirror;
 using UnityEngine;
 
 namespace DFMP.Runtime
@@ -7,6 +8,7 @@ namespace DFMP.Runtime
     {
         readonly DFMPDynamicEnemyRegistry registry = new DFMPDynamicEnemyRegistry();
         readonly Dictionary<DFMPWorldContextKey, string[]> enemyIdsByContext = new Dictionary<DFMPWorldContextKey, string[]>();
+        readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
         ulong serverWorldSeed;
         int dungeonRosterSize;
         bool isSubscribed;
@@ -106,6 +108,8 @@ namespace DFMP.Runtime
 
             if (reactivatedCount > 0)
                 Debug.Log($"[DFMP Enemy] Reactivated dungeon roster: context={context}, count={reactivatedCount}.");
+
+            ProjectActiveRecords(context, enemyIds);
         }
 
         void DespawnContext(DFMPWorldContextKey context)
@@ -114,14 +118,68 @@ namespace DFMP.Runtime
             if (!enemyIdsByContext.TryGetValue(context, out enemyIds))
                 return;
 
+            int destroyedStateCount = 0;
             for (int index = 0; index < enemyIds.Length; index++)
             {
                 DFMPDynamicEnemyRecord record;
                 if (registry.TryGetRecord(enemyIds[index], out record) && record.LifecycleState == DFMPDynamicEnemyLifecycleState.SpawnedAlive)
                     registry.TryTransition(true, enemyIds[index], DFMPDynamicEnemyLifecycleState.DespawnedAlive);
+
+                if (DestroyStateObject(enemyIds[index]))
+                    destroyedStateCount++;
             }
 
             Debug.Log($"[DFMP Enemy] Despawned dungeon roster: context={context}, count={enemyIds.Length}.");
+            if (destroyedStateCount > 0)
+                Debug.Log($"[DFMP Enemy] Destroyed state projections: context={context}, count={destroyedStateCount}.");
+        }
+
+        void ProjectActiveRecords(DFMPWorldContextKey context, string[] enemyIds)
+        {
+            if (!NetworkServer.active)
+                return;
+
+            int spawnedStateCount = 0;
+            for (int index = 0; index < enemyIds.Length; index++)
+            {
+                if (stateObjectsByEnemyId.ContainsKey(enemyIds[index]))
+                    continue;
+
+                DFMPDynamicEnemyRecord record;
+                if (!registry.TryGetRecord(enemyIds[index], out record) || record.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
+                    continue;
+
+                GameObject enemyGo = new GameObject("DFMP_DynamicEnemyState_" + record.Identity.EnemyId);
+                enemyGo.SetActive(false);
+                enemyGo.AddComponent<NetworkIdentity>();
+                enemyGo.AddComponent<DFMPWorldContextCarrier>().Initialize(context);
+                enemyGo.AddComponent<DFMPDynamicEnemyState>().Initialize(record);
+                Object.DontDestroyOnLoad(enemyGo);
+                enemyGo.SetActive(true);
+                NetworkServer.Spawn(enemyGo, DFMPDynamicEnemyState.AssetId);
+                stateObjectsByEnemyId.Add(record.Identity.EnemyId, enemyGo);
+                spawnedStateCount++;
+            }
+
+            if (spawnedStateCount > 0)
+                Debug.Log($"[DFMP Enemy] Spawned state projections: context={context}, count={spawnedStateCount}.");
+        }
+
+        bool DestroyStateObject(string enemyId)
+        {
+            GameObject enemyGo;
+            if (!stateObjectsByEnemyId.TryGetValue(enemyId, out enemyGo))
+                return false;
+
+            stateObjectsByEnemyId.Remove(enemyId);
+            if (enemyGo == null)
+                return false;
+
+            if (NetworkServer.active)
+                NetworkServer.Destroy(enemyGo);
+            else
+                Destroy(enemyGo);
+            return true;
         }
 
         static bool IsDungeonBlock(DFMPWorldContextKey context)
