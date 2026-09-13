@@ -60,12 +60,17 @@ namespace DFMP.Runtime
             if (contextChange == null)
                 return;
 
-            if (contextChange.HadPreviousContext && IsDungeonBlock(contextChange.PreviousContext) &&
-                DFMPNetworkServer.GetConnectionsInWorldContext(contextChange.PreviousContext).Length == 0)
-                DespawnContext(contextChange.PreviousContext);
+            if (contextChange.HadPreviousContext)
+                HandleContextVacated(contextChange.PreviousContext);
 
             if (IsDungeonBlock(contextChange.CurrentContext))
                 ActivateContext(contextChange.CurrentContext);
+        }
+
+        public void HandleContextVacated(DFMPWorldContextKey context)
+        {
+            if (IsDungeonBlock(context) && DFMPNetworkServer.GetConnectionsInWorldContext(context).Length == 0)
+                DespawnContext(context);
         }
 
         void ActivateContext(DFMPWorldContextKey context)
@@ -185,7 +190,7 @@ namespace DFMP.Runtime
         static bool IsDungeonBlock(DFMPWorldContextKey context)
         {
             return context.Kind == DFMPWorldContextKind.Dungeon &&
-                context.DungeonBlockIndex > 0 &&
+                context.DungeonBlockIndex >= 0 &&
                 !string.IsNullOrWhiteSpace(context.LocationId) &&
                 !string.IsNullOrWhiteSpace(context.DungeonBlockName);
         }

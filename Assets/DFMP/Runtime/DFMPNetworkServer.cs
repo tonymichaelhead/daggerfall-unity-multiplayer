@@ -1743,7 +1743,11 @@ namespace DFMP.Runtime
 
             playerSessionStates.Remove(conn.connectionId);
             joinDecisions.Remove(conn.connectionId);
+            DFMPWorldContextKey previousContext;
+            bool hadPreviousContext = worldOccupancy.TryGetContext(conn.connectionId, out previousContext);
             worldOccupancy.Remove(conn.connectionId);
+            if (hadPreviousContext && DungeonEnemyRosterService != null)
+                DungeonEnemyRosterService.HandleContextVacated(previousContext);
             startMarkerAssignments.Remove(conn.connectionId);
             transitionAssignmentStates.Remove(conn.connectionId);
             vitalStates.Remove(conn.connectionId);

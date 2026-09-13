@@ -63,6 +63,17 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_AcceptsFirstNativeDungeonBlock()
+        {
+            DFMPWorldContextKey firstBlock = CreateDungeonContext();
+            firstBlock.DungeonBlockIndex = 0;
+            DFMPDynamicEnemyRecord[] roster;
+
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(123456UL, firstBlock, 1, out roster));
+            Assert.AreEqual(0, roster[0].Identity.Encounter.Context.DungeonBlockIndex);
+        }
+
+        [Test]
         public void Registry_EnforcesServerAuthorityAndIdempotentRosterRegistration()
         {
             DFMPDynamicEnemyRecord[] roster = CreateRoster();
@@ -132,6 +143,7 @@ namespace DFMP.Tests
                 var firstSession = firstSessionObject.AddComponent<DFMPPlayerSessionState>();
                 var secondSession = secondSessionObject.AddComponent<DFMPPlayerSessionState>();
                 DFMPWorldContextKey dungeon = CreateDungeonContext();
+                dungeon.DungeonBlockIndex = 0;
                 DFMPWorldContextKey exterior = dungeon;
                 exterior.Kind = DFMPWorldContextKind.Exterior;
                 exterior.DungeonBlockIndex = 0;

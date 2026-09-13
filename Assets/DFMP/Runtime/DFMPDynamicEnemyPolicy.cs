@@ -111,7 +111,7 @@ namespace DFMP.Runtime
             encounter = new DFMPDynamicEncounterKey();
             if (context.Kind != DFMPWorldContextKind.Dungeon ||
                 string.IsNullOrWhiteSpace(context.LocationId) ||
-                context.DungeonBlockIndex <= 0 ||
+                context.DungeonBlockIndex < 0 ||
                 string.IsNullOrWhiteSpace(context.DungeonBlockName))
                 return false;
 
