@@ -18,6 +18,10 @@
     "DamageRateWindowSeconds": 1.0,
     "MaximumDamageRequestsPerWindow": 10
   },
+  "Enemies": {
+    "WorldSeed": "default",
+    "DungeonRosterSize": 8
+  },
   "Developer": {
     "CommandsEnabled": true
   },

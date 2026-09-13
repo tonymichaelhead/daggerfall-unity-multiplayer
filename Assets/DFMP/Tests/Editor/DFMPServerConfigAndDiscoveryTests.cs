@@ -27,6 +27,27 @@ namespace DFMP.Tests
             Assert.AreEqual(DFMPRestPolicies.Disabled, config.Rest.Policy);
             Assert.NotNull(config.Developer);
             Assert.IsFalse(config.Developer.CommandsEnabled);
+            Assert.NotNull(config.Enemies);
+            Assert.AreEqual("default", config.Enemies.WorldSeed);
+            Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
+        }
+
+        [Test]
+        public void ServerConfig_NormalizesEnemyRosterSettings()
+        {
+            var config = new DFMPServerConfig
+            {
+                Enemies = new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "  test-world  ",
+                    DungeonRosterSize = DFMPDungeonRosterPolicy.MaximumRosterSize + 1
+                }
+            };
+
+            config.Normalize();
+
+            Assert.AreEqual("test-world", config.Enemies.WorldSeed);
+            Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
         }
 
         [Test]

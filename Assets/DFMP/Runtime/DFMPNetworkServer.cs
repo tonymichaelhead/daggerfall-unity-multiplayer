@@ -23,6 +23,7 @@ namespace DFMP.Runtime
         public static string Motd { get; set; } = "Welcome to Daggerfall Unity Multiplayer";
         public static DFMPServerConfig Config { get; private set; }
         public static IDFMPCharacterStore CharacterStore { get; private set; }
+        public static DFMPDungeonEnemyRosterService DungeonEnemyRosterService { get; private set; }
 
         public static int ConnectedPlayerCount
         {
@@ -284,6 +285,9 @@ namespace DFMP.Runtime
             Transport.statisticsLog = false;
 
             networkGo.AddComponent<DFMPWorldInterestManagement>();
+
+            DungeonEnemyRosterService = networkGo.AddComponent<DFMPDungeonEnemyRosterService>();
+            DungeonEnemyRosterService.Initialize(Config.Enemies);
 
             Manager = networkGo.AddComponent<DFMPNetworkManager>();
             Manager.dontDestroyOnLoad = true;
@@ -1771,6 +1775,7 @@ namespace DFMP.Runtime
             Manager = null;
             Transport = null;
             TimeState = null;
+            DungeonEnemyRosterService = null;
             playerSessionStates.Clear();
             joinDecisions.Clear();
             worldOccupancy.Clear();

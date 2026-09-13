@@ -50,6 +50,19 @@ namespace DFMP.Runtime
         }
     }
 
+    [Serializable]
+    public class DFMPServerEnemyConfig
+    {
+        public string WorldSeed = "default";
+        public int DungeonRosterSize = 8;
+
+        public void Normalize()
+        {
+            WorldSeed = string.IsNullOrWhiteSpace(WorldSeed) ? "default" : WorldSeed.Trim();
+            DungeonRosterSize = DungeonRosterSize > 0 && DungeonRosterSize <= DFMPDungeonRosterPolicy.MaximumRosterSize ? DungeonRosterSize : 8;
+        }
+    }
+
     public static class DFMPRestPolicies
     {
         public const string Disabled = "Disabled";
@@ -128,6 +141,7 @@ namespace DFMP.Runtime
         public DFMPServerGameplayConfig Gameplay = new DFMPServerGameplayConfig();
         public DFMPServerDeveloperConfig Developer = new DFMPServerDeveloperConfig();
         public DFMPServerCombatConfig Combat = new DFMPServerCombatConfig();
+        public DFMPServerEnemyConfig Enemies = new DFMPServerEnemyConfig();
         public DFMPServerRestConfig Rest = new DFMPServerRestConfig();
         public DFMPServerStartingLocationConfig StartingLocation = new DFMPServerStartingLocationConfig();
 
@@ -166,6 +180,11 @@ namespace DFMP.Runtime
                 Combat = new DFMPServerCombatConfig();
 
             Combat.Normalize();
+
+            if (Enemies == null)
+                Enemies = new DFMPServerEnemyConfig();
+
+            Enemies.Normalize();
 
             if (Rest == null)
                 Rest = new DFMPServerRestConfig();

@@ -30,7 +30,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M6 | World context, location occupancy, interest management, and safe transitions. | Done |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Done |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Planned |
-| M8 | Server-owned dungeon enemies with rosters, replication, AI, and kill credit. | Planned |
+| M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | Planned |
 | M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
 | — | **Phase 1 exit: private beta server live for Discord testers.** | Planned |
 
@@ -65,7 +65,7 @@ Phase 1 is complete when a tester can run this loop end to end on the author's s
 
 Systems are divided by a single rule: **replicate state when a desync between two co-located players would break immersion or be exploitable. Otherwise keep it personal to each client and document it.**
 
-Server-owned in Phase 1: player presence and movement, global chat, game time and weather, character persistence, vitals, combat damage, PvP policy, dungeon enemies, location occupancy, and door state.
+Server-owned in Phase 1: player presence and movement, global chat, game time and weather, character persistence, vitals, combat damage, PvP policy, dynamic world enemies (dungeon enemies first), location occupancy, and door state.
 
 Personal (client-local) in Phase 1: wandering town citizens, static NPCs and shopkeepers, shop inventories and guild services, loot, and quests. Daggerfall's world geometry, dungeon layouts, and static flats are deterministic from game data, so they are never replicated.
 
@@ -316,7 +316,7 @@ M7 is implemented as a sequence of vertical slices. The first end-to-end combat 
 
 1. **PvP vertical slice.** Complete client damage-intent production, server validation, PvP enabled/disabled policy, same-context and range checks, cooldown and rate limits, authoritative vital replication, persistence, death/respawn integration, and combat lifecycle events. All damage continues through the source-agnostic server chokepoint.
 2. **Local quest PvE exception.** Reuse the same chokepoint for client-local quest enemies. Restrict the target to the submitting player, retain bounded and rate-limited validation, and keep the source explicitly beta-trusted and non-shared.
-3. **Server-owned dungeon enemies.** Continue into M8 only after the PvP damage, vital replication, death/respawn, and policy-toggle paths are proven. Enemy entities, AI, attack timing, navigation, kill credit, and loot remain M8 concerns and must submit server-originated damage through the existing chokepoint rather than create a second combat path.
+3. **Server-owned dynamic world enemies.** Continue into M8 only after the PvP damage, vital replication, death/respawn, and policy-toggle paths are proven. Dungeon enemies are the first provider and vertical slice; wilderness encounters, city/night spawns, and future mod-provided encounters must fit the same server-owned entity, activation, replication, kill-credit, and loot boundaries. Enemy entities, AI, attack timing, navigation, kill credit, and loot remain M8 concerns and must submit server-originated damage through the existing chokepoint rather than create a second combat path.
 
 Verification:
 
@@ -324,14 +324,15 @@ Verification:
 - Two-client graphical smoke test first proves PvP damage with PvP enabled and disabled, then covers the owner-only local quest PvE exception. Server-owned dungeon enemy combat is verified separately in M8.
 - Reconnect and respawn smoke coverage confirms that persisted low health restores without a damage-like visual or audio effect, while accepted damage still produces normal feedback.
 
-### M8: Server-Owned Dungeon Enemies
+### M8: Server-Owned Dynamic World Enemies
 
 Status: Planned.
 
-- Shared persistent-world dungeons rather than per-party instances. Layouts are deterministic from game data, so only dynamic entities are replicated.
+- Dungeon enemies are the first provider and vertical slice: shared persistent-world dungeons rather than per-party instances. Layouts are deterministic from game data, so only dynamic entities are replicated.
 - The server populates a dungeon's enemy roster on first occupancy, seeded from location identity and a server world seed so rosters are reproducible and debuggable.
-- Roster persists while the location is occupied and despawns on a configurable timer once empty.
-- Server-owned enemy state, movement, and AI, replicated to occupants through M6 interest management.
+- The enemy registry and lifecycle model remain provider-agnostic so later wilderness encounters, city/night spawns, and validated mod-provided encounters can use the same server-owned path without redefining entity identity or authority.
+- Roster or encounter state persists while its activation scope is occupied and despawns on a configurable timer once empty.
+- Server-owned enemy state, movement, and AI are replicated to observers through M6 context and occupancy interest management; Unity transform distance is not the authority boundary.
 - Kill credit and loot attribution routed through the server.
 - **Personal loot.** Each player loots an independent copy, avoiding loot races and duplication exploits entirely.
 - Event bus raises `EnemySpawned`, `EnemyDied`, and `LootGenerated`.
@@ -340,6 +341,7 @@ Verification:
 
 - EditMode tests for roster seeding, spawn and despawn lifecycle, authority boundaries, and kill credit.
 - Two-client graphical dungeon smoke test confirming both players see and fight the same enemies.
+- The first implementation must prove that the dungeon provider can use the general registry and activation/replication boundaries without hard-coding a dungeon-only enemy model.
 
 ### M9: Beta Server Launch Readiness
 
