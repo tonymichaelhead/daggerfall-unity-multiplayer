@@ -56,6 +56,34 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonLocalToScenePosition_UsesDeterministicDungeonRoot()
+        {
+            Vector3 scenePosition = DFMPRemotePlayerPresentation.DungeonLocalToScenePosition(
+                new Vector3(100f, 0f, -200f),
+                new Vector3(12.5f, 3f, -8.25f));
+
+            Assert.AreEqual(new Vector3(112.5f, 3f, -208.25f), scenePosition);
+        }
+
+        [Test]
+        public void SessionState_StoresReplicatedDungeonLocalPosition()
+        {
+            GameObject go = new GameObject("DFMP_DungeonLocalSessionStateTest");
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.SetDungeonLocalPosition(true, new Vector3(12f, -3f, 8f));
+
+                Assert.IsTrue(session.HasDungeonLocalPosition);
+                Assert.AreEqual(new Vector3(12f, -3f, 8f), session.DungeonLocalPosition);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void IsVisibleInLocalMapPixel_UsesPresentationDistanceCap()
         {
             Assert.IsTrue(DFMPRemotePlayerPresentation.IsVisibleInLocalMapPixel(Vector3.zero, new Vector3(149f, 0f, 0f)));

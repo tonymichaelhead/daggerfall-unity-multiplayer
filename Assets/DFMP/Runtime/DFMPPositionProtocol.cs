@@ -12,6 +12,10 @@ namespace DFMP.Runtime
         public int WorldZ;
         public float FacingYaw;
         public float SceneHeightOffset;
+        public bool HasDungeonLocalPosition;
+        public float DungeonLocalX;
+        public float DungeonLocalY;
+        public float DungeonLocalZ;
     }
 
     public struct DFMPPlayerIdentityReport : Mirror.NetworkMessage
@@ -71,6 +75,7 @@ namespace DFMP.Runtime
         SpawnNotConfirmed,
         TooSoon,
         InvalidWorldPosition,
+        InvalidDungeonLocalPosition,
         ExcessiveDisplacement
     }
 
@@ -92,6 +97,7 @@ namespace DFMP.Runtime
         public const float MinimumAcceptedReportInterval = MinimumReportInterval * 0.5f;
         public const float MaximumSpeed = 4096f;
         public const float MaximumSceneHeightOffset = 20f;
+        public const float MaximumDungeonLocalCoordinate = 8192f;
         public const int MinimumMapPixelX = 3;
         public const int MaximumMapPixelX = 998;
         public const int MinimumMapPixelY = 3;
@@ -159,8 +165,13 @@ namespace DFMP.Runtime
 
         public static float GetSceneHeightOffset(float sceneY, float groundY, float controllerCenterY, float controllerHeight, float controllerSkinWidth)
         {
-            float feetY = sceneY + controllerCenterY - controllerHeight * 0.5f - Mathf.Max(0f, controllerSkinWidth);
+            float feetY = GetControllerFeetY(sceneY, controllerCenterY, controllerHeight, controllerSkinWidth);
             return Mathf.Clamp(feetY - groundY, -MaximumSceneHeightOffset, MaximumSceneHeightOffset);
+        }
+
+        public static float GetControllerFeetY(float sceneY, float controllerCenterY, float controllerHeight, float controllerSkinWidth)
+        {
+            return sceneY + controllerCenterY - controllerHeight * 0.5f - Mathf.Max(0f, controllerSkinWidth);
         }
 
         public static bool IsValidWorldPosition(DFMPPlayerPositionReport report)
@@ -176,12 +187,29 @@ namespace DFMP.Runtime
                 mapPixelY >= MinimumMapPixelY && mapPixelY <= MaximumMapPixelY;
         }
 
+            public static bool IsValidDungeonLocalPosition(Vector3 position)
+            {
+                return !float.IsNaN(position.x) && !float.IsInfinity(position.x) && Mathf.Abs(position.x) <= MaximumDungeonLocalCoordinate &&
+                !float.IsNaN(position.y) && !float.IsInfinity(position.y) && Mathf.Abs(position.y) <= MaximumDungeonLocalCoordinate &&
+                !float.IsNaN(position.z) && !float.IsInfinity(position.z) && Mathf.Abs(position.z) <= MaximumDungeonLocalCoordinate;
+            }
+
+            public static Vector3 GetDungeonLocalPosition(DFMPPlayerPositionReport report)
+            {
+                return new Vector3(report.DungeonLocalX, report.DungeonLocalY, report.DungeonLocalZ);
+            }
+
         public static bool IsAccepted(DFMPPlayerSessionState sessionState, DFMPPlayerPositionReport report, float elapsedSeconds)
         {
             return GetRejectionReason(sessionState, report, elapsedSeconds) == DFMPPositionRejectionReason.None;
         }
 
         public static DFMPPositionRejectionReason GetRejectionReason(DFMPPlayerSessionState sessionState, DFMPPlayerPositionReport report, float elapsedSeconds)
+        {
+            return GetRejectionReason(sessionState, report, elapsedSeconds, new DFMPWorldContextKey());
+        }
+
+        public static DFMPPositionRejectionReason GetRejectionReason(DFMPPlayerSessionState sessionState, DFMPPlayerPositionReport report, float elapsedSeconds, DFMPWorldContextKey authoritativeContext)
         {
             if (sessionState == null)
                 return DFMPPositionRejectionReason.MissingSession;
@@ -192,9 +220,20 @@ namespace DFMP.Runtime
             if (!IsValidWorldPosition(report))
                 return DFMPPositionRejectionReason.InvalidWorldPosition;
 
+            if (authoritativeContext.Kind == DFMPWorldContextKind.Dungeon &&
+                (!report.HasDungeonLocalPosition || !IsValidDungeonLocalPosition(GetDungeonLocalPosition(report))))
+                return DFMPPositionRejectionReason.InvalidDungeonLocalPosition;
+
+            if (authoritativeContext.Kind == DFMPWorldContextKind.Dungeon && !sessionState.HasDungeonLocalPosition)
+                return DFMPPositionRejectionReason.None;
+
             float maxDistance = MaximumSpeed * elapsedSeconds;
-            float deltaX = report.WorldX - sessionState.WorldX;
-            float deltaZ = report.WorldZ - sessionState.WorldZ;
+            float deltaX = authoritativeContext.Kind == DFMPWorldContextKind.Dungeon
+                ? report.DungeonLocalX - sessionState.DungeonLocalPosition.x
+                : report.WorldX - sessionState.WorldX;
+            float deltaZ = authoritativeContext.Kind == DFMPWorldContextKind.Dungeon
+                ? report.DungeonLocalZ - sessionState.DungeonLocalPosition.z
+                : report.WorldZ - sessionState.WorldZ;
             return deltaX * deltaX + deltaZ * deltaZ <= maxDistance * maxDistance
                 ? DFMPPositionRejectionReason.None
                 : DFMPPositionRejectionReason.ExcessiveDisplacement;
@@ -207,9 +246,14 @@ namespace DFMP.Runtime
 
         public static bool IsMoving(int previousWorldX, int previousWorldZ, int currentWorldX, int currentWorldZ)
         {
-            long deltaX = (long)currentWorldX - previousWorldX;
-            long deltaZ = (long)currentWorldZ - previousWorldZ;
-            long threshold = MovementThreshold;
+            return IsMoving((float)previousWorldX, (float)previousWorldZ, currentWorldX, currentWorldZ);
+        }
+
+        public static bool IsMoving(float previousX, float previousZ, float currentX, float currentZ)
+        {
+            float deltaX = currentX - previousX;
+            float deltaZ = currentZ - previousZ;
+            float threshold = MovementThreshold;
             return deltaX * deltaX + deltaZ * deltaZ > threshold * threshold;
         }
     }

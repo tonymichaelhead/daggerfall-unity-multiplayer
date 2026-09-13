@@ -1117,7 +1117,9 @@ namespace DFMP.Runtime
                 ? Time.unscaledTime - lastReportTime
                 : DFMPPositionProtocol.MinimumReportInterval;
 
-            DFMPPositionRejectionReason rejectionReason = DFMPPositionProtocol.GetRejectionReason(sessionState, report, elapsedSeconds);
+            DFMPWorldContextKey context;
+            TryGetSessionWorldContext(conn.connectionId, out context);
+            DFMPPositionRejectionReason rejectionReason = DFMPPositionProtocol.GetRejectionReason(sessionState, report, elapsedSeconds, context);
             if (rejectionReason != DFMPPositionRejectionReason.None)
             {
                 // Anchor time is deliberately not advanced so the movement budget keeps growing and a
@@ -1130,11 +1132,14 @@ namespace DFMP.Runtime
 
             lastPositionReportTimes[conn.connectionId] = Time.unscaledTime;
             rejectedPositionReportConnections.Remove(conn.connectionId);
-            bool isMoving = DFMPMovementProtocol.IsMoving(sessionState.WorldX, sessionState.WorldZ, report.WorldX, report.WorldZ);
+            bool isMoving = context.Kind == DFMPWorldContextKind.Dungeon
+                ? DFMPMovementProtocol.IsMoving(sessionState.DungeonLocalPosition.x, sessionState.DungeonLocalPosition.z, report.DungeonLocalX, report.DungeonLocalZ)
+                : DFMPMovementProtocol.IsMoving(sessionState.WorldX, sessionState.WorldZ, report.WorldX, report.WorldZ);
             sessionState.SetPosition(report.WorldX, report.WorldY, report.WorldZ);
             sessionState.SetMovement(isMoving);
             sessionState.SetFacingYaw(DFMPPositionProtocol.NormalizeFacingYaw(report.FacingYaw));
             sessionState.SetSceneHeightOffset(report.SceneHeightOffset);
+            sessionState.SetDungeonLocalPosition(report.HasDungeonLocalPosition, DFMPPositionProtocol.GetDungeonLocalPosition(report));
             if (activePositionReportConnections.Add(conn.connectionId))
                 Debug.Log($"[DFMP Session] Server accepted player position reports: connectionId={conn.connectionId}.");
         }

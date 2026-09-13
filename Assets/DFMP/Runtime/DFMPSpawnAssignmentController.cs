@@ -46,10 +46,16 @@ namespace DFMP.Runtime
             get { return instance != null && (instance.assignmentState.HasPendingAssignment || instance.transitionState.HasPendingAssignment || Time.unscaledTime < instance.reportSuppressionDeadline); }
         }
 
+        public static bool HasImmediateWorldContextReport
+        {
+            get { return instance != null && instance.hasImmediateWorldContextReport; }
+        }
+
         readonly DFMPSpawnAssignmentState assignmentState = new DFMPSpawnAssignmentState();
         readonly DFMPTransitionAssignmentState transitionState = new DFMPTransitionAssignmentState();
         float fixedSpawnWaitDeadline;
         float reportSuppressionDeadline;
+        bool hasImmediateWorldContextReport;
         bool sharedTestSpawnApplied;
         bool transitionApplied;
         bool doorHookBypass;
@@ -156,6 +162,12 @@ namespace DFMP.Runtime
 
             instance = null;
             LocalConnectionId = -1;
+        }
+
+        public static void CompleteImmediateWorldContextReport()
+        {
+            if (instance != null)
+                instance.hasImmediateWorldContextReport = false;
         }
 
         void OnDestroy()
@@ -650,6 +662,7 @@ namespace DFMP.Runtime
                 return;
 
             NetworkClient.Send(acknowledgement);
+            hasImmediateWorldContextReport = DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(transitionState.Assignment.Kind);
             ClearPendingDungeonTransition();
             SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Transition] Client acknowledged assigned dungeon transition: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");

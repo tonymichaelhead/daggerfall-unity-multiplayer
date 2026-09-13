@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Game.Entity;
 using DaggerfallWorkshop.Utility;
 using Mirror;
@@ -25,6 +26,11 @@ namespace DFMP.Runtime
                 0f,
                 (worldZ - localPlayerGPS.WorldZ) / StreamingWorld.SceneMapRatio);
         }
+
+            public static Vector3 DungeonLocalToScenePosition(Vector3 dungeonRootPosition, Vector3 dungeonLocalPosition)
+            {
+                return dungeonRootPosition + dungeonLocalPosition;
+            }
 
         public static Vector3 GroundScenePosition(StreamingWorld streamingWorld, Vector3 scenePosition)
         {
@@ -191,13 +197,26 @@ namespace DFMP.Runtime
                 GameObject proxy = GetOrCreateProxy(sessionId, session.ConnectionId);
                 UpdateLabel(proxy, session.DisplayName);
                 UpdateAvatar(proxy, session);
-                DFPosition remoteMapPixel = DaggerfallConnect.Arena2.MapsFile.WorldCoordToMapPixel(session.WorldX, session.WorldZ);
-                bool isInLocalMapPixel = remoteMapPixel.X == streamingWorld.LocalPlayerGPS.CurrentMapPixel.X && remoteMapPixel.Y == streamingWorld.LocalPlayerGPS.CurrentMapPixel.Y;
                 Vector3 localPosition = streamingWorld.LocalPlayerGPS.transform.position;
-                Vector3 targetPosition = DFMPRemotePlayerPresentation.WorldToScenePosition(streamingWorld.LocalPlayerGPS, localPosition, session.WorldX, session.WorldZ);
-                targetPosition = DFMPRemotePlayerPresentation.GroundScenePosition(streamingWorld, targetPosition);
-                targetPosition = DFMPRemotePlayerPresentation.ApplySceneHeightOffset(targetPosition, session.SceneHeightOffset);
-                bool isVisible = isInLocalMapPixel && DFMPRemotePlayerPresentation.IsVisibleInLocalMapPixel(localPosition, targetPosition);
+                PlayerEnterExit playerEnterExit = GameManager.Instance != null ? GameManager.Instance.PlayerEnterExit : null;
+                bool isInsideDungeon = playerEnterExit != null && playerEnterExit.IsPlayerInsideDungeon && playerEnterExit.Dungeon != null;
+                Vector3 targetPosition;
+                bool isVisible;
+                if (isInsideDungeon)
+                {
+                    targetPosition = DFMPRemotePlayerPresentation.DungeonLocalToScenePosition(playerEnterExit.Dungeon.transform.position, session.DungeonLocalPosition);
+                    localPosition = playerEnterExit.transform.position;
+                    isVisible = session.HasDungeonLocalPosition && DFMPRemotePlayerPresentation.IsVisibleInLocalMapPixel(localPosition, targetPosition);
+                }
+                else
+                {
+                    DFPosition remoteMapPixel = DaggerfallConnect.Arena2.MapsFile.WorldCoordToMapPixel(session.WorldX, session.WorldZ);
+                    bool isInLocalMapPixel = remoteMapPixel.X == streamingWorld.LocalPlayerGPS.CurrentMapPixel.X && remoteMapPixel.Y == streamingWorld.LocalPlayerGPS.CurrentMapPixel.Y;
+                    targetPosition = DFMPRemotePlayerPresentation.WorldToScenePosition(streamingWorld.LocalPlayerGPS, localPosition, session.WorldX, session.WorldZ);
+                    targetPosition = DFMPRemotePlayerPresentation.GroundScenePosition(streamingWorld, targetPosition);
+                    targetPosition = DFMPRemotePlayerPresentation.ApplySceneHeightOffset(targetPosition, session.SceneHeightOffset);
+                    isVisible = isInLocalMapPixel && DFMPRemotePlayerPresentation.IsVisibleInLocalMapPixel(localPosition, targetPosition);
+                }
 
                 if (isVisible)
                 {

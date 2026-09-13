@@ -34,6 +34,14 @@ namespace DFMP.Runtime
         SaveLoad
     }
 
+    public static class DFMPTransitionReportPolicy
+    {
+        public static bool ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind transitionKind)
+        {
+            return transitionKind == DFMPTransitionKind.DungeonEntry;
+        }
+    }
+
     public struct DFMPTransitionAssignment : Mirror.NetworkMessage
     {
         public int AssignmentId;

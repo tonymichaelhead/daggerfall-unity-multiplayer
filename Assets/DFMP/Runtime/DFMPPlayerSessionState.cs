@@ -41,6 +41,18 @@ namespace DFMP.Runtime
         float sceneHeightOffset;
 
         [SyncVar]
+        bool hasDungeonLocalPosition;
+
+        [SyncVar]
+        float dungeonLocalX;
+
+        [SyncVar]
+        float dungeonLocalY;
+
+        [SyncVar]
+        float dungeonLocalZ;
+
+        [SyncVar]
         int race;
 
         [SyncVar]
@@ -114,6 +126,16 @@ namespace DFMP.Runtime
         public float SceneHeightOffset
         {
             get { return sceneHeightOffset; }
+        }
+
+        public bool HasDungeonLocalPosition
+        {
+            get { return hasDungeonLocalPosition; }
+        }
+
+        public Vector3 DungeonLocalPosition
+        {
+            get { return new Vector3(dungeonLocalX, dungeonLocalY, dungeonLocalZ); }
         }
 
         public int Race
@@ -202,6 +224,14 @@ namespace DFMP.Runtime
         public void SetSceneHeightOffset(float newSceneHeightOffset)
         {
             sceneHeightOffset = newSceneHeightOffset;
+        }
+
+        public void SetDungeonLocalPosition(bool newHasDungeonLocalPosition, Vector3 newDungeonLocalPosition)
+        {
+            hasDungeonLocalPosition = newHasDungeonLocalPosition;
+            dungeonLocalX = newDungeonLocalPosition.x;
+            dungeonLocalY = newDungeonLocalPosition.y;
+            dungeonLocalZ = newDungeonLocalPosition.z;
         }
 
         public void SetAppearance(int newRace, int newGender, int newOutfitVariant, int newFaceVariant)

@@ -25,6 +25,15 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void TransitionReportPolicy_RequestsImmediateContextOnlyForDungeonEntry()
+        {
+            Assert.IsTrue(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.DungeonEntry));
+            Assert.IsFalse(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.DungeonExit));
+            Assert.IsFalse(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.Door));
+            Assert.IsFalse(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.DeathRespawn));
+        }
+
+        [Test]
         public void ClientDeathInterception_AcceptsReadySpawnedSession()
         {
             Assert.IsTrue(DFMPDeathRespawnPolicy.ShouldInterceptClientDeath(true, true, false, false));

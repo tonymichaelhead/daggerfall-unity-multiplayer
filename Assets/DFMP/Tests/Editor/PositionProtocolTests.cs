@@ -43,6 +43,7 @@ namespace DFMP.Tests
         [Test]
         public void SceneHeightOffset_IsRelativeAndBounded()
         {
+            Assert.AreEqual(10f, DFMPPositionProtocol.GetControllerFeetY(11.08f, 0f, 2f, 0.08f), 0.0001f);
             Assert.AreEqual(0f, DFMPPositionProtocol.GetSceneHeightOffset(11.08f, 10f, 0f, 2f, 0.08f), 0.0001f);
             Assert.AreEqual(1.25f, DFMPPositionProtocol.GetSceneHeightOffset(12.33f, 10f, 0f, 2f, 0.08f), 0.0001f);
             Assert.AreEqual(DFMPPositionProtocol.MaximumSceneHeightOffset, DFMPPositionProtocol.GetSceneHeightOffset(100f, 10f, 0f, 2f, 0.08f));
@@ -55,6 +56,52 @@ namespace DFMP.Tests
                 WorldZ = 9374554,
                 SceneHeightOffset = DFMPPositionProtocol.MaximumSceneHeightOffset + 1f
             }));
+        }
+
+        [Test]
+        public void DungeonLocalPosition_RequiresFiniteBoundedCoordinates()
+        {
+            Assert.IsTrue(DFMPPositionProtocol.IsValidDungeonLocalPosition(new Vector3(2048f, -12f, 2048f)));
+            Assert.IsFalse(DFMPPositionProtocol.IsValidDungeonLocalPosition(new Vector3(float.NaN, 0f, 0f)));
+            Assert.IsFalse(DFMPPositionProtocol.IsValidDungeonLocalPosition(new Vector3(0f, float.PositiveInfinity, 0f)));
+            Assert.IsFalse(DFMPPositionProtocol.IsValidDungeonLocalPosition(new Vector3(0f, 0f, DFMPPositionProtocol.MaximumDungeonLocalCoordinate + 1f)));
+        }
+
+        [Test]
+        public void DungeonPositionValidation_RequiresLocalCoordinatesAndAnchorsFirstReport()
+        {
+            GameObject go = new GameObject("DFMP_DungeonPositionValidationTest");
+            try
+            {
+                var session = go.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(7, 6792821, 0f, 9374554);
+                session.ConfirmSpawn();
+                var dungeon = new DFMPWorldContextKey { Kind = DFMPWorldContextKind.Dungeon };
+                var report = new DFMPPlayerPositionReport
+                {
+                    WorldX = 6792821,
+                    WorldY = 0f,
+                    WorldZ = 9374554,
+                    HasDungeonLocalPosition = true,
+                    DungeonLocalX = 1000f,
+                    DungeonLocalY = 0f,
+                    DungeonLocalZ = 1000f
+                };
+
+                Assert.AreEqual(DFMPPositionRejectionReason.None, DFMPPositionProtocol.GetRejectionReason(session, report, 0.1f, dungeon));
+
+                report.HasDungeonLocalPosition = false;
+                Assert.AreEqual(DFMPPositionRejectionReason.InvalidDungeonLocalPosition, DFMPPositionProtocol.GetRejectionReason(session, report, 0.1f, dungeon));
+
+                report.HasDungeonLocalPosition = true;
+                session.SetDungeonLocalPosition(true, new Vector3(1000f, 0f, 1000f));
+                report.DungeonLocalX = 2000f;
+                Assert.AreEqual(DFMPPositionRejectionReason.ExcessiveDisplacement, DFMPPositionProtocol.GetRejectionReason(session, report, 0.1f, dungeon));
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
         }
 
         [Test]
@@ -146,6 +193,7 @@ namespace DFMP.Tests
         public void MovementProtocol_MovementAboveThresholdIsMoving()
         {
             Assert.IsTrue(DFMPMovementProtocol.IsMoving(100, 200, 100 + DFMPMovementProtocol.MovementThreshold + 1, 200));
+            Assert.IsTrue(DFMPMovementProtocol.IsMoving(100.25f, 200.5f, 100.5f, 200.5f));
         }
 
         [Test]

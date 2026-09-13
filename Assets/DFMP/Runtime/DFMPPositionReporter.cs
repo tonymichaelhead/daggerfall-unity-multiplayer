@@ -57,7 +57,8 @@ namespace DFMP.Runtime
             if (!NetworkClient.isConnected)
                 return;
 
-            if (DFMPSpawnAssignmentController.HasPendingServerAssignment)
+            bool hasImmediateWorldContextReport = DFMPSpawnAssignmentController.HasImmediateWorldContextReport;
+            if (DFMPSpawnAssignmentController.HasPendingServerAssignment && !hasImmediateWorldContextReport)
                 return;
 
             if (!IsLocalPlayerAvailable())
@@ -70,6 +71,13 @@ namespace DFMP.Runtime
             if (streamingWorld == null || !streamingWorld.IsReady || streamingWorld.LocalPlayerGPS == null)
                 return;
 
+            if (hasImmediateWorldContextReport)
+            {
+                if (SendWorldContextReport(streamingWorld))
+                    DFMPSpawnAssignmentController.CompleteImmediateWorldContextReport();
+                return;
+            }
+
             ReportPlayerAction(streamingWorld);
             nextReportTime = Time.unscaledTime + DFMPPositionProtocol.MinimumReportInterval;
             SendIdentityReport();
@@ -80,6 +88,19 @@ namespace DFMP.Runtime
             float controllerCenterY = playerController != null ? playerController.center.y : 0f;
             float controllerHeight = playerController != null ? playerController.height : 0f;
             float controllerSkinWidth = playerController != null ? playerController.skinWidth : 0f;
+            PlayerEnterExit playerEnterExit = GameManager.Instance != null ? GameManager.Instance.PlayerEnterExit : null;
+            bool isInsideDungeon = playerEnterExit != null && playerEnterExit.IsPlayerInsideDungeon && playerEnterExit.Dungeon != null;
+            Vector3 dungeonLocalPosition = isInsideDungeon
+                ? playerEnterExit.transform.position - playerEnterExit.Dungeon.transform.position
+                : Vector3.zero;
+            if (isInsideDungeon)
+            {
+                dungeonLocalPosition.y = DFMPPositionProtocol.GetControllerFeetY(
+                    playerScenePosition.y,
+                    controllerCenterY,
+                    controllerHeight,
+                    controllerSkinWidth) - playerEnterExit.Dungeon.transform.position.y;
+            }
             NetworkClient.Send(new DFMPPlayerPositionReport
             {
                 WorldX = streamingWorld.LocalPlayerGPS.WorldX,
@@ -91,7 +112,11 @@ namespace DFMP.Runtime
                     groundScenePosition.y,
                     controllerCenterY,
                         controllerHeight,
-                        controllerSkinWidth)
+                        controllerSkinWidth),
+                HasDungeonLocalPosition = isInsideDungeon,
+                DungeonLocalX = dungeonLocalPosition.x,
+                DungeonLocalY = dungeonLocalPosition.y,
+                DungeonLocalZ = dungeonLocalPosition.z
             }, Channels.Unreliable);
         }
 
@@ -233,18 +258,19 @@ namespace DFMP.Runtime
             });
         }
 
-        void SendWorldContextReport(StreamingWorld streamingWorld)
+        bool SendWorldContextReport(StreamingWorld streamingWorld)
         {
             DFMPWorldContextReport report;
             if (!TryBuildWorldContextReport(streamingWorld, out report))
-                return;
+                return false;
 
             int signature = DFMPWorldContextProtocol.GetSignature(report);
             if (signature == lastContextSignature)
-                return;
+                return true;
 
             lastContextSignature = signature;
             NetworkClient.Send(report);
+            return true;
         }
 
         public static bool TryBuildWorldContextReport(StreamingWorld streamingWorld, out DFMPWorldContextReport report)
