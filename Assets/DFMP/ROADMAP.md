@@ -394,6 +394,8 @@ Verification:
 
 Status: Planned.
 
+See [SCRIPTING_ARCHITECTURE.md](SCRIPTING_ARCHITECTURE.md) for the complete design rationale, TES3MP comparison, server-driven UI protocol, and `.dfmod` client extensibility model.
+
 The M4 event bus exists precisely so this milestone is a binding exercise rather than a rewrite.
 
 - An embedded scripting runtime loading scripts from a server-side scripts folder.
