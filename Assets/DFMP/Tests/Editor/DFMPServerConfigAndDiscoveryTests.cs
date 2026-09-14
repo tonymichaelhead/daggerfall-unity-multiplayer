@@ -30,6 +30,7 @@ namespace DFMP.Tests
             Assert.NotNull(config.Enemies);
             Assert.AreEqual("default", config.Enemies.WorldSeed);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
+            Assert.AreEqual(24f, config.Enemies.PursuitLeashRange);
             Assert.AreEqual(6f, config.Enemies.PlayerMeleeDamageRange);
             Assert.AreEqual(25f, config.Enemies.PlayerRangedDamageRange);
         }
@@ -49,6 +50,7 @@ namespace DFMP.Tests
                     AiTickIntervalSeconds = 0f,
                     AttackCooldownSeconds = 0f,
                     AttackDamage = 0,
+                    PursuitLeashRange = 512f,
                     PlayerMeleeDamageRange = 64f,
                     PlayerRangedDamageRange = 1f
                 }
@@ -64,6 +66,7 @@ namespace DFMP.Tests
             Assert.AreEqual(0.1f, config.Enemies.AiTickIntervalSeconds);
             Assert.AreEqual(1.8f, config.Enemies.AttackCooldownSeconds);
             Assert.AreEqual(4, config.Enemies.AttackDamage);
+            Assert.AreEqual(24f, config.Enemies.PursuitLeashRange);
             Assert.AreEqual(6f, config.Enemies.PlayerMeleeDamageRange);
             Assert.AreEqual(25f, config.Enemies.PlayerRangedDamageRange);
         }

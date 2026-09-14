@@ -587,6 +587,54 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyAi_PursuitLeashReturnsEnemyHomeBeforeTargeting()
+        {
+            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = new Vector3(5f, 0f, 0f),
+                HomePosition = Vector3.zero,
+                PursuitLeashRange = 3f,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 41, DungeonLocalPosition = new Vector3(6f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
+                },
+                AwarenessRange = 64f,
+                AttackRange = 1f,
+                MoveSpeed = 4f,
+                DeltaTime = 0.5f,
+                RequireLineOfSight = false
+            });
+
+            Assert.IsFalse(decision.HasTarget);
+            Assert.IsTrue(decision.IsMoving);
+            Assert.AreEqual(new Vector3(3f, 0f, 0f), decision.NextDungeonLocalPosition);
+            Assert.AreEqual(270f, decision.FacingYaw);
+        }
+
+        [Test]
+        public void DynamicEnemyAi_PursuitLeashClampsOutboundMovement()
+        {
+            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = new Vector3(2f, 0f, 0f),
+                HomePosition = Vector3.zero,
+                PursuitLeashRange = 3f,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 42, DungeonLocalPosition = new Vector3(10f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
+                },
+                AwarenessRange = 64f,
+                AttackRange = 1f,
+                MoveSpeed = 4f,
+                DeltaTime = 1f,
+                RequireLineOfSight = false
+            });
+
+            Assert.IsTrue(decision.HasTarget);
+            Assert.AreEqual(new Vector3(3f, 0f, 0f), decision.NextDungeonLocalPosition);
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest
@@ -740,7 +788,7 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void DungeonRosterService_AiTick_StrictGeometryStopsAtHostedBlocker()
+        public void DungeonRosterService_AiTick_GeometryStopsAtHostedBlocker()
         {
             GameObject geometryObject = new GameObject("DFMP_RosterServiceBlockedGeometryTest");
             GameObject serviceObject = new GameObject("DFMP_RosterServiceBlockedGeometryRoster");
@@ -758,7 +806,7 @@ namespace DFMP.Tests
                     AwarenessRange = 64f,
                     AttackRange = 2f,
                     MoveSpeed = 4f,
-                    RequireLineOfSight = true
+                    RequireLineOfSight = false
                 });
 
                 var session = sessionObject.AddComponent<DFMPPlayerSessionState>();

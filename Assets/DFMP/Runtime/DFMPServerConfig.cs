@@ -62,6 +62,7 @@ namespace DFMP.Runtime
         public float AiTickIntervalSeconds = 0.1f;
         public float AttackCooldownSeconds = 1.8f;
         public int AttackDamage = 4;
+        public float PursuitLeashRange = 24f;
         public float PlayerMeleeDamageRange = 6f;
         public float PlayerRangedDamageRange = 25f;
         public bool RequireLineOfSight = true;
@@ -77,6 +78,7 @@ namespace DFMP.Runtime
             AiTickIntervalSeconds = AiTickIntervalSeconds > 0f && AiTickIntervalSeconds <= 5f ? AiTickIntervalSeconds : 0.1f;
             AttackCooldownSeconds = AttackCooldownSeconds > 0f && AttackCooldownSeconds <= 60f ? AttackCooldownSeconds : 1.8f;
             AttackDamage = AttackDamage > 0 && AttackDamage <= 1000 ? AttackDamage : 4;
+            PursuitLeashRange = PursuitLeashRange >= 0f && PursuitLeashRange <= 256f ? PursuitLeashRange : 24f;
             PlayerMeleeDamageRange = PlayerMeleeDamageRange > 0f && PlayerMeleeDamageRange <= 32f ? PlayerMeleeDamageRange : 6f;
             PlayerRangedDamageRange = PlayerRangedDamageRange >= PlayerMeleeDamageRange && PlayerRangedDamageRange <= 128f ? PlayerRangedDamageRange : 25f;
         }

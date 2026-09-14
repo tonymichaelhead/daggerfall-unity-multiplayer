@@ -157,6 +157,8 @@ namespace DFMP.Runtime
         public float MoveSpeed;
         public float DeltaTime;
         public bool RequireLineOfSight;
+        public Vector3 HomePosition;
+        public float PursuitLeashRange;
     }
 
     public struct DFMPDynamicEnemyAiDecision
@@ -181,6 +183,23 @@ namespace DFMP.Runtime
             };
 
             int targetIndex;
+            float leashRange = Mathf.Max(0f, input.PursuitLeashRange);
+            if (leashRange > 0f && GetPlanarDistanceSquared(input.EnemyPosition, input.HomePosition) > leashRange * leashRange)
+            {
+                Vector3 returnOffset = input.HomePosition - input.EnemyPosition;
+                returnOffset.y = 0f;
+                float returnDistance = returnOffset.magnitude;
+                decision.FacingYaw = returnDistance > 0.0001f ? YawFromDirection(returnOffset) : decision.FacingYaw;
+                if (returnDistance > 0.0001f && input.MoveSpeed > 0f && input.DeltaTime > 0f)
+                {
+                    float returnStep = Mathf.Min(input.MoveSpeed * input.DeltaTime, returnDistance);
+                    decision.NextDungeonLocalPosition = input.EnemyPosition + returnOffset / returnDistance * returnStep;
+                    decision.IsMoving = returnStep > 0.0001f;
+                }
+
+                return decision;
+            }
+
             if (!TrySelectTarget(input, out targetIndex))
                 return decision;
 
@@ -198,10 +217,27 @@ namespace DFMP.Runtime
             {
                 float step = Mathf.Min(input.MoveSpeed * input.DeltaTime, Mathf.Max(0f, distance - Mathf.Max(0f, input.AttackRange)));
                 decision.NextDungeonLocalPosition = input.EnemyPosition + offset / distance * step;
+                decision.NextDungeonLocalPosition = ConstrainToPursuitLeash(input, decision.NextDungeonLocalPosition);
                 decision.IsMoving = step > 0.0001f;
             }
 
             return decision;
+        }
+
+        static Vector3 ConstrainToPursuitLeash(DFMPDynamicEnemyAiInput input, Vector3 desiredPosition)
+        {
+            float leashRange = Mathf.Max(0f, input.PursuitLeashRange);
+            if (leashRange <= 0f)
+                return desiredPosition;
+
+            Vector3 offset = desiredPosition - input.HomePosition;
+            offset.y = 0f;
+            if (offset.sqrMagnitude <= leashRange * leashRange)
+                return desiredPosition;
+
+            Vector3 constrainedPosition = input.HomePosition + offset.normalized * leashRange;
+            constrainedPosition.y = desiredPosition.y;
+            return constrainedPosition;
         }
 
         static bool TrySelectTarget(DFMPDynamicEnemyAiInput input, out int targetIndex)

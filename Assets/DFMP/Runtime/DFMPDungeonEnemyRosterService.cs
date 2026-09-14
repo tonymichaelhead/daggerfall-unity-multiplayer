@@ -10,6 +10,7 @@ namespace DFMP.Runtime
         readonly DFMPDynamicEnemyRegistry registry = new DFMPDynamicEnemyRegistry();
         readonly Dictionary<DFMPWorldContextKey, string[]> enemyIdsByContext = new Dictionary<DFMPWorldContextKey, string[]>();
         readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
+        readonly Dictionary<string, Vector3> homePositionsByEnemyId = new Dictionary<string, Vector3>();
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
         readonly HashSet<DFMPDungeonGeometryScopeKey> missingLineOfSightGeometryWarnings = new HashSet<DFMPDungeonGeometryScopeKey>();
@@ -24,6 +25,7 @@ namespace DFMP.Runtime
         float attackCooldownSeconds;
         int attackDamage;
         bool requireLineOfSight;
+        float pursuitLeashRange;
         const float EnemyMovementRadius = 0.35f;
         const float EnemyMovementHeight = 1.8f;
         DFMPDungeonGeometryService geometryServiceForTesting;
@@ -50,6 +52,7 @@ namespace DFMP.Runtime
             attackCooldownSeconds = config.AttackCooldownSeconds;
             attackDamage = config.AttackDamage;
             requireLineOfSight = config.RequireLineOfSight;
+            pursuitLeashRange = config.PursuitLeashRange;
             Subscribe();
         }
 
@@ -153,6 +156,7 @@ namespace DFMP.Runtime
         {
             pendingDespawnTimes.Clear();
             lastAttackTimesByEnemyId.Clear();
+            homePositionsByEnemyId.Clear();
             missingLineOfSightGeometryWarnings.Clear();
             if (!isSubscribed)
                 return;
@@ -184,7 +188,9 @@ namespace DFMP.Runtime
                     AttackRange = attackRange,
                     MoveSpeed = moveSpeed,
                     DeltaTime = deltaTime,
-                    RequireLineOfSight = requireLineOfSight
+                    RequireLineOfSight = requireLineOfSight,
+                    HomePosition = GetHomePosition(record),
+                    PursuitLeashRange = pursuitLeashRange
                 });
 
                 DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
@@ -390,7 +396,10 @@ namespace DFMP.Runtime
 
                 enemyIds = new string[roster.Length];
                 for (int index = 0; index < roster.Length; index++)
+                {
                     enemyIds[index] = roster[index].Identity.EnemyId;
+                    homePositionsByEnemyId[enemyIds[index]] = roster[index].Descriptor.DungeonLocalPosition;
+                }
 
                 enemyIdsByContext.Add(context, enemyIds);
                 Debug.Log($"[DFMP Enemy] Activated dungeon roster: context={context}, count={enemyIds.Length}.");
@@ -411,6 +420,16 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Enemy] Reactivated dungeon roster: context={context}, count={reactivatedCount}.");
 
             ProjectActiveRecords(context, enemyIds);
+        }
+
+        Vector3 GetHomePosition(DFMPDynamicEnemyRecord record)
+        {
+            Vector3 homePosition;
+            if (homePositionsByEnemyId.TryGetValue(record.Identity.EnemyId, out homePosition))
+                return homePosition;
+
+            homePositionsByEnemyId[record.Identity.EnemyId] = record.Descriptor.DungeonLocalPosition;
+            return record.Descriptor.DungeonLocalPosition;
         }
 
         void DespawnContext(DFMPWorldContextKey context)
