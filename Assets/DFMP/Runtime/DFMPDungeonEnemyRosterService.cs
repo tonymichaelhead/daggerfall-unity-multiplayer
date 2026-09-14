@@ -14,6 +14,7 @@ namespace DFMP.Runtime
         readonly Dictionary<string, int> blockedMovementTicksByEnemyId = new Dictionary<string, int>();
         readonly Dictionary<string, float> stuckRecoveryTimesByEnemyId = new Dictionary<string, float>();
         readonly Dictionary<string, int> stuckTargetConnectionIdsByEnemyId = new Dictionary<string, int>();
+        readonly Dictionary<string, int> lastLoggedTargetConnectionIdsByEnemyId = new Dictionary<string, int>();
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
         readonly HashSet<DFMPDungeonGeometryScopeKey> missingLineOfSightGeometryWarnings = new HashSet<DFMPDungeonGeometryScopeKey>();
@@ -171,6 +172,7 @@ namespace DFMP.Runtime
             blockedMovementTicksByEnemyId.Clear();
             stuckRecoveryTimesByEnemyId.Clear();
             stuckTargetConnectionIdsByEnemyId.Clear();
+            lastLoggedTargetConnectionIdsByEnemyId.Clear();
             missingLineOfSightGeometryWarnings.Clear();
             if (!isSubscribed)
                 return;
@@ -215,6 +217,7 @@ namespace DFMP.Runtime
                 Vector3 resolvedPosition;
                 bool movementAvailable = TryResolveEnemyMovement(context, record.Descriptor.DungeonLocalPosition, decision.NextDungeonLocalPosition, out resolvedPosition, out movementBlocked);
                 UpdateBlockedMovement(record.Identity.EnemyId, decision, movementAvailable, movementBlocked, currentTime);
+                LogTargetTransition(record.Identity.EnemyId, record.TargetConnectionId, decision.TargetConnectionId);
                 descriptor.DungeonLocalPosition = movementAvailable ? resolvedPosition : record.Descriptor.DungeonLocalPosition;
                 descriptor.FacingYaw = decision.FacingYaw;
                 bool isMoving = decision.IsMoving && movementAvailable && !movementBlocked && descriptor.DungeonLocalPosition != record.Descriptor.DungeonLocalPosition;
@@ -246,6 +249,19 @@ namespace DFMP.Runtime
             stuckRecoveryTimesByEnemyId[enemyId] = currentTime + stuckRecoverySeconds;
             stuckTargetConnectionIdsByEnemyId[enemyId] = decision.TargetConnectionId;
             Debug.LogWarning($"[DFMP Enemy] Movement stuck; temporarily releasing target: enemyId={enemyId}, target={decision.TargetConnectionId}, blockedTicks={blockedTicks}.");
+        }
+
+        void LogTargetTransition(string enemyId, int previousTargetConnectionId, int nextTargetConnectionId)
+        {
+            int lastLoggedTargetConnectionId;
+            if (lastLoggedTargetConnectionIdsByEnemyId.TryGetValue(enemyId, out lastLoggedTargetConnectionId) && lastLoggedTargetConnectionId == nextTargetConnectionId)
+                return;
+
+            lastLoggedTargetConnectionIdsByEnemyId[enemyId] = nextTargetConnectionId;
+            if (nextTargetConnectionId > 0)
+                Debug.Log($"[DFMP Enemy] Target acquired: enemyId={enemyId}, target={nextTargetConnectionId}, previousTarget={previousTargetConnectionId}.");
+            else if (previousTargetConnectionId > 0)
+                Debug.Log($"[DFMP Enemy] Target lost: enemyId={enemyId}, previousTarget={previousTargetConnectionId}.");
         }
 
         int GetIgnoredTargetConnectionId(string enemyId, float currentTime)
@@ -340,6 +356,7 @@ namespace DFMP.Runtime
             if (serverEnemyDamageApplier != null && serverEnemyDamageApplier(enemyId, targetConnectionId, attackDamage))
             {
                 lastAttackTimesByEnemyId[enemyId] = currentTime;
+                Debug.Log($"[DFMP Enemy] Attack accepted: enemyId={enemyId}, target={targetConnectionId}, kind={attackKind}, damage={attackDamage}.");
                 GameObject enemyGo;
                 if (stateObjectsByEnemyId.TryGetValue(enemyId, out enemyGo) && enemyGo != null)
                 {
@@ -586,6 +603,7 @@ namespace DFMP.Runtime
             blockedMovementTicksByEnemyId.Remove(enemyId);
             stuckRecoveryTimesByEnemyId.Remove(enemyId);
             stuckTargetConnectionIdsByEnemyId.Remove(enemyId);
+            lastLoggedTargetConnectionIdsByEnemyId.Remove(enemyId);
         }
 
         static bool IsDungeonBlock(DFMPWorldContextKey context)
