@@ -24,6 +24,9 @@ namespace DFMP.Runtime
         float attackCooldownSeconds;
         int attackDamage;
         bool requireLineOfSight;
+        const float EnemyMovementRadius = 0.35f;
+        const float EnemyMovementHeight = 1.8f;
+        DFMPDungeonGeometryService geometryServiceForTesting;
         Func<string, int, int, bool> serverEnemyDamageApplier = DFMPNetworkServer.TryApplyServerEnemyDamage;
         bool isSubscribed;
 
@@ -68,6 +71,11 @@ namespace DFMP.Runtime
         public void SetServerEnemyDamageApplierForTesting(Func<string, int, int, bool> damageApplier)
         {
             serverEnemyDamageApplier = damageApplier ?? DFMPNetworkServer.TryApplyServerEnemyDamage;
+        }
+
+        public void SetDungeonGeometryServiceForTesting(DFMPDungeonGeometryService geometryService)
+        {
+            geometryServiceForTesting = geometryService;
         }
 
         public void ProcessAiTickCadence(float currentTime, float deltaTime)
@@ -180,15 +188,49 @@ namespace DFMP.Runtime
                 });
 
                 DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
-                descriptor.DungeonLocalPosition = decision.NextDungeonLocalPosition;
+                bool movementBlocked;
+                Vector3 resolvedPosition;
+                bool movementAvailable = TryResolveEnemyMovement(context, record.Descriptor.DungeonLocalPosition, decision.NextDungeonLocalPosition, out resolvedPosition, out movementBlocked);
+                descriptor.DungeonLocalPosition = movementAvailable ? resolvedPosition : record.Descriptor.DungeonLocalPosition;
                 descriptor.FacingYaw = decision.FacingYaw;
+                bool isMoving = decision.IsMoving && movementAvailable && !movementBlocked && descriptor.DungeonLocalPosition != record.Descriptor.DungeonLocalPosition;
                 DFMPDynamicEnemyRecord updatedRecord;
-                if (registry.TryUpdateAiState(true, record.Identity.EnemyId, descriptor, decision.TargetConnectionId, decision.IsMoving, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
+                if (registry.TryUpdateAiState(true, record.Identity.EnemyId, descriptor, decision.TargetConnectionId, isMoving, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
                     UpdateStateProjection(updatedRecord);
 
                 if (decision.HasTarget && decision.InAttackRange)
                     TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, currentTime);
             }
+        }
+
+        bool TryResolveEnemyMovement(DFMPWorldContextKey context, Vector3 fromPosition, Vector3 desiredPosition, out Vector3 resolvedPosition, out bool blocked)
+        {
+            resolvedPosition = fromPosition;
+            blocked = false;
+            if (fromPosition == desiredPosition && !requireLineOfSight)
+            {
+                resolvedPosition = desiredPosition;
+                return true;
+            }
+
+            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
+            if (geometryService != null && geometryService.TryResolveMovement(
+                context,
+                fromPosition,
+                desiredPosition,
+                EnemyMovementRadius,
+                EnemyMovementHeight,
+                out resolvedPosition,
+                out blocked))
+                return true;
+
+            if (!requireLineOfSight)
+            {
+                resolvedPosition = desiredPosition;
+                return true;
+            }
+
+            return false;
         }
 
         DFMPDynamicEnemySensoryTarget[] CreateSensoryTargets(DFMPWorldContextKey context, Vector3 enemyPosition)
@@ -217,7 +259,8 @@ namespace DFMP.Runtime
         bool HasDungeonLineOfSight(DFMPWorldContextKey context, Vector3 enemyPosition, Vector3 targetPosition)
         {
             bool hasLineOfSight;
-            if (DFMPNetworkServer.DungeonGeometryService != null && DFMPNetworkServer.DungeonGeometryService.TryHasLineOfSight(context, enemyPosition, targetPosition, out hasLineOfSight))
+            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
+            if (geometryService != null && geometryService.TryHasLineOfSight(context, enemyPosition, targetPosition, out hasLineOfSight))
                 return hasLineOfSight;
 
             DFMPDungeonGeometryScopeKey scope;

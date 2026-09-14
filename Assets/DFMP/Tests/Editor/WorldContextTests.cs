@@ -430,6 +430,103 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_Movement_ReachesDesiredPositionWhenClear()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryClearMovementTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryClearMovementSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "clear-movement");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(113, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 resolvedPosition;
+                bool blocked;
+                Assert.IsTrue(service.TryResolveMovement(dungeon, Vector3.zero, new Vector3(0f, 0f, 4f), 0.35f, 1.8f, out resolvedPosition, out blocked));
+                Assert.AreEqual(new Vector3(0f, 0f, 4f), resolvedPosition);
+                Assert.IsFalse(blocked);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_Movement_StopsBeforeHostedSolidCollider()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryBlockedMovementTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryBlockedMovementSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "blocked-movement");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(114, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = new Vector3(0f, 1f, 2f);
+                wall.transform.localScale = new Vector3(3f, 3f, 0.25f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 resolvedPosition;
+                bool blocked;
+                Assert.IsTrue(service.TryResolveMovement(dungeon, Vector3.zero, new Vector3(0f, 0f, 4f), 0.35f, 1.8f, out resolvedPosition, out blocked));
+                Assert.IsTrue(blocked);
+                Assert.Less(resolvedPosition.z, 2f);
+                Assert.Greater(resolvedPosition.z, 0f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_Movement_FailsClosedWhenUnavailable()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryUnavailableMovementTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryUnavailableMovementSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "unavailable-movement");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(115, session, dungeon, "test"));
+
+                Vector3 resolvedPosition;
+                bool blocked;
+                Assert.IsFalse(service.TryResolveMovement(dungeon, Vector3.zero, new Vector3(0f, 0f, 4f), 0.35f, 1.8f, out resolvedPosition, out blocked));
+                Assert.AreEqual(Vector3.zero, resolvedPosition);
+                Assert.IsFalse(blocked);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void NetworkServer_TryApplyWorldContextReport_UpdatesOccupancy()
         {
             GameObject go = new GameObject("DFMP_ContextApplyTest");

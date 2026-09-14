@@ -156,6 +156,60 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public bool TryResolveMovement(DFMPWorldContextKey context, Vector3 fromDungeonLocalPosition, Vector3 desiredDungeonLocalPosition, float radius, float height, out Vector3 resolvedDungeonLocalPosition, out bool blocked)
+        {
+            resolvedDungeonLocalPosition = fromDungeonLocalPosition;
+            blocked = false;
+
+            DFMPDungeonGeometryScopeKey scope;
+            if (!TryCreateScope(context, out scope))
+                return false;
+
+            HostedDungeonGeometry hostedGeometry;
+            if (!hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) || hostedGeometry == null || hostedGeometry.Root == null || !hostedGeometry.GeometryAvailable)
+                return false;
+
+            Vector3 offset = desiredDungeonLocalPosition - fromDungeonLocalPosition;
+            float distance = offset.magnitude;
+            if (distance <= 0.0001f)
+                return true;
+
+            radius = Mathf.Max(0.01f, radius);
+            height = Mathf.Max(radius * 2f, height);
+            Vector3 direction = offset / distance;
+            Vector3 fromWorldPosition = DungeonLocalToHostedWorldPosition(hostedGeometry.Root.transform, fromDungeonLocalPosition);
+            Vector3 bottom = fromWorldPosition + Vector3.up * radius;
+            Vector3 top = fromWorldPosition + Vector3.up * (height - radius);
+            RaycastHit[] hits = Physics.CapsuleCastAll(bottom, top, radius, direction, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+
+            float nearestHitDistance = distance;
+            bool foundBlocker = false;
+            for (int index = 0; index < hits.Length; index++)
+            {
+                Collider hitCollider = hits[index].collider;
+                if (hitCollider == null || hitCollider.transform == null || !hitCollider.transform.IsChildOf(hostedGeometry.Root.transform))
+                    continue;
+
+                if (hits[index].distance < nearestHitDistance)
+                {
+                    nearestHitDistance = hits[index].distance;
+                    foundBlocker = true;
+                }
+            }
+
+            if (!foundBlocker)
+            {
+                resolvedDungeonLocalPosition = desiredDungeonLocalPosition;
+                return true;
+            }
+
+            float safeDistance = Mathf.Max(0f, nearestHitDistance - 0.01f);
+            Vector3 resolvedWorldPosition = fromWorldPosition + direction * safeDistance;
+            resolvedDungeonLocalPosition = hostedGeometry.Root.transform.InverseTransformPoint(resolvedWorldPosition);
+            blocked = true;
+            return true;
+        }
+
         public bool TryMarkGeometryAvailableForTesting(DFMPDungeonGeometryScopeKey scope)
         {
             HostedDungeonGeometry hostedGeometry;

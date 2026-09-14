@@ -740,6 +740,111 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRosterService_AiTick_StrictGeometryStopsAtHostedBlocker()
+        {
+            GameObject geometryObject = new GameObject("DFMP_RosterServiceBlockedGeometryTest");
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceBlockedGeometryRoster");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceBlockedGeometrySession");
+            try
+            {
+                var geometry = geometryObject.AddComponent<DFMPDungeonGeometryService>();
+                geometry.Initialize();
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.SetDungeonGeometryServiceForTesting(geometry);
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "blocked-geometry-seed",
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 4f,
+                    RequireLineOfSight = true
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(116, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "blocked-geometry");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(116, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("blocked-geometry-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 initialPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(10f, 0f, 0f));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(geometry.TryGetRoot(scope, out root));
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = initialPosition + new Vector3(1f, 1f, 0f);
+                wall.transform.localScale = new Vector3(0.25f, 3f, 3f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(geometry.TryMarkGeometryAvailableForTesting(scope));
+
+                service.ProcessAiTick(10f, 0.5f);
+                DFMPDynamicEnemyRecord updatedRecord = GetRecord(service, enemyId);
+
+                Assert.IsFalse(updatedRecord.IsMoving);
+                Assert.Less(updatedRecord.Descriptor.DungeonLocalPosition.x, initialPosition.x + 1f);
+                Assert.Greater(updatedRecord.Descriptor.DungeonLocalPosition.x, initialPosition.x);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(geometryObject);
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonRosterService_AiTick_NonStrictGeometryUnavailableRetainsMovementFallback()
+        {
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceUnavailableGeometryRoster");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceUnavailableGeometrySession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "unavailable-geometry-seed",
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 4f,
+                    RequireLineOfSight = false
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(117, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "unavailable-geometry");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(117, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("unavailable-geometry-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 initialPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(10f, 0f, 0f));
+
+                service.ProcessAiTick(10f, 0.5f);
+                DFMPDynamicEnemyRecord updatedRecord = GetRecord(service, enemyId);
+
+                Assert.IsTrue(updatedRecord.IsMoving);
+                Assert.AreEqual(initialPosition + new Vector3(2f, 0f, 0f), updatedRecord.Descriptor.DungeonLocalPosition);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonRosterService_AiTick_WithStrictLineOfSightDoesNotAcquireWithoutGeometry()
         {
             GameObject serviceObject = new GameObject("DFMP_RosterServiceAiStrictLosTest");
@@ -997,6 +1102,15 @@ namespace DFMP.Tests
                 DungeonBlockName = "S0000161.RDB",
                 InstanceId = "shared"
             };
+        }
+
+        static DFMPWorldContextKey CreateDungeonContext(int dungeonBlockIndex, string dungeonBlockName, string instanceId)
+        {
+            DFMPWorldContextKey context = CreateDungeonContext();
+            context.DungeonBlockIndex = dungeonBlockIndex;
+            context.DungeonBlockName = dungeonBlockName;
+            context.InstanceId = instanceId;
+            return context;
         }
     }
 }
