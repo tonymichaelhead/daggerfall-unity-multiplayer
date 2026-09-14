@@ -172,6 +172,50 @@ namespace DFMP.Runtime
         public bool InAttackRange;
     }
 
+    public enum DFMPDynamicEnemyAttackKind
+    {
+        Melee,
+        Ranged,
+        Magic
+    }
+
+    public struct DFMPDynamicEnemyAttackProfile
+    {
+        public DFMPDynamicEnemyAttackKind Kind;
+        public float Range;
+    }
+
+    public static class DFMPDynamicEnemyAttackPolicy
+    {
+        public static DFMPDynamicEnemyAttackProfile GetProfile(int mobileType, float meleeRange, float rangedRange, float magicRange)
+        {
+            MobileTypes type = (MobileTypes)mobileType;
+            if (type == MobileTypes.OrcShaman || type == MobileTypes.Mage || type == MobileTypes.Battlemage || type == MobileTypes.Sorcerer || type == MobileTypes.Lich || type == MobileTypes.AncientLich)
+            {
+                return new DFMPDynamicEnemyAttackProfile
+                {
+                    Kind = DFMPDynamicEnemyAttackKind.Magic,
+                    Range = Mathf.Max(0f, magicRange)
+                };
+            }
+
+            if (type == MobileTypes.Harpy || type == MobileTypes.Archer || type == MobileTypes.Ranger)
+            {
+                return new DFMPDynamicEnemyAttackProfile
+                {
+                    Kind = DFMPDynamicEnemyAttackKind.Ranged,
+                    Range = Mathf.Max(0f, rangedRange)
+                };
+            }
+
+            return new DFMPDynamicEnemyAttackProfile
+            {
+                Kind = DFMPDynamicEnemyAttackKind.Melee,
+                Range = Mathf.Max(0f, meleeRange)
+            };
+        }
+    }
+
     public static class DFMPDynamicEnemyAiPolicy
     {
         public static DFMPDynamicEnemyAiDecision Evaluate(DFMPDynamicEnemyAiInput input)
@@ -340,7 +384,10 @@ namespace DFMP.Runtime
             MobileTypes.Spider,
             MobileTypes.SkeletalWarrior,
             MobileTypes.Zombie,
-            MobileTypes.Orc
+            MobileTypes.Orc,
+            MobileTypes.Harpy,
+            MobileTypes.OrcShaman,
+            MobileTypes.Lich
         };
 
         public static ulong CreateServerWorldSeed(string configuredSeed)

@@ -658,6 +658,21 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyAttackPolicy_SelectsMeleeRangedAndMagicProfiles()
+        {
+            DFMPDynamicEnemyAttackProfile melee = DFMPDynamicEnemyAttackPolicy.GetProfile((int)MobileTypes.Orc, 2f, 8f, 12f);
+            DFMPDynamicEnemyAttackProfile ranged = DFMPDynamicEnemyAttackPolicy.GetProfile((int)MobileTypes.Harpy, 2f, 8f, 12f);
+            DFMPDynamicEnemyAttackProfile magic = DFMPDynamicEnemyAttackPolicy.GetProfile((int)MobileTypes.OrcShaman, 2f, 8f, 12f);
+
+            Assert.AreEqual(DFMPDynamicEnemyAttackKind.Melee, melee.Kind);
+            Assert.AreEqual(2f, melee.Range);
+            Assert.AreEqual(DFMPDynamicEnemyAttackKind.Ranged, ranged.Kind);
+            Assert.AreEqual(8f, ranged.Range);
+            Assert.AreEqual(DFMPDynamicEnemyAttackKind.Magic, magic.Kind);
+            Assert.AreEqual(12f, magic.Range);
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest

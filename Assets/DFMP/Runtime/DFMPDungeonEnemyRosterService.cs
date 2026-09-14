@@ -22,6 +22,8 @@ namespace DFMP.Runtime
         float despawnDelaySeconds;
         float awarenessRange;
         float attackRange;
+        float rangedAttackRange;
+        float magicAttackRange;
         float moveSpeed;
         float aiTickIntervalSeconds;
         float aiTickAccumulator;
@@ -51,6 +53,8 @@ namespace DFMP.Runtime
             despawnDelaySeconds = config.DespawnDelaySeconds;
             awarenessRange = config.AwarenessRange;
             attackRange = config.AttackRange;
+            rangedAttackRange = config.RangedAttackRange;
+            magicAttackRange = config.MagicAttackRange;
             moveSpeed = config.MoveSpeed;
             aiTickIntervalSeconds = config.AiTickIntervalSeconds;
             aiTickAccumulator = 0f;
@@ -188,6 +192,8 @@ namespace DFMP.Runtime
                 if (!registry.TryGetRecord(enemyIds[index], out record) || record.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
                     continue;
 
+                DFMPDynamicEnemyAttackProfile attackProfile = DFMPDynamicEnemyAttackPolicy.GetProfile(record.Descriptor.MobileType, attackRange, rangedAttackRange, magicAttackRange);
+
                 DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
                 {
                     EnemyPosition = record.Descriptor.DungeonLocalPosition,
@@ -195,7 +201,7 @@ namespace DFMP.Runtime
                     CurrentTargetConnectionId = record.TargetConnectionId,
                     Targets = CreateSensoryTargets(context, record.Descriptor.DungeonLocalPosition),
                     AwarenessRange = awarenessRange,
-                    AttackRange = attackRange,
+                    AttackRange = attackProfile.Range,
                     MoveSpeed = moveSpeed,
                     DeltaTime = deltaTime,
                     RequireLineOfSight = requireLineOfSight,

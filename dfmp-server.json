@@ -24,6 +24,8 @@
     "DespawnDelaySeconds": 0.0,
     "AwarenessRange": 32.0,
     "AttackRange": 2.25,
+    "RangedAttackRange": 8.0,
+    "MagicAttackRange": 12.0,
     "MoveSpeed": 3.5,
     "AiTickIntervalSeconds": 0.1,
     "AttackCooldownSeconds": 1.8,

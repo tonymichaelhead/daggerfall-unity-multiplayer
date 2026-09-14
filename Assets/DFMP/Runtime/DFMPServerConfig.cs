@@ -58,6 +58,8 @@ namespace DFMP.Runtime
         public float DespawnDelaySeconds = 0f;
         public float AwarenessRange = 32f;
         public float AttackRange = 2.25f;
+        public float RangedAttackRange = 8f;
+        public float MagicAttackRange = 12f;
         public float MoveSpeed = 3.5f;
         public float AiTickIntervalSeconds = 0.1f;
         public float AttackCooldownSeconds = 1.8f;
@@ -76,6 +78,8 @@ namespace DFMP.Runtime
             DespawnDelaySeconds = DespawnDelaySeconds >= 0f && DespawnDelaySeconds <= 3600f ? DespawnDelaySeconds : 0f;
             AwarenessRange = AwarenessRange > 0f && AwarenessRange <= 256f ? AwarenessRange : 32f;
             AttackRange = AttackRange > 0f && AttackRange <= AwarenessRange ? AttackRange : Math.Min(2.25f, AwarenessRange);
+            RangedAttackRange = RangedAttackRange >= AttackRange && RangedAttackRange <= AwarenessRange ? RangedAttackRange : Math.Min(8f, AwarenessRange);
+            MagicAttackRange = MagicAttackRange >= AttackRange && MagicAttackRange <= AwarenessRange ? MagicAttackRange : Math.Min(12f, AwarenessRange);
             MoveSpeed = MoveSpeed > 0f && MoveSpeed <= 32f ? MoveSpeed : 3.5f;
             AiTickIntervalSeconds = AiTickIntervalSeconds > 0f && AiTickIntervalSeconds <= 5f ? AiTickIntervalSeconds : 0.1f;
             AttackCooldownSeconds = AttackCooldownSeconds > 0f && AttackCooldownSeconds <= 60f ? AttackCooldownSeconds : 1.8f;

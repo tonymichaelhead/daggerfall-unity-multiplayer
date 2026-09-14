@@ -30,6 +30,8 @@ namespace DFMP.Tests
             Assert.NotNull(config.Enemies);
             Assert.AreEqual("default", config.Enemies.WorldSeed);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
+            Assert.AreEqual(8f, config.Enemies.RangedAttackRange);
+            Assert.AreEqual(12f, config.Enemies.MagicAttackRange);
             Assert.AreEqual(24f, config.Enemies.PursuitLeashRange);
             Assert.AreEqual(3, config.Enemies.StuckMovementTickLimit);
             Assert.AreEqual(2f, config.Enemies.StuckRecoverySeconds);
@@ -48,6 +50,8 @@ namespace DFMP.Tests
                     DungeonRosterSize = DFMPDungeonRosterPolicy.MaximumRosterSize + 1,
                     AwarenessRange = 512f,
                     AttackRange = 512f,
+                    RangedAttackRange = 1f,
+                    MagicAttackRange = 512f,
                     MoveSpeed = 0f,
                     AiTickIntervalSeconds = 0f,
                     AttackCooldownSeconds = 0f,
@@ -66,6 +70,8 @@ namespace DFMP.Tests
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
             Assert.AreEqual(32f, config.Enemies.AwarenessRange);
             Assert.AreEqual(2.25f, config.Enemies.AttackRange);
+            Assert.AreEqual(8f, config.Enemies.RangedAttackRange);
+            Assert.AreEqual(12f, config.Enemies.MagicAttackRange);
             Assert.AreEqual(3.5f, config.Enemies.MoveSpeed);
             Assert.AreEqual(0.1f, config.Enemies.AiTickIntervalSeconds);
             Assert.AreEqual(1.8f, config.Enemies.AttackCooldownSeconds);
