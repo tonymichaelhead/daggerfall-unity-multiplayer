@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using DaggerfallConnect;
+using DaggerfallWorkshop;
 using UnityEngine;
 
 namespace DFMP.Runtime
@@ -55,6 +57,7 @@ namespace DFMP.Runtime
             public DFMPDungeonGeometryScopeKey Scope;
             public int OccupantCount;
             public GameObject Root;
+            public bool GeometryAvailable;
         }
 
         readonly Dictionary<DFMPDungeonGeometryScopeKey, HostedDungeonGeometry> hostedGeometryByScope = new Dictionary<DFMPDungeonGeometryScopeKey, HostedDungeonGeometry>();
@@ -135,6 +138,39 @@ namespace DFMP.Runtime
             return hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) && hostedGeometry != null ? hostedGeometry.OccupantCount : 0;
         }
 
+        public bool TryHasLineOfSight(DFMPWorldContextKey context, Vector3 fromDungeonLocalPosition, Vector3 toDungeonLocalPosition, out bool hasLineOfSight)
+        {
+            hasLineOfSight = false;
+
+            DFMPDungeonGeometryScopeKey scope;
+            if (!TryCreateScope(context, out scope))
+                return false;
+
+            HostedDungeonGeometry hostedGeometry;
+            if (!hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) || hostedGeometry == null || hostedGeometry.Root == null || !hostedGeometry.GeometryAvailable)
+                return false;
+
+            Vector3 fromWorldPosition = DungeonLocalToHostedWorldPosition(hostedGeometry.Root.transform, fromDungeonLocalPosition + Vector3.up);
+            Vector3 toWorldPosition = DungeonLocalToHostedWorldPosition(hostedGeometry.Root.transform, toDungeonLocalPosition + Vector3.up);
+            hasLineOfSight = !HasHostedGeometryBlocker(hostedGeometry.Root.transform, fromWorldPosition, toWorldPosition);
+            return true;
+        }
+
+        public bool TryMarkGeometryAvailableForTesting(DFMPDungeonGeometryScopeKey scope)
+        {
+            HostedDungeonGeometry hostedGeometry;
+            if (!hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) || hostedGeometry == null || hostedGeometry.Root == null)
+                return false;
+
+            hostedGeometry.GeometryAvailable = true;
+            return true;
+        }
+
+        public static Vector3 DungeonLocalToHostedWorldPosition(Transform root, Vector3 dungeonLocalPosition)
+        {
+            return root != null ? root.TransformPoint(dungeonLocalPosition) : dungeonLocalPosition;
+        }
+
         void OnPlayerWorldContextChanged(DFMPPlayerWorldContextChangedEvent contextChange)
         {
             if (contextChange == null)
@@ -163,7 +199,8 @@ namespace DFMP.Runtime
                 hostedGeometry = new HostedDungeonGeometry
                 {
                     Scope = scope,
-                    Root = CreateGeometryRoot(scope)
+                    Root = CreateGeometryRoot(scope, out bool geometryAvailable),
+                    GeometryAvailable = geometryAvailable
                 };
                 hostedGeometryByScope.Add(scope, hostedGeometry);
                 Debug.Log($"[DFMP Dungeon Geometry] Hosted dungeon geometry scope: scope={scope}.");
@@ -190,12 +227,92 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Dungeon Geometry] Released dungeon geometry scope: scope={scope}.");
         }
 
-        GameObject CreateGeometryRoot(DFMPDungeonGeometryScopeKey scope)
+        GameObject CreateGeometryRoot(DFMPDungeonGeometryScopeKey scope, out bool geometryAvailable)
         {
             GameObject root = new GameObject("DFMP_DungeonGeometry_" + SanitizeName(scope.ToString()));
             if (Application.isPlaying)
                 UnityEngine.Object.DontDestroyOnLoad(root);
+
+            geometryAvailable = TryPopulateNativeGeometry(scope, root);
             return root;
+        }
+
+        bool TryPopulateNativeGeometry(DFMPDungeonGeometryScopeKey scope, GameObject root)
+        {
+            if (!Application.isPlaying || root == null)
+                return false;
+
+            DFLocation location;
+            if (!TryResolveLocation(scope, out location))
+            {
+                Debug.LogWarning($"[DFMP Dungeon Geometry] Native dungeon geometry unavailable: scope={scope}, reason=location-unavailable.");
+                return false;
+            }
+
+            if (!location.HasDungeon)
+            {
+                Debug.LogWarning($"[DFMP Dungeon Geometry] Native dungeon geometry unavailable: scope={scope}, reason=location-has-no-dungeon.");
+                return false;
+            }
+
+            try
+            {
+                DaggerfallDungeon dungeon = root.AddComponent<DaggerfallDungeon>();
+                dungeon.DungeonTextureUse = DungeonTextureUse.Disabled;
+                dungeon.SetDungeon(location, false);
+                DisableAudioComponents(root);
+                Debug.Log($"[DFMP Dungeon Geometry] Generated native dungeon geometry: scope={scope}, children={root.transform.childCount}.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[DFMP Dungeon Geometry] Native dungeon geometry generation failed: scope={scope}, exception={exception}.");
+                return false;
+            }
+        }
+
+        static bool TryResolveLocation(DFMPDungeonGeometryScopeKey scope, out DFLocation location)
+        {
+            location = new DFLocation();
+            if (DaggerfallUnity.Instance == null || !DaggerfallUnity.Instance.IsReady || DaggerfallUnity.Instance.ContentReader == null)
+                return false;
+
+            return DaggerfallUnity.Instance.ContentReader.GetLocation(scope.RegionIndex, scope.LocationIndex, out location);
+        }
+
+        static void DisableAudioComponents(GameObject root)
+        {
+            DaggerfallAudioSource[] daggerfallAudioSources = root.GetComponentsInChildren<DaggerfallAudioSource>(true);
+            for (int index = 0; index < daggerfallAudioSources.Length; index++)
+            {
+                if (daggerfallAudioSources[index] != null)
+                    daggerfallAudioSources[index].enabled = false;
+            }
+
+            AudioSource[] audioSources = root.GetComponentsInChildren<AudioSource>(true);
+            for (int index = 0; index < audioSources.Length; index++)
+            {
+                if (audioSources[index] != null)
+                    audioSources[index].enabled = false;
+            }
+        }
+
+        static bool HasHostedGeometryBlocker(Transform root, Vector3 fromWorldPosition, Vector3 toWorldPosition)
+        {
+            Vector3 offset = toWorldPosition - fromWorldPosition;
+            float distance = offset.magnitude;
+            if (distance <= 0.0001f)
+                return false;
+
+            RaycastHit[] hits = Physics.RaycastAll(fromWorldPosition, offset / distance, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            for (int index = 0; index < hits.Length; index++)
+            {
+                Collider hitCollider = hits[index].collider;
+                if (hitCollider != null && hitCollider.transform != null && hitCollider.transform.IsChildOf(root))
+                    return true;
+            }
+
+            return false;
         }
 
         static void DestroyRoot(GameObject root)

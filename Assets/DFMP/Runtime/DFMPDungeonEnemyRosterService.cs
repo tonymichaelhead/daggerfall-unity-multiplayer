@@ -12,6 +12,7 @@ namespace DFMP.Runtime
         readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
+        readonly HashSet<DFMPDungeonGeometryScopeKey> missingLineOfSightGeometryWarnings = new HashSet<DFMPDungeonGeometryScopeKey>();
         ulong serverWorldSeed;
         int dungeonRosterSize;
         float despawnDelaySeconds;
@@ -144,6 +145,7 @@ namespace DFMP.Runtime
         {
             pendingDespawnTimes.Clear();
             lastAttackTimesByEnemyId.Clear();
+            missingLineOfSightGeometryWarnings.Clear();
             if (!isSubscribed)
                 return;
 
@@ -205,18 +207,24 @@ namespace DFMP.Runtime
                     DungeonLocalPosition = sessionState.DungeonLocalPosition,
                     SpawnConfirmed = sessionState.SpawnConfirmed,
                     IsDead = sessionState.IsDead,
-                    HasLineOfSight = !requireLineOfSight || HasDungeonLineOfSight(enemyPosition, sessionState.DungeonLocalPosition)
+                    HasLineOfSight = !requireLineOfSight || HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition)
                 });
             }
 
             return targets.ToArray();
         }
 
-        static bool HasDungeonLineOfSight(Vector3 enemyPosition, Vector3 targetPosition)
+        bool HasDungeonLineOfSight(DFMPWorldContextKey context, Vector3 enemyPosition, Vector3 targetPosition)
         {
-            Vector3 enemyEye = enemyPosition + Vector3.up;
-            Vector3 targetEye = targetPosition + Vector3.up;
-            return !Physics.Linecast(enemyEye, targetEye, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            bool hasLineOfSight;
+            if (DFMPNetworkServer.DungeonGeometryService != null && DFMPNetworkServer.DungeonGeometryService.TryHasLineOfSight(context, enemyPosition, targetPosition, out hasLineOfSight))
+                return hasLineOfSight;
+
+            DFMPDungeonGeometryScopeKey scope;
+            if (DFMPDungeonGeometryService.TryCreateScope(context, out scope) && missingLineOfSightGeometryWarnings.Add(scope))
+                Debug.LogWarning($"[DFMP Enemy] Strict line of sight is enabled but dungeon geometry is unavailable: scope={scope}.");
+
+            return false;
         }
 
         void TryAttackTarget(string enemyId, int targetConnectionId, float currentTime)

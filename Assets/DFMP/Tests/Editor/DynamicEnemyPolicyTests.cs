@@ -740,6 +740,51 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRosterService_AiTick_WithStrictLineOfSightDoesNotAcquireWithoutGeometry()
+        {
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceAiStrictLosTest");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceAiStrictLosSession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "ai-strict-los-seed",
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 4f,
+                    RequireLineOfSight = true
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(69, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext();
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(69, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("ai-strict-los-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 initialPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(10f, 0f, 0f));
+
+                service.ProcessAiTick(10f, 0.5f);
+                DFMPDynamicEnemyRecord updatedRecord = GetRecord(service, enemyId);
+
+                Assert.AreEqual(-1, updatedRecord.TargetConnectionId);
+                Assert.IsFalse(updatedRecord.IsMoving);
+                Assert.AreEqual(initialPosition, updatedRecord.Descriptor.DungeonLocalPosition);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonRosterService_AiTickCadence_WaitsForConfiguredInterval()
         {
             GameObject serviceObject = new GameObject("DFMP_RosterServiceAiCadenceTest");

@@ -353,6 +353,83 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_LineOfSight_RequiresHostedSolidGeometry()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryLineOfSightTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryLineOfSightSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "shared");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(111, session, dungeon, "test"));
+
+                bool hasLineOfSight;
+                Assert.IsFalse(service.TryHasLineOfSight(dungeon, Vector3.zero, new Vector3(0f, 0f, 4f), out hasLineOfSight));
+                Assert.IsFalse(hasLineOfSight);
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                BoxCollider floor = root.AddComponent<BoxCollider>();
+                floor.center = new Vector3(0f, -2f, 0f);
+                floor.size = new Vector3(8f, 0.25f, 8f);
+                floor.isTrigger = true;
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Assert.IsTrue(service.TryHasLineOfSight(dungeon, Vector3.zero, new Vector3(0f, 0f, 4f), out hasLineOfSight));
+                Assert.IsTrue(hasLineOfSight);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_LineOfSight_BlocksOnHostedSolidCollider()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryBlockedLineOfSightTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryBlockedLineOfSightSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "shared");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(112, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = new Vector3(0f, 1f, 2f);
+                wall.transform.localScale = new Vector3(3f, 3f, 0.25f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                bool hasLineOfSight;
+                Assert.IsTrue(service.TryHasLineOfSight(dungeon, Vector3.zero, new Vector3(0f, 0f, 4f), out hasLineOfSight));
+                Assert.IsFalse(hasLineOfSight);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void NetworkServer_TryApplyWorldContextReport_UpdatesOccupancy()
         {
             GameObject go = new GameObject("DFMP_ContextApplyTest");
