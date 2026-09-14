@@ -369,6 +369,7 @@ namespace DFMP.Runtime
 
             if (killed)
             {
+                ClearTransientAiState(enemyId);
                 GameObject enemyGo;
                 if (stateObjectsByEnemyId.TryGetValue(enemyId, out enemyGo) && enemyGo != null)
                 {
@@ -472,6 +473,7 @@ namespace DFMP.Runtime
             int reactivatedCount = 0;
             for (int index = 0; index < enemyIds.Length; index++)
             {
+                ClearTransientAiState(enemyIds[index]);
                 DFMPDynamicEnemyRecord record;
                 if (registry.TryGetRecord(enemyIds[index], out record) && record.LifecycleState == DFMPDynamicEnemyLifecycleState.DespawnedAlive)
                 {
@@ -571,8 +573,19 @@ namespace DFMP.Runtime
                 NetworkServer.Destroy(enemyGo);
             else
                 Destroy(enemyGo);
-            lastAttackTimesByEnemyId.Remove(enemyId);
+            ClearTransientAiState(enemyId);
             return true;
+        }
+
+        void ClearTransientAiState(string enemyId)
+        {
+            if (string.IsNullOrEmpty(enemyId))
+                return;
+
+            lastAttackTimesByEnemyId.Remove(enemyId);
+            blockedMovementTicksByEnemyId.Remove(enemyId);
+            stuckRecoveryTimesByEnemyId.Remove(enemyId);
+            stuckTargetConnectionIdsByEnemyId.Remove(enemyId);
         }
 
         static bool IsDungeonBlock(DFMPWorldContextKey context)
