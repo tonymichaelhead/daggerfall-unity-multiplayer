@@ -443,6 +443,30 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyHitTarget_RequiresPresentationEligibilityBeforeDamage()
+        {
+            GameObject enemyObject = new GameObject("DFMP_DynamicEnemyHitTargetTest");
+            try
+            {
+                var hitTarget = enemyObject.AddComponent<DFMPDynamicEnemyHitTarget>();
+                hitTarget.Initialize("enemy-test");
+
+                Assert.AreEqual("enemy-test", hitTarget.EnemyId);
+                Assert.IsFalse(hitTarget.IsDamageable);
+
+                hitTarget.SetDamageable(true);
+                Assert.IsTrue(hitTarget.IsDamageable);
+
+                hitTarget.SetDamageable(false);
+                Assert.IsFalse(hitTarget.IsDamageable);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(enemyObject);
+            }
+        }
+
+        [Test]
         public void Registry_AppliesDamageToEnemyHealth_AndTransitionsToDeadOnLethalDamage()
         {
             DFMPDynamicEnemyRecord[] roster = CreateRoster();

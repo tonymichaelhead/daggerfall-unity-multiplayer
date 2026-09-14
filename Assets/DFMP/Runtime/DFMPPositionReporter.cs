@@ -180,7 +180,7 @@ namespace DFMP.Runtime
             }
 
             DFMPDynamicEnemyHitTarget enemyTarget = hitTransform.GetComponentInParent<DFMPDynamicEnemyHitTarget>();
-            if (enemyTarget != null && !string.IsNullOrWhiteSpace(enemyTarget.EnemyId))
+            if (enemyTarget != null && enemyTarget.IsDamageable && !string.IsNullOrWhiteSpace(enemyTarget.EnemyId))
             {
                 NetworkClient.Send(new DFMPDamageIntent
                 {
@@ -224,7 +224,7 @@ namespace DFMP.Runtime
             }
 
             DFMPDynamicEnemyHitTarget enemyTarget = hitCollider.transform.GetComponentInParent<DFMPDynamicEnemyHitTarget>();
-            if (enemyTarget != null && !string.IsNullOrWhiteSpace(enemyTarget.EnemyId))
+            if (enemyTarget != null && enemyTarget.IsDamageable && !string.IsNullOrWhiteSpace(enemyTarget.EnemyId))
             {
                 NetworkClient.Send(new DFMPDamageIntent
                 {

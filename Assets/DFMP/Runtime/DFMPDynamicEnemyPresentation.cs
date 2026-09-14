@@ -104,10 +104,17 @@ namespace DFMP.Runtime
     public class DFMPDynamicEnemyHitTarget : MonoBehaviour
     {
         public string EnemyId { get; private set; }
+        public bool IsDamageable { get; private set; }
 
         public void Initialize(string enemyId)
         {
             EnemyId = enemyId ?? string.Empty;
+            IsDamageable = false;
+        }
+
+        public void SetDamageable(bool isDamageable)
+        {
+            IsDamageable = isDamageable;
         }
     }
 
@@ -258,12 +265,20 @@ namespace DFMP.Runtime
                         targetPosition);
 
                     proxy.SetActive(isVisible);
+                    var hitTarget = proxy.GetComponent<DFMPDynamicEnemyHitTarget>();
+                    if (hitTarget != null)
+                        hitTarget.SetDamageable(isVisible);
                 }
                 else
                 {
                     GameObject proxy;
                     if (proxies.TryGetValue(stateId, out proxy) && proxy != null)
+                    {
                         proxy.SetActive(false);
+                        var hitTarget = proxy.GetComponent<DFMPDynamicEnemyHitTarget>();
+                        if (hitTarget != null)
+                            hitTarget.SetDamageable(false);
+                    }
                 }
 
                 bool isCorpseEligible = DFMPDynamicEnemyPresentation.IsCorpseEligible(state, isInsideDungeon, playerContext);
