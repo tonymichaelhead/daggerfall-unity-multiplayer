@@ -98,6 +98,29 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DamageIntent_RequiresExactlyOneTargetKind()
+        {
+            var intent = new DFMPDamageIntent
+            {
+                RequestId = 1,
+                Sequence = 1,
+                SourceKind = DFMPDamageSourceKind.Player,
+                VitalKind = DFMPVitalKind.Health,
+                AttackKind = DFMPCombatAttackKind.Melee,
+                Amount = 5
+            };
+
+            Assert.IsFalse(DFMPCombatProtocol.IsValidDamageIntent(intent));
+
+            intent.TargetConnectionId = 7;
+            intent.TargetEnemyId = "enemy-1";
+            Assert.IsFalse(DFMPCombatProtocol.IsValidDamageIntent(intent));
+
+            intent.TargetConnectionId = 0;
+            Assert.IsTrue(DFMPCombatProtocol.IsValidDamageIntent(intent));
+        }
+
+        [Test]
         public void DamageIntent_PlayerRangedHitUsesHealthVital()
         {
             var intent = new DFMPDamageIntent

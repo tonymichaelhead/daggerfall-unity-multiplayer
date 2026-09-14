@@ -30,6 +30,8 @@ namespace DFMP.Tests
             Assert.NotNull(config.Enemies);
             Assert.AreEqual("default", config.Enemies.WorldSeed);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
+            Assert.AreEqual(6f, config.Enemies.PlayerMeleeDamageRange);
+            Assert.AreEqual(25f, config.Enemies.PlayerRangedDamageRange);
         }
 
         [Test]
@@ -40,7 +42,15 @@ namespace DFMP.Tests
                 Enemies = new DFMPServerEnemyConfig
                 {
                     WorldSeed = "  test-world  ",
-                    DungeonRosterSize = DFMPDungeonRosterPolicy.MaximumRosterSize + 1
+                    DungeonRosterSize = DFMPDungeonRosterPolicy.MaximumRosterSize + 1,
+                    AwarenessRange = 512f,
+                    AttackRange = 512f,
+                    MoveSpeed = 0f,
+                    AiTickIntervalSeconds = 0f,
+                    AttackCooldownSeconds = 0f,
+                    AttackDamage = 0,
+                    PlayerMeleeDamageRange = 64f,
+                    PlayerRangedDamageRange = 1f
                 }
             };
 
@@ -48,6 +58,14 @@ namespace DFMP.Tests
 
             Assert.AreEqual("test-world", config.Enemies.WorldSeed);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
+            Assert.AreEqual(32f, config.Enemies.AwarenessRange);
+            Assert.AreEqual(2.25f, config.Enemies.AttackRange);
+            Assert.AreEqual(3.5f, config.Enemies.MoveSpeed);
+            Assert.AreEqual(0.1f, config.Enemies.AiTickIntervalSeconds);
+            Assert.AreEqual(1.8f, config.Enemies.AttackCooldownSeconds);
+            Assert.AreEqual(4, config.Enemies.AttackDamage);
+            Assert.AreEqual(6f, config.Enemies.PlayerMeleeDamageRange);
+            Assert.AreEqual(25f, config.Enemies.PlayerRangedDamageRange);
         }
 
         [Test]

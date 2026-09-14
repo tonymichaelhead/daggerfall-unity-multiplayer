@@ -337,6 +337,30 @@ Verification:
 - EditMode tests for roster seeding, marker scanning, deterministic descriptor generation, spawn and despawn lifecycle, delayed despawn timer and re-entry cancellation, authority boundaries, damage application, death transitions, and kill credit.
 - Two-client graphical dungeon smoke test confirming both players see and fight the same enemies.
 
+#### M8 Public-Ready Dungeon Enemy Combat Plan
+
+The current M8 implementation has an end-to-end shared dungeon enemy combat slice, but it is not public-server-ready until enemy sensing, movement, attack authority, geometry interaction, lifecycle cleanup, and presentation are hardened. This plan is scoped only to shared dynamic dungeon enemies. Wilderness, city/night, ambient world enemies, and quest enemies are deferred to later milestones or follow-up planning.
+
+Design decisions for M8 closeout:
+
+- Pathing baseline: host native dungeon geometry server-side and use simple physics/path constraints first.
+- Enemy persistence: dead or altered dungeon enemy state may reset on server restart for the public beta; persistent enemy state is deferred.
+- Combat fidelity: include melee, ranged, and magic enemy attacks, with magic constrained to direct damage unless safe existing DFU helpers make more possible.
+- Smoke testing: rely on focused EditMode tests per slice and reserve the comprehensive two-client dungeon smoke test for M8 closeout.
+
+Implementation sequence:
+
+1. Harden network-facing player-to-enemy damage validation. Dynamic enemy damage intents must only accept client `SourceKind.Player`, reject dead attackers, reject attackers in pending transitions, reject malformed mixed-target messages, and continue enforcing same dungeon context, dungeon-local range, request id, sequence, cooldown, and rate limits.
+2. Introduce a server-owned dungeon geometry host service. Generate native dungeon geometry for occupied shared dungeon scopes with `importEnemies: false`, isolate it under server-owned roots, strip server-irrelevant audio/UI/player-only components, add diagnostics, and tear it down after the empty-context grace period.
+3. Replace placeholder line-of-sight checks with geometry-service queries. Convert dungeon-local enemy/player positions into hosted dungeon scene space, ignore trigger and presentation colliders, and fail closed with a clear warning when strict line of sight is required but geometry is unavailable.
+4. Constrain enemy movement against dungeon geometry. Replace straight-line wall crossing with simple capsule/raycast movement, basic slide-or-stop behavior, stuck handling, vertical stability, and a pursuit leash.
+5. Add enemy combat profiles for melee, ranged, and direct-damage magic. Resolve attack range, damage, cooldown, and line-of-sight requirements from mobile type plus Phase 1 config defaults, and route all accepted damage through the existing M7 vitals/death/respawn path.
+6. Replicate attack presentation state. Extend enemy state with attack kind/sequence where needed so clients can show melee, ranged, and magic attacks without granting presentation authority.
+7. Tighten lifecycle cleanup. Dead enemies must stop moving, clear targets, stop attacking, and never reacquire. Despawned alive enemies should preserve health while the server runs, clear stale targets, reset attack cooldowns, and resume cleanly on re-entry.
+8. Harden client presentation and hit targeting. Keep dynamic enemy hit targets aligned with moving proxies, prevent native enemy confusion, create one personal corpse presentation per dead state, and clean up stale proxies on transition/unspawn.
+9. Finish the Phase 1 enemy config and logging pass. Add only beta-needed knobs for line of sight, AI cadence, movement constraints, leash/stuck behavior, melee/ranged/magic attack ranges, damage, cooldowns, and any simplified-AI fallback. Add concise, rate-limited logs for geometry lifecycle, target acquisition/loss, blocked movement, attacks, deaths, and cleanup.
+10. Close M8 with one comprehensive two-client dungeon smoke test after focused EditMode fixtures pass. Expected evidence: both clients receive the same enemy ids and positions, enemies move while respecting basic blocked geometry, both players damage the same enemy health pool, enemy death emits one server `EnemyDied` and `LootGenerated`, both clients see personal corpse loot, enemies attack players, M7 death/respawn still works, re-entry preserves intended in-memory lifecycle, and stale state/proxies do not remain after transitions or disconnects.
+
 ### M9: Beta Server Launch Readiness
 
 Status: Planned.

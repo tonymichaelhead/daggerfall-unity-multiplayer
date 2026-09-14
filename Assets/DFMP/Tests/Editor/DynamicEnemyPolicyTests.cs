@@ -605,6 +605,7 @@ namespace DFMP.Tests
             {
                 HasSession = true,
                 SpawnConfirmed = true,
+                SourceIsDead = false,
                 TargetExists = true,
                 TargetIsDead = false,
                 HasPendingTransition = false,
@@ -630,6 +631,18 @@ namespace DFMP.Tests
             context.InRange = true;
             context.TargetIsDead = true;
             Assert.AreEqual(DFMPDamageRejectionReason.TargetDead, DFMPDamagePolicy.GetRejectionReason(request, context));
+
+            context.TargetIsDead = false;
+            context.SourceIsDead = true;
+            Assert.AreEqual(DFMPDamageRejectionReason.SourceDead, DFMPDamagePolicy.GetRejectionReason(request, context));
+
+            context.SourceIsDead = false;
+            context.HasPendingTransition = true;
+            Assert.AreEqual(DFMPDamageRejectionReason.TransitionPending, DFMPDamagePolicy.GetRejectionReason(request, context));
+
+            context.HasPendingTransition = false;
+            request.SourceKind = DFMPDamageSourceKind.NativeEnemy;
+            Assert.AreEqual(DFMPDamageRejectionReason.InvalidSource, DFMPDamagePolicy.GetRejectionReason(request, context));
         }
 
         [Test]

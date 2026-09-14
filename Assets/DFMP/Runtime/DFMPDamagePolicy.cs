@@ -25,6 +25,7 @@ namespace DFMP.Runtime
         SpawnNotConfirmed,
         TargetMissing,
         TargetDead,
+        SourceDead,
         TransitionPending,
         InvalidRequestId,
         InvalidSequence,
@@ -57,6 +58,7 @@ namespace DFMP.Runtime
     {
         public bool HasSession;
         public bool SpawnConfirmed;
+        public bool SourceIsDead;
         public bool TargetExists;
         public bool TargetIsDead;
         public bool HasPendingTransition;
@@ -184,6 +186,8 @@ namespace DFMP.Runtime
                 return DFMPDamageRejectionReason.MissingSession;
             if (!context.SpawnConfirmed)
                 return DFMPDamageRejectionReason.SpawnNotConfirmed;
+            if (context.SourceIsDead)
+                return DFMPDamageRejectionReason.SourceDead;
             if (!context.TargetExists)
                 return DFMPDamageRejectionReason.TargetMissing;
             if (context.TargetIsDead)
@@ -209,6 +213,8 @@ namespace DFMP.Runtime
 
             if (context.IsDynamicEnemyTarget)
             {
+                if (intent.SourceKind != DFMPDamageSourceKind.Player)
+                    return DFMPDamageRejectionReason.InvalidSource;
                 if (!context.SameWorldContext)
                     return DFMPDamageRejectionReason.ContextMismatch;
                 if (!context.InRange)

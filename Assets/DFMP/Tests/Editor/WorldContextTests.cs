@@ -289,6 +289,70 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_UsesDungeonWideScopeAcrossBlocks()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryServiceTest");
+            GameObject firstSessionGo = new GameObject("DFMP_DungeonGeometryFirstSession");
+            GameObject secondSessionGo = new GameObject("DFMP_DungeonGeometrySecondSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var firstSession = firstSessionGo.AddComponent<DFMPPlayerSessionState>();
+                var secondSession = secondSessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey firstBlock = CreateDungeonContext(7, "S0000161.RDB", "shared");
+                DFMPWorldContextKey secondBlock = CreateDungeonContext(8, "M0000004.RDB", "shared");
+                DFMPWorldContextKey exterior = firstBlock;
+                exterior.Kind = DFMPWorldContextKind.Exterior;
+                exterior.DungeonBlockIndex = 0;
+                exterior.DungeonBlockName = string.Empty;
+
+                DFMPDungeonGeometryScopeKey scope;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(firstBlock, out scope));
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(101, firstSession, firstBlock, "test"));
+                Assert.AreEqual(1, service.HostedScopeCount);
+                Assert.AreEqual(1, service.GetOccupantCount(scope));
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(102, secondSession, secondBlock, "test"));
+                Assert.AreEqual(1, service.HostedScopeCount);
+                Assert.AreEqual(2, service.GetOccupantCount(scope));
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(101, firstSession, secondBlock, "test"));
+                Assert.AreEqual(1, service.HostedScopeCount);
+                Assert.AreEqual(2, service.GetOccupantCount(scope));
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(101, firstSession, exterior, "test"));
+                Assert.AreEqual(1, service.HostedScopeCount);
+                Assert.AreEqual(1, service.GetOccupantCount(scope));
+
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(102, secondSession, exterior, "test"));
+                Assert.AreEqual(0, service.HostedScopeCount);
+                Assert.AreEqual(0, service.GetOccupantCount(scope));
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(firstSessionGo);
+                Object.DestroyImmediate(secondSessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_SeparatesSharedDungeonInstances()
+        {
+            DFMPWorldContextKey shared = CreateDungeonContext(7, "S0000161.RDB", "shared");
+            DFMPWorldContextKey other = CreateDungeonContext(7, "S0000161.RDB", "other");
+
+            DFMPDungeonGeometryScopeKey sharedScope;
+            DFMPDungeonGeometryScopeKey otherScope;
+            Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(shared, out sharedScope));
+            Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(other, out otherScope));
+
+            Assert.AreNotEqual(sharedScope, otherScope);
+        }
+
+        [Test]
         public void NetworkServer_TryApplyWorldContextReport_UpdatesOccupancy()
         {
             GameObject go = new GameObject("DFMP_ContextApplyTest");
@@ -558,6 +622,22 @@ namespace DFMP.Tests
                 Object.DestroyImmediate(interestGo);
                 DFMPNetworkServer.Stop();
             }
+        }
+
+        static DFMPWorldContextKey CreateDungeonContext(int blockIndex, string blockName, string instanceId)
+        {
+            return new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Dungeon,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 3,
+                LocationIndex = 42,
+                LocationId = "Daggerfall Dungeon",
+                DungeonBlockIndex = blockIndex,
+                DungeonBlockName = blockName,
+                InstanceId = instanceId
+            };
         }
     }
 }

@@ -23,6 +23,7 @@ namespace DFMP.Runtime
         public static string Motd { get; set; } = "Welcome to Daggerfall Unity Multiplayer";
         public static DFMPServerConfig Config { get; private set; }
         public static IDFMPCharacterStore CharacterStore { get; private set; }
+        public static DFMPDungeonGeometryService DungeonGeometryService { get; private set; }
         public static DFMPDungeonEnemyRosterService DungeonEnemyRosterService { get; private set; }
 
         public static int ConnectedPlayerCount
@@ -302,6 +303,8 @@ namespace DFMP.Runtime
             if (DaggerfallUnity.Instance != null)
                 DaggerfallUnity.Instance.Option_ImportEnemyPrefabs = false;
 
+            DungeonGeometryService = networkGo.AddComponent<DFMPDungeonGeometryService>();
+            DungeonGeometryService.Initialize();
             DungeonEnemyRosterService = networkGo.AddComponent<DFMPDungeonEnemyRosterService>();
             DungeonEnemyRosterService.Initialize(Config.Enemies);
 
@@ -1243,6 +1246,9 @@ namespace DFMP.Runtime
             bool sameWorldContext = hasSourceContext && enemyExists && sourceContext.Equals(enemyRecord.Identity.Encounter.Context);
             bool inRange = sameWorldContext && sourceSession.HasDungeonLocalPosition &&
                 IsWithinEnemyRange(sourceSession.DungeonLocalPosition, enemyRecord.Descriptor.DungeonLocalPosition, intent.AttackKind);
+            DFMPTransitionAssignmentState sourceAssignmentState;
+            bool hasSourcePendingTransition = transitionAssignmentStates.TryGetValue(conn.connectionId, out sourceAssignmentState) &&
+                sourceAssignmentState != null && sourceAssignmentState.HasPendingAssignment;
 
             DFMPDamageValidationRequest validationRequest = new DFMPDamageValidationRequest
             {
@@ -1260,9 +1266,10 @@ namespace DFMP.Runtime
             {
                 HasSession = sourceSession != null,
                 SpawnConfirmed = sourceSession.SpawnConfirmed,
+                SourceIsDead = sourceSession.IsDead,
                 TargetExists = enemyExists,
                 TargetIsDead = enemyIsDead,
-                HasPendingTransition = false,
+                HasPendingTransition = hasSourcePendingTransition,
                 SameWorldContext = sameWorldContext,
                 InRange = inRange,
                 PvpEnabled = true,
@@ -1299,7 +1306,10 @@ namespace DFMP.Runtime
 
         static bool IsWithinEnemyRange(Vector3 sourceDungeonPos, Vector3 enemyDungeonPos, DFMPCombatAttackKind attackKind)
         {
-            float maxRange = attackKind == DFMPCombatAttackKind.Ranged ? 25f : 6f;
+            DFMPServerEnemyConfig enemyConfig = Config != null ? Config.Enemies : null;
+            float maxRange = attackKind == DFMPCombatAttackKind.Ranged
+                ? (enemyConfig != null ? enemyConfig.PlayerRangedDamageRange : 25f)
+                : (enemyConfig != null ? enemyConfig.PlayerMeleeDamageRange : 6f);
             return Vector3.Distance(sourceDungeonPos, enemyDungeonPos) <= maxRange;
         }
 
@@ -1348,6 +1358,7 @@ namespace DFMP.Runtime
             {
                 HasSession = sourceSession != null,
                 SpawnConfirmed = sourceSession.SpawnConfirmed,
+                SourceIsDead = sourceSession.IsDead,
                 TargetExists = targetSession != null,
                 TargetIsDead = targetSession.IsDead || targetVitals.Health <= 0,
                 HasPendingTransition = hasPendingTransition,
@@ -1997,6 +2008,7 @@ namespace DFMP.Runtime
             Manager = null;
             Transport = null;
             TimeState = null;
+            DungeonGeometryService = null;
             DungeonEnemyRosterService = null;
             playerSessionStates.Clear();
             joinDecisions.Clear();

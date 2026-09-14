@@ -81,13 +81,14 @@ namespace DFMP.Runtime
 
         public static bool IsValidDamageIntent(DFMPDamageIntent intent)
         {
-            bool hasValidTarget = intent.TargetConnectionId > 0 || !string.IsNullOrWhiteSpace(intent.TargetEnemyId);
+            bool hasPlayerTarget = intent.TargetConnectionId > 0;
+            bool hasEnemyTarget = !string.IsNullOrWhiteSpace(intent.TargetEnemyId);
             return intent.RequestId != 0 &&
                 intent.Sequence != 0 &&
                 Enum.IsDefined(typeof(DFMPDamageSourceKind), intent.SourceKind) &&
                 Enum.IsDefined(typeof(DFMPVitalKind), intent.VitalKind) &&
                 Enum.IsDefined(typeof(DFMPCombatAttackKind), intent.AttackKind) &&
-                hasValidTarget &&
+                hasPlayerTarget != hasEnemyTarget &&
                 intent.Amount > 0;
         }
 
