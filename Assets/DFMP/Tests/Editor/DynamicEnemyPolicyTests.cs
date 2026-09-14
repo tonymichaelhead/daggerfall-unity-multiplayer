@@ -427,8 +427,14 @@ namespace DFMP.Tests
                 Assert.AreEqual(record.Descriptor.MobileType, state.MobileType);
                 Assert.AreEqual(record.TargetConnectionId, state.TargetConnectionId);
                 Assert.AreEqual(record.IsMoving, state.IsMoving);
+                Assert.AreEqual(0, state.AttackSequence);
+                Assert.AreEqual(DFMPDynamicEnemyAttackKind.Melee, state.AttackKind);
                 Assert.AreEqual(record.Descriptor, state.Descriptor);
                 Assert.AreEqual(4, enemyObject.GetComponents<Component>().Length);
+
+                state.SetAttackState(DFMPDynamicEnemyAttackKind.Magic);
+                Assert.AreEqual(1, state.AttackSequence);
+                Assert.AreEqual(DFMPDynamicEnemyAttackKind.Magic, state.AttackKind);
             }
             finally
             {

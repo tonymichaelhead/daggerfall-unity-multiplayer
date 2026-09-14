@@ -115,8 +115,9 @@ namespace DFMP.Runtime
     {
         int mobileType = int.MinValue;
         bool? isMoving;
+        int attackSequence = -1;
 
-        public void ApplyIfChanged(int targetMobileType, bool targetIsMoving)
+        public void ApplyIfChanged(int targetMobileType, bool targetIsMoving, int targetAttackSequence, DFMPDynamicEnemyAttackKind targetAttackKind)
         {
             var mobile = GetComponentInChildren<DaggerfallMobileUnit>();
             if (mobile == null)
@@ -139,6 +140,17 @@ namespace DFMP.Runtime
             {
                 mobile.ChangeEnemyState(targetIsMoving ? MobileStates.Move : MobileStates.Idle);
                 isMoving = targetIsMoving;
+            }
+
+            if (attackSequence != targetAttackSequence)
+            {
+                MobileStates attackState = targetAttackKind == DFMPDynamicEnemyAttackKind.Magic
+                    ? MobileStates.Spell
+                    : targetAttackKind == DFMPDynamicEnemyAttackKind.Ranged
+                        ? MobileStates.RangedAttack1
+                        : MobileStates.PrimaryAttack;
+                mobile.ChangeEnemyState(attackState);
+                attackSequence = targetAttackSequence;
             }
         }
     }
@@ -232,7 +244,7 @@ namespace DFMP.Runtime
                     GameObject proxy = GetOrCreateProxy(stateId, state.EnemyId);
                     var appearance = proxy.GetComponentInChildren<DFMPDynamicEnemyAppearance>();
                     if (appearance != null)
-                        appearance.ApplyIfChanged(state.MobileType, state.IsMoving);
+                        appearance.ApplyIfChanged(state.MobileType, state.IsMoving, state.AttackSequence, state.AttackKind);
 
                     Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
                         playerEnterExit.Dungeon.transform.position,

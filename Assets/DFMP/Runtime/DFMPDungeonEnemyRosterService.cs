@@ -223,7 +223,7 @@ namespace DFMP.Runtime
                     UpdateStateProjection(updatedRecord);
 
                 if (decision.HasTarget && decision.InAttackRange && GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime) < 0)
-                    TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, currentTime);
+                    TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, attackProfile.Kind, currentTime);
             }
         }
 
@@ -331,14 +331,23 @@ namespace DFMP.Runtime
             return false;
         }
 
-        void TryAttackTarget(string enemyId, int targetConnectionId, float currentTime)
+        void TryAttackTarget(string enemyId, int targetConnectionId, DFMPDynamicEnemyAttackKind attackKind, float currentTime)
         {
             float lastAttackTime;
             if (lastAttackTimesByEnemyId.TryGetValue(enemyId, out lastAttackTime) && currentTime - lastAttackTime < attackCooldownSeconds)
                 return;
 
             if (serverEnemyDamageApplier != null && serverEnemyDamageApplier(enemyId, targetConnectionId, attackDamage))
+            {
                 lastAttackTimesByEnemyId[enemyId] = currentTime;
+                GameObject enemyGo;
+                if (stateObjectsByEnemyId.TryGetValue(enemyId, out enemyGo) && enemyGo != null)
+                {
+                    var state = enemyGo.GetComponent<DFMPDynamicEnemyState>();
+                    if (state != null)
+                        state.SetAttackState(attackKind);
+                }
+            }
         }
 
         void UpdateStateProjection(DFMPDynamicEnemyRecord record)

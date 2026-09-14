@@ -37,6 +37,12 @@ namespace DFMP.Runtime
         [SyncVar]
         bool isMoving;
 
+        [SyncVar]
+        int attackSequence;
+
+        [SyncVar]
+        int attackKind;
+
         public DFMPDynamicEnemyProviderKind ProviderKind { get { return (DFMPDynamicEnemyProviderKind)providerKind; } }
         public string EncounterId { get { return encounterId; } }
         public int RosterIndex { get { return rosterIndex; } }
@@ -47,6 +53,8 @@ namespace DFMP.Runtime
         public int MobileType { get { return mobileType; } }
         public int TargetConnectionId { get { return targetConnectionId; } }
         public bool IsMoving { get { return isMoving; } }
+        public int AttackSequence { get { return attackSequence; } }
+        public DFMPDynamicEnemyAttackKind AttackKind { get { return (DFMPDynamicEnemyAttackKind)attackKind; } }
         public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType }; } }
 
         public void SetLifecycleState(DFMPDynamicEnemyLifecycleState state)
@@ -68,6 +76,12 @@ namespace DFMP.Runtime
             isMoving = newIsMoving;
         }
 
+        public void SetAttackState(DFMPDynamicEnemyAttackKind newAttackKind)
+        {
+            attackKind = (int)newAttackKind;
+            attackSequence++;
+        }
+
         public void Initialize(DFMPDynamicEnemyRecord record)
         {
             providerKind = (int)record.Identity.Encounter.ProviderKind;
@@ -80,6 +94,8 @@ namespace DFMP.Runtime
             mobileType = record.Descriptor.MobileType;
             targetConnectionId = record.TargetConnectionId;
             isMoving = record.IsMoving;
+            attackSequence = 0;
+            attackKind = (int)DFMPDynamicEnemyAttackKind.Melee;
         }
 
         public override void OnStartClient()
