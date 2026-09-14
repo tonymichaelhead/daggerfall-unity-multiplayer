@@ -159,6 +159,7 @@ namespace DFMP.Runtime
         public bool RequireLineOfSight;
         public Vector3 HomePosition;
         public float PursuitLeashRange;
+        public int IgnoredTargetConnectionId;
     }
 
     public struct DFMPDynamicEnemyAiDecision
@@ -249,7 +250,7 @@ namespace DFMP.Runtime
             float maximumDistanceSquared = input.AwarenessRange * input.AwarenessRange;
             for (int index = 0; index < input.Targets.Length; index++)
             {
-                if (input.Targets[index].ConnectionId == input.CurrentTargetConnectionId && IsValidTarget(input, index, maximumDistanceSquared))
+                if (input.Targets[index].ConnectionId == input.CurrentTargetConnectionId && !IsIgnoredTarget(input, index) && IsValidTarget(input, index, maximumDistanceSquared))
                 {
                     targetIndex = index;
                     return true;
@@ -259,7 +260,7 @@ namespace DFMP.Runtime
             float bestDistanceSquared = float.MaxValue;
             for (int index = 0; index < input.Targets.Length; index++)
             {
-                if (!IsValidTarget(input, index, maximumDistanceSquared))
+                if (IsIgnoredTarget(input, index) || !IsValidTarget(input, index, maximumDistanceSquared))
                     continue;
 
                 float distanceSquared = GetPlanarDistanceSquared(input.EnemyPosition, input.Targets[index].DungeonLocalPosition);
@@ -271,6 +272,11 @@ namespace DFMP.Runtime
             }
 
             return targetIndex >= 0;
+        }
+
+        static bool IsIgnoredTarget(DFMPDynamicEnemyAiInput input, int targetIndex)
+        {
+            return input.Targets[targetIndex].ConnectionId == input.IgnoredTargetConnectionId;
         }
 
         static bool IsValidTarget(DFMPDynamicEnemyAiInput input, int targetIndex, float maximumDistanceSquared)

@@ -29,6 +29,8 @@
     "AttackCooldownSeconds": 1.8,
     "AttackDamage": 4,
     "PursuitLeashRange": 24.0,
+    "StuckMovementTickLimit": 3,
+    "StuckRecoverySeconds": 2.0,
     "PlayerMeleeDamageRange": 6.0,
     "PlayerRangedDamageRange": 25.0,
     "RequireLineOfSight": true

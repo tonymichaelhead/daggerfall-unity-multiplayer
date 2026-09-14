@@ -635,6 +635,29 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyAi_IgnoresTemporarilyBlockedTarget()
+        {
+            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = Vector3.zero,
+                IgnoredTargetConnectionId = 43,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 43, DungeonLocalPosition = new Vector3(4f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 44, DungeonLocalPosition = new Vector3(6f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
+                },
+                AwarenessRange = 64f,
+                AttackRange = 1f,
+                MoveSpeed = 4f,
+                DeltaTime = 0.1f,
+                RequireLineOfSight = false
+            });
+
+            Assert.IsTrue(decision.HasTarget);
+            Assert.AreEqual(44, decision.TargetConnectionId);
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest
@@ -833,8 +856,12 @@ namespace DFMP.Tests
                 Assert.IsTrue(geometry.TryMarkGeometryAvailableForTesting(scope));
 
                 service.ProcessAiTick(10f, 0.5f);
+                service.ProcessAiTick(10.5f, 0.5f);
+                service.ProcessAiTick(11f, 0.5f);
+                service.ProcessAiTick(11.5f, 0.5f);
                 DFMPDynamicEnemyRecord updatedRecord = GetRecord(service, enemyId);
 
+                Assert.AreEqual(-1, updatedRecord.TargetConnectionId);
                 Assert.IsFalse(updatedRecord.IsMoving);
                 Assert.Less(updatedRecord.Descriptor.DungeonLocalPosition.x, initialPosition.x + 1f);
                 Assert.Greater(updatedRecord.Descriptor.DungeonLocalPosition.x, initialPosition.x);

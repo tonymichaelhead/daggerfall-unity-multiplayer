@@ -11,6 +11,9 @@ namespace DFMP.Runtime
         readonly Dictionary<DFMPWorldContextKey, string[]> enemyIdsByContext = new Dictionary<DFMPWorldContextKey, string[]>();
         readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
         readonly Dictionary<string, Vector3> homePositionsByEnemyId = new Dictionary<string, Vector3>();
+        readonly Dictionary<string, int> blockedMovementTicksByEnemyId = new Dictionary<string, int>();
+        readonly Dictionary<string, float> stuckRecoveryTimesByEnemyId = new Dictionary<string, float>();
+        readonly Dictionary<string, int> stuckTargetConnectionIdsByEnemyId = new Dictionary<string, int>();
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
         readonly HashSet<DFMPDungeonGeometryScopeKey> missingLineOfSightGeometryWarnings = new HashSet<DFMPDungeonGeometryScopeKey>();
@@ -26,6 +29,8 @@ namespace DFMP.Runtime
         int attackDamage;
         bool requireLineOfSight;
         float pursuitLeashRange;
+        int stuckMovementTickLimit;
+        float stuckRecoverySeconds;
         const float EnemyMovementRadius = 0.35f;
         const float EnemyMovementHeight = 1.8f;
         DFMPDungeonGeometryService geometryServiceForTesting;
@@ -53,6 +58,8 @@ namespace DFMP.Runtime
             attackDamage = config.AttackDamage;
             requireLineOfSight = config.RequireLineOfSight;
             pursuitLeashRange = config.PursuitLeashRange;
+            stuckMovementTickLimit = config.StuckMovementTickLimit;
+            stuckRecoverySeconds = config.StuckRecoverySeconds;
             Subscribe();
         }
 
@@ -157,6 +164,9 @@ namespace DFMP.Runtime
             pendingDespawnTimes.Clear();
             lastAttackTimesByEnemyId.Clear();
             homePositionsByEnemyId.Clear();
+            blockedMovementTicksByEnemyId.Clear();
+            stuckRecoveryTimesByEnemyId.Clear();
+            stuckTargetConnectionIdsByEnemyId.Clear();
             missingLineOfSightGeometryWarnings.Clear();
             if (!isSubscribed)
                 return;
@@ -190,13 +200,15 @@ namespace DFMP.Runtime
                     DeltaTime = deltaTime,
                     RequireLineOfSight = requireLineOfSight,
                     HomePosition = GetHomePosition(record),
-                    PursuitLeashRange = pursuitLeashRange
+                    PursuitLeashRange = pursuitLeashRange,
+                    IgnoredTargetConnectionId = GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime)
                 });
 
                 DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
                 bool movementBlocked;
                 Vector3 resolvedPosition;
                 bool movementAvailable = TryResolveEnemyMovement(context, record.Descriptor.DungeonLocalPosition, decision.NextDungeonLocalPosition, out resolvedPosition, out movementBlocked);
+                UpdateBlockedMovement(record.Identity.EnemyId, decision, movementAvailable, movementBlocked, currentTime);
                 descriptor.DungeonLocalPosition = movementAvailable ? resolvedPosition : record.Descriptor.DungeonLocalPosition;
                 descriptor.FacingYaw = decision.FacingYaw;
                 bool isMoving = decision.IsMoving && movementAvailable && !movementBlocked && descriptor.DungeonLocalPosition != record.Descriptor.DungeonLocalPosition;
@@ -204,9 +216,46 @@ namespace DFMP.Runtime
                 if (registry.TryUpdateAiState(true, record.Identity.EnemyId, descriptor, decision.TargetConnectionId, isMoving, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
                     UpdateStateProjection(updatedRecord);
 
-                if (decision.HasTarget && decision.InAttackRange)
+                if (decision.HasTarget && decision.InAttackRange && GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime) < 0)
                     TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, currentTime);
             }
+        }
+
+        void UpdateBlockedMovement(string enemyId, DFMPDynamicEnemyAiDecision decision, bool movementAvailable, bool movementBlocked, float currentTime)
+        {
+            if (!decision.HasTarget || !decision.IsMoving || !movementAvailable || !movementBlocked)
+            {
+                blockedMovementTicksByEnemyId.Remove(enemyId);
+                return;
+            }
+
+            int blockedTicks;
+            blockedMovementTicksByEnemyId.TryGetValue(enemyId, out blockedTicks);
+            blockedTicks++;
+            blockedMovementTicksByEnemyId[enemyId] = blockedTicks;
+            if (blockedTicks < stuckMovementTickLimit)
+                return;
+
+            blockedMovementTicksByEnemyId.Remove(enemyId);
+            stuckRecoveryTimesByEnemyId[enemyId] = currentTime + stuckRecoverySeconds;
+            stuckTargetConnectionIdsByEnemyId[enemyId] = decision.TargetConnectionId;
+            Debug.LogWarning($"[DFMP Enemy] Movement stuck; temporarily releasing target: enemyId={enemyId}, target={decision.TargetConnectionId}, blockedTicks={blockedTicks}.");
+        }
+
+        int GetIgnoredTargetConnectionId(string enemyId, float currentTime)
+        {
+            float recoveryUntil;
+            if (!stuckRecoveryTimesByEnemyId.TryGetValue(enemyId, out recoveryUntil))
+                return -1;
+            if (currentTime >= recoveryUntil)
+            {
+                stuckRecoveryTimesByEnemyId.Remove(enemyId);
+                stuckTargetConnectionIdsByEnemyId.Remove(enemyId);
+                return -1;
+            }
+
+            int targetConnectionId;
+            return stuckTargetConnectionIdsByEnemyId.TryGetValue(enemyId, out targetConnectionId) ? targetConnectionId : -1;
         }
 
         bool TryResolveEnemyMovement(DFMPWorldContextKey context, Vector3 fromPosition, Vector3 desiredPosition, out Vector3 resolvedPosition, out bool blocked)
