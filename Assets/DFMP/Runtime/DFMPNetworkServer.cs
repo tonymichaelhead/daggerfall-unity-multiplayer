@@ -85,6 +85,11 @@ namespace DFMP.Runtime
             return worldOccupancy.GetConnectionsInInterestScope(context);
         }
 
+        public static bool TryGetPlayerSessionState(int connectionId, out DFMPPlayerSessionState sessionState)
+        {
+            return playerSessionStates.TryGetValue(connectionId, out sessionState);
+        }
+
         public static bool TryGetStartMarkerAssignment(int connectionId, out string markerName)
         {
             return startMarkerAssignments.TryGetValue(connectionId, out markerName);
@@ -104,6 +109,9 @@ namespace DFMP.Runtime
 
         public static bool SetSessionWorldContext(int connectionId, DFMPPlayerSessionState sessionState, DFMPWorldContextKey context, string reason)
         {
+            if (sessionState != null)
+                playerSessionStates[connectionId] = sessionState;
+
             DFMPWorldContextKey previousContext;
             bool hadPreviousContext = worldOccupancy.TryGetContext(connectionId, out previousContext);
             if (hadPreviousContext && previousContext.Equals(context))
@@ -1403,6 +1411,71 @@ namespace DFMP.Runtime
                 SendVitalSnapshot(targetConnection, targetVitals, targetSession.IsDead);
 
             Debug.Log($"[DFMP Combat] Applied damage: source={conn.connectionId}, target={intent.TargetConnectionId}, sourceKind={intent.SourceKind}, vital={intent.VitalKind}, requested={intent.Amount}, applied={applicationResult.AppliedAmount}, current={applicationResult.CurrentValue}, killed={applicationResult.Killed}.");
+            return true;
+        }
+
+        public static bool TryApplyServerEnemyDamage(string enemyId, int targetConnectionId, int amount)
+        {
+            DFMPPlayerSessionState targetSession;
+            DFMPVitalState targetVitals;
+            if (string.IsNullOrWhiteSpace(enemyId) || !playerSessionStates.TryGetValue(targetConnectionId, out targetSession) || targetSession == null ||
+                !vitalStates.TryGetValue(targetConnectionId, out targetVitals))
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected server enemy damage: enemyId={enemyId ?? string.Empty}, target={targetConnectionId}, reason=missing-target.");
+                return false;
+            }
+
+            int maximumAmount = Config != null && Config.Combat != null ? Config.Combat.MaximumDamagePerHit : 100;
+            if (amount <= 0 || amount > maximumAmount)
+            {
+                Debug.LogWarning($"[DFMP Combat] Rejected server enemy damage: enemyId={enemyId}, target={targetConnectionId}, reason=invalid-amount.");
+                return false;
+            }
+
+            DFMPTransitionAssignmentState assignmentState;
+            bool hasPendingTransition = transitionAssignmentStates.TryGetValue(targetConnectionId, out assignmentState) &&
+                assignmentState != null && assignmentState.HasPendingAssignment;
+            if (!targetSession.SpawnConfirmed || targetSession.IsDead || targetVitals.Health <= 0 || hasPendingTransition)
+                return false;
+
+            DFMPVitalApplicationResult applicationResult = targetVitals.ApplyDamage(DFMPVitalKind.Health, amount);
+            if (!applicationResult.Accepted)
+                return false;
+
+            vitalStates[targetConnectionId] = targetVitals;
+
+            DFMPJoinDecision joinDecision;
+            if (CharacterStore != null && joinDecisions.TryGetValue(targetConnectionId, out joinDecision) && joinDecision.CharacterRecord != null)
+            {
+                DFMPCharacterPersistence.ApplyVitalState(joinDecision.CharacterRecord, targetVitals);
+                CharacterStore.Save(joinDecision.CharacterRecord);
+            }
+
+            DFMPEventBus.Instance.PublishPlayerDamaged(new DFMPPlayerDamagedEvent
+            {
+                SourceConnectionId = 0,
+                TargetConnectionId = targetConnectionId,
+                SourceKind = DFMPDamageSourceKind.NativeEnemy,
+                VitalKind = DFMPVitalKind.Health,
+                RequestedAmount = amount,
+                AppliedAmount = applicationResult.AppliedAmount,
+                CurrentValue = applicationResult.CurrentValue,
+                MaximumValue = applicationResult.MaximumValue
+            });
+
+            if (applicationResult.Killed)
+            {
+                joinDecisions.TryGetValue(targetConnectionId, out joinDecision);
+                NetworkConnectionToClient deathConnection;
+                if (NetworkServer.connections.TryGetValue(targetConnectionId, out deathConnection))
+                    TryBeginDeathRespawn(deathConnection, targetSession, joinDecision, DFMPDamageSourceKind.NativeEnemy, DFMPVitalKind.Health, applicationResult.AppliedAmount);
+            }
+
+            NetworkConnectionToClient targetConnection;
+            if (NetworkServer.connections.TryGetValue(targetConnectionId, out targetConnection))
+                SendVitalSnapshot(targetConnection, targetVitals, targetSession.IsDead);
+
+            Debug.Log($"[DFMP Combat] Applied server enemy damage: enemyId={enemyId}, target={targetConnectionId}, amount={applicationResult.AppliedAmount}, current={applicationResult.CurrentValue}, killed={applicationResult.Killed}.");
             return true;
         }
 

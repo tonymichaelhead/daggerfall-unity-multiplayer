@@ -425,6 +425,8 @@ namespace DFMP.Tests
                 Assert.AreEqual(record.Descriptor.DungeonLocalPosition, state.DungeonLocalPosition);
                 Assert.AreEqual(record.Descriptor.FacingYaw, state.FacingYaw);
                 Assert.AreEqual(record.Descriptor.MobileType, state.MobileType);
+                Assert.AreEqual(record.TargetConnectionId, state.TargetConnectionId);
+                Assert.AreEqual(record.IsMoving, state.IsMoving);
                 Assert.AreEqual(record.Descriptor, state.Descriptor);
                 Assert.AreEqual(4, enemyObject.GetComponents<Component>().Length);
             }
@@ -464,6 +466,124 @@ namespace DFMP.Tests
 
             // Cannot damage already dead enemy
             Assert.AreEqual(DFMPDynamicEnemyRegistryResult.InvalidTransition, registry.TryApplyDamage(true, enemyId, 5, out updatedRecord, out appliedAmount, out killed));
+        }
+
+        [Test]
+        public void Registry_UpdatesAiStateUnderServerAuthorityOnly()
+        {
+            DFMPDynamicEnemyRecord[] roster = CreateRoster();
+            var registry = new DFMPDynamicEnemyRegistry();
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, registry.RegisterRoster(true, roster));
+            string enemyId = roster[0].Identity.EnemyId;
+            DFMPDynamicEnemyDescriptor descriptor = roster[0].Descriptor;
+            descriptor.DungeonLocalPosition += new Vector3(1f, 0f, 0f);
+            descriptor.FacingYaw = 90f;
+
+            DFMPDynamicEnemyRecord updatedRecord;
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.InvalidAuthority, registry.TryUpdateAiState(false, enemyId, descriptor, 44, true, out updatedRecord));
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, registry.TryUpdateAiState(true, enemyId, descriptor, 44, true, out updatedRecord));
+
+            Assert.AreEqual(descriptor.DungeonLocalPosition, updatedRecord.Descriptor.DungeonLocalPosition);
+            Assert.AreEqual(90f, updatedRecord.Descriptor.FacingYaw);
+            Assert.AreEqual(44, updatedRecord.TargetConnectionId);
+            Assert.IsTrue(updatedRecord.IsMoving);
+        }
+
+        [Test]
+        public void DynamicEnemyAi_SelectsNearestVisibleLiveTargetAndMovesTowardAttackRange()
+        {
+            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = Vector3.zero,
+                FacingYaw = 270f,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 11, DungeonLocalPosition = new Vector3(12f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 12, DungeonLocalPosition = new Vector3(4f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 13, DungeonLocalPosition = new Vector3(2f, 0f, 0f), SpawnConfirmed = true, IsDead = true, HasLineOfSight = true }
+                },
+                AwarenessRange = 16f,
+                AttackRange = 2f,
+                MoveSpeed = 3f,
+                DeltaTime = 0.5f,
+                RequireLineOfSight = true
+            });
+
+            Assert.IsTrue(decision.HasTarget);
+            Assert.AreEqual(12, decision.TargetConnectionId);
+            Assert.IsTrue(decision.IsMoving);
+            Assert.IsFalse(decision.InAttackRange);
+            Assert.AreEqual(new Vector3(1.5f, 0f, 0f), decision.NextDungeonLocalPosition);
+            Assert.AreEqual(90f, decision.FacingYaw);
+        }
+
+        [Test]
+        public void DynamicEnemyAi_RequiresLineOfSightAndStopsAtAttackRange()
+        {
+            DFMPDynamicEnemyAiDecision blocked = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = Vector3.zero,
+                FacingYaw = 45f,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 21, DungeonLocalPosition = new Vector3(1f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = false }
+                },
+                AwarenessRange = 8f,
+                AttackRange = 2f,
+                MoveSpeed = 3f,
+                DeltaTime = 1f,
+                RequireLineOfSight = true
+            });
+
+            Assert.IsFalse(blocked.HasTarget);
+            Assert.AreEqual(Vector3.zero, blocked.NextDungeonLocalPosition);
+            Assert.AreEqual(45f, blocked.FacingYaw);
+
+            DFMPDynamicEnemyAiDecision inRange = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = Vector3.zero,
+                FacingYaw = 0f,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 22, DungeonLocalPosition = new Vector3(1f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = false }
+                },
+                AwarenessRange = 8f,
+                AttackRange = 2f,
+                MoveSpeed = 3f,
+                DeltaTime = 1f,
+                RequireLineOfSight = false
+            });
+
+            Assert.IsTrue(inRange.HasTarget);
+            Assert.AreEqual(22, inRange.TargetConnectionId);
+            Assert.IsTrue(inRange.InAttackRange);
+            Assert.IsFalse(inRange.IsMoving);
+            Assert.AreEqual(Vector3.zero, inRange.NextDungeonLocalPosition);
+        }
+
+        [Test]
+        public void DynamicEnemyAi_RetainsCurrentTargetWhenStillValid()
+        {
+            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = Vector3.zero,
+                FacingYaw = 0f,
+                CurrentTargetConnectionId = 31,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 30, DungeonLocalPosition = new Vector3(2f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 31, DungeonLocalPosition = new Vector3(6f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
+                },
+                AwarenessRange = 8f,
+                AttackRange = 2f,
+                MoveSpeed = 10f,
+                DeltaTime = 0.1f,
+                RequireLineOfSight = true
+            });
+
+            Assert.IsTrue(decision.HasTarget);
+            Assert.AreEqual(31, decision.TargetConnectionId);
+            Assert.AreEqual(new Vector3(1f, 0f, 0f), decision.NextDungeonLocalPosition);
         }
 
         [Test]
@@ -551,6 +671,52 @@ namespace DFMP.Tests
                 Assert.IsNotNull(lootEvent);
                 Assert.AreEqual(enemyId, lootEvent.EnemyId);
                 Assert.AreEqual(55, lootEvent.KillerConnectionId);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonRosterService_AiTick_AcquiresCoLocatedPlayerAndMovesEnemy()
+        {
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceAiTickTest");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceAiSession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "ai-tick-seed",
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 4f,
+                    RequireLineOfSight = false
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(66, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext();
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(66, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("ai-tick-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 initialPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(10f, 0f, 0f));
+
+                service.ProcessAiTick(10f, 0.5f);
+                DFMPDynamicEnemyRecord updatedRecord = GetRecord(service, enemyId);
+
+                Assert.AreEqual(66, updatedRecord.TargetConnectionId);
+                Assert.IsTrue(updatedRecord.IsMoving);
+                Assert.AreEqual(initialPosition + new Vector3(2f, 0f, 0f), updatedRecord.Descriptor.DungeonLocalPosition);
+                Assert.AreEqual(90f, updatedRecord.Descriptor.FacingYaw);
             }
             finally
             {

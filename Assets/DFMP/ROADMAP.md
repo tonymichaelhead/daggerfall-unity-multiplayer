@@ -30,7 +30,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M6 | World context, location occupancy, interest management, and safe transitions. | Done |
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Done |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Done |
-| M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | Done |
+| M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | In-Progress |
 | M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
 | — | **Phase 1 exit: private beta server live for Discord testers.** | Planned |
 
@@ -308,7 +308,7 @@ Verification:
 
 ### M8: Server-Owned Dynamic World Enemies
 
-Status: Complete.
+Status: In-Progress.
 
 - Dungeon enemies are the first provider and vertical slice: shared persistent-world dungeons rather than per-party instances. Layouts are deterministic from game data, so only dynamic entities are replicated.
 - The server populates a dungeon's enemy roster on first occupancy, seeded from location identity and a server world seed so rosters are reproducible and debuggable.

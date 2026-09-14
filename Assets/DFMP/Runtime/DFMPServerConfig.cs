@@ -56,12 +56,23 @@ namespace DFMP.Runtime
         public string WorldSeed = "default";
         public int DungeonRosterSize = 8;
         public float DespawnDelaySeconds = 0f;
+        public float AwarenessRange = 32f;
+        public float AttackRange = 2.25f;
+        public float MoveSpeed = 3.5f;
+        public float AttackCooldownSeconds = 1.8f;
+        public int AttackDamage = 4;
+        public bool RequireLineOfSight = true;
 
         public void Normalize()
         {
             WorldSeed = string.IsNullOrWhiteSpace(WorldSeed) ? "default" : WorldSeed.Trim();
             DungeonRosterSize = DungeonRosterSize > 0 && DungeonRosterSize <= DFMPDungeonRosterPolicy.MaximumRosterSize ? DungeonRosterSize : 8;
             DespawnDelaySeconds = DespawnDelaySeconds >= 0f && DespawnDelaySeconds <= 3600f ? DespawnDelaySeconds : 0f;
+            AwarenessRange = AwarenessRange > 0f && AwarenessRange <= 256f ? AwarenessRange : 32f;
+            AttackRange = AttackRange > 0f && AttackRange <= AwarenessRange ? AttackRange : Math.Min(2.25f, AwarenessRange);
+            MoveSpeed = MoveSpeed > 0f && MoveSpeed <= 32f ? MoveSpeed : 3.5f;
+            AttackCooldownSeconds = AttackCooldownSeconds > 0f && AttackCooldownSeconds <= 60f ? AttackCooldownSeconds : 1.8f;
+            AttackDamage = AttackDamage > 0 && AttackDamage <= 1000 ? AttackDamage : 4;
         }
     }
 

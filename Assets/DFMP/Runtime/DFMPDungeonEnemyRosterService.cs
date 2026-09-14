@@ -10,9 +10,16 @@ namespace DFMP.Runtime
         readonly Dictionary<DFMPWorldContextKey, string[]> enemyIdsByContext = new Dictionary<DFMPWorldContextKey, string[]>();
         readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
+        readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
         ulong serverWorldSeed;
         int dungeonRosterSize;
         float despawnDelaySeconds;
+        float awarenessRange;
+        float attackRange;
+        float moveSpeed;
+        float attackCooldownSeconds;
+        int attackDamage;
+        bool requireLineOfSight;
         bool isSubscribed;
 
         public int RosterCount
@@ -27,6 +34,12 @@ namespace DFMP.Runtime
             serverWorldSeed = DFMPDungeonRosterPolicy.CreateServerWorldSeed(config.WorldSeed);
             dungeonRosterSize = config.DungeonRosterSize;
             despawnDelaySeconds = config.DespawnDelaySeconds;
+            awarenessRange = config.AwarenessRange;
+            attackRange = config.AttackRange;
+            moveSpeed = config.MoveSpeed;
+            attackCooldownSeconds = config.AttackCooldownSeconds;
+            attackDamage = config.AttackDamage;
+            requireLineOfSight = config.RequireLineOfSight;
             Subscribe();
         }
 
@@ -37,10 +50,26 @@ namespace DFMP.Runtime
 
         void Update()
         {
+            ProcessAiTick(Time.unscaledTime, Time.deltaTime);
+
             if (pendingDespawnTimes.Count == 0)
                 return;
 
             ProcessPendingDespawns(Time.unscaledTime);
+        }
+
+        public void ProcessAiTick(float currentTime, float deltaTime)
+        {
+            if (enemyIdsByContext.Count == 0 || deltaTime <= 0f)
+                return;
+
+            foreach (var kvp in enemyIdsByContext)
+            {
+                if (DFMPNetworkServer.GetConnectionsInWorldContext(kvp.Key).Length == 0)
+                    continue;
+
+                ProcessContextAi(kvp.Key, kvp.Value, currentTime, deltaTime);
+            }
         }
 
         public void ProcessPendingDespawns(float currentTime)
@@ -89,6 +118,7 @@ namespace DFMP.Runtime
         void OnDestroy()
         {
             pendingDespawnTimes.Clear();
+            lastAttackTimesByEnemyId.Clear();
             if (!isSubscribed)
                 return;
 
@@ -99,6 +129,90 @@ namespace DFMP.Runtime
         public bool TryGetRecord(string enemyId, out DFMPDynamicEnemyRecord record)
         {
             return registry.TryGetRecord(enemyId, out record);
+        }
+
+        void ProcessContextAi(DFMPWorldContextKey context, string[] enemyIds, float currentTime, float deltaTime)
+        {
+            for (int index = 0; index < enemyIds.Length; index++)
+            {
+                DFMPDynamicEnemyRecord record;
+                if (!registry.TryGetRecord(enemyIds[index], out record) || record.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
+                    continue;
+
+                DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+                {
+                    EnemyPosition = record.Descriptor.DungeonLocalPosition,
+                    FacingYaw = record.Descriptor.FacingYaw,
+                    CurrentTargetConnectionId = record.TargetConnectionId,
+                    Targets = CreateSensoryTargets(context, record.Descriptor.DungeonLocalPosition),
+                    AwarenessRange = awarenessRange,
+                    AttackRange = attackRange,
+                    MoveSpeed = moveSpeed,
+                    DeltaTime = deltaTime,
+                    RequireLineOfSight = requireLineOfSight
+                });
+
+                DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
+                descriptor.DungeonLocalPosition = decision.NextDungeonLocalPosition;
+                descriptor.FacingYaw = decision.FacingYaw;
+                DFMPDynamicEnemyRecord updatedRecord;
+                if (registry.TryUpdateAiState(true, record.Identity.EnemyId, descriptor, decision.TargetConnectionId, decision.IsMoving, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
+                    UpdateStateProjection(updatedRecord);
+
+                if (decision.HasTarget && decision.InAttackRange)
+                    TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, currentTime);
+            }
+        }
+
+        DFMPDynamicEnemySensoryTarget[] CreateSensoryTargets(DFMPWorldContextKey context, Vector3 enemyPosition)
+        {
+            int[] connectionIds = DFMPNetworkServer.GetConnectionsInWorldContext(context);
+            var targets = new List<DFMPDynamicEnemySensoryTarget>(connectionIds.Length);
+            for (int index = 0; index < connectionIds.Length; index++)
+            {
+                DFMPPlayerSessionState sessionState;
+                if (!DFMPNetworkServer.TryGetPlayerSessionState(connectionIds[index], out sessionState) || sessionState == null || !sessionState.HasDungeonLocalPosition)
+                    continue;
+
+                targets.Add(new DFMPDynamicEnemySensoryTarget
+                {
+                    ConnectionId = connectionIds[index],
+                    DungeonLocalPosition = sessionState.DungeonLocalPosition,
+                    SpawnConfirmed = sessionState.SpawnConfirmed,
+                    IsDead = sessionState.IsDead,
+                    HasLineOfSight = !requireLineOfSight || HasDungeonLineOfSight(enemyPosition, sessionState.DungeonLocalPosition)
+                });
+            }
+
+            return targets.ToArray();
+        }
+
+        static bool HasDungeonLineOfSight(Vector3 enemyPosition, Vector3 targetPosition)
+        {
+            Vector3 enemyEye = enemyPosition + Vector3.up;
+            Vector3 targetEye = targetPosition + Vector3.up;
+            return !Physics.Linecast(enemyEye, targetEye, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        }
+
+        void TryAttackTarget(string enemyId, int targetConnectionId, float currentTime)
+        {
+            float lastAttackTime;
+            if (lastAttackTimesByEnemyId.TryGetValue(enemyId, out lastAttackTime) && currentTime - lastAttackTime < attackCooldownSeconds)
+                return;
+
+            if (DFMPNetworkServer.TryApplyServerEnemyDamage(enemyId, targetConnectionId, attackDamage))
+                lastAttackTimesByEnemyId[enemyId] = currentTime;
+        }
+
+        void UpdateStateProjection(DFMPDynamicEnemyRecord record)
+        {
+            GameObject enemyGo;
+            if (!stateObjectsByEnemyId.TryGetValue(record.Identity.EnemyId, out enemyGo) || enemyGo == null)
+                return;
+
+            var state = enemyGo.GetComponent<DFMPDynamicEnemyState>();
+            if (state != null)
+                state.SetAiState(record.Descriptor, record.TargetConnectionId, record.IsMoving);
         }
 
         public bool TryApplyDamage(string enemyId, int amount, int killerConnectionId, out DFMPDynamicEnemyRecord updatedRecord, out int appliedAmount, out bool killed)
@@ -298,6 +412,7 @@ namespace DFMP.Runtime
                 NetworkServer.Destroy(enemyGo);
             else
                 Destroy(enemyGo);
+            lastAttackTimesByEnemyId.Remove(enemyId);
             return true;
         }
 

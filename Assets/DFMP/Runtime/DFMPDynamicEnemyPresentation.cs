@@ -114,8 +114,9 @@ namespace DFMP.Runtime
     public class DFMPDynamicEnemyAppearance : MonoBehaviour
     {
         int mobileType = int.MinValue;
+        bool? isMoving;
 
-        public void ApplyIfChanged(int targetMobileType)
+        public void ApplyIfChanged(int targetMobileType, bool targetIsMoving)
         {
             var mobile = GetComponentInChildren<DaggerfallMobileUnit>();
             if (mobile == null)
@@ -132,6 +133,12 @@ namespace DFMP.Runtime
                 }
 
                 mobileType = targetMobileType;
+            }
+
+            if (!isMoving.HasValue || isMoving.Value != targetIsMoving)
+            {
+                mobile.ChangeEnemyState(targetIsMoving ? MobileStates.Move : MobileStates.Idle);
+                isMoving = targetIsMoving;
             }
         }
     }
@@ -225,7 +232,7 @@ namespace DFMP.Runtime
                     GameObject proxy = GetOrCreateProxy(stateId, state.EnemyId);
                     var appearance = proxy.GetComponentInChildren<DFMPDynamicEnemyAppearance>();
                     if (appearance != null)
-                        appearance.ApplyIfChanged(state.MobileType);
+                        appearance.ApplyIfChanged(state.MobileType, state.IsMoving);
 
                     Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
                         playerEnterExit.Dungeon.transform.position,

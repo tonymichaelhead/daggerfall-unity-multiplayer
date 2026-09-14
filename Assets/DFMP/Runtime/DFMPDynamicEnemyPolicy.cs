@@ -133,6 +133,138 @@ namespace DFMP.Runtime
         public DFMPDynamicEnemyDescriptor Descriptor;
         public int Health;
         public int MaxHealth;
+        public int TargetConnectionId;
+        public bool IsMoving;
+    }
+
+    public struct DFMPDynamicEnemySensoryTarget
+    {
+        public int ConnectionId;
+        public Vector3 DungeonLocalPosition;
+        public bool SpawnConfirmed;
+        public bool IsDead;
+        public bool HasLineOfSight;
+    }
+
+    public struct DFMPDynamicEnemyAiInput
+    {
+        public Vector3 EnemyPosition;
+        public float FacingYaw;
+        public int CurrentTargetConnectionId;
+        public DFMPDynamicEnemySensoryTarget[] Targets;
+        public float AwarenessRange;
+        public float AttackRange;
+        public float MoveSpeed;
+        public float DeltaTime;
+        public bool RequireLineOfSight;
+    }
+
+    public struct DFMPDynamicEnemyAiDecision
+    {
+        public bool HasTarget;
+        public int TargetConnectionId;
+        public Vector3 NextDungeonLocalPosition;
+        public float FacingYaw;
+        public bool IsMoving;
+        public bool InAttackRange;
+    }
+
+    public static class DFMPDynamicEnemyAiPolicy
+    {
+        public static DFMPDynamicEnemyAiDecision Evaluate(DFMPDynamicEnemyAiInput input)
+        {
+            var decision = new DFMPDynamicEnemyAiDecision
+            {
+                TargetConnectionId = -1,
+                NextDungeonLocalPosition = input.EnemyPosition,
+                FacingYaw = NormalizeYaw(input.FacingYaw)
+            };
+
+            int targetIndex;
+            if (!TrySelectTarget(input, out targetIndex))
+                return decision;
+
+            Vector3 targetPosition = input.Targets[targetIndex].DungeonLocalPosition;
+            Vector3 offset = targetPosition - input.EnemyPosition;
+            offset.y = 0f;
+            float distance = offset.magnitude;
+
+            decision.HasTarget = true;
+            decision.TargetConnectionId = input.Targets[targetIndex].ConnectionId;
+            decision.FacingYaw = distance > 0.0001f ? YawFromDirection(offset) : decision.FacingYaw;
+            decision.InAttackRange = distance <= Mathf.Max(0f, input.AttackRange);
+
+            if (!decision.InAttackRange && distance > 0.0001f && input.MoveSpeed > 0f && input.DeltaTime > 0f)
+            {
+                float step = Mathf.Min(input.MoveSpeed * input.DeltaTime, Mathf.Max(0f, distance - Mathf.Max(0f, input.AttackRange)));
+                decision.NextDungeonLocalPosition = input.EnemyPosition + offset / distance * step;
+                decision.IsMoving = step > 0.0001f;
+            }
+
+            return decision;
+        }
+
+        static bool TrySelectTarget(DFMPDynamicEnemyAiInput input, out int targetIndex)
+        {
+            targetIndex = -1;
+            if (input.Targets == null || input.Targets.Length == 0 || input.AwarenessRange <= 0f)
+                return false;
+
+            float maximumDistanceSquared = input.AwarenessRange * input.AwarenessRange;
+            for (int index = 0; index < input.Targets.Length; index++)
+            {
+                if (input.Targets[index].ConnectionId == input.CurrentTargetConnectionId && IsValidTarget(input, index, maximumDistanceSquared))
+                {
+                    targetIndex = index;
+                    return true;
+                }
+            }
+
+            float bestDistanceSquared = float.MaxValue;
+            for (int index = 0; index < input.Targets.Length; index++)
+            {
+                if (!IsValidTarget(input, index, maximumDistanceSquared))
+                    continue;
+
+                float distanceSquared = GetPlanarDistanceSquared(input.EnemyPosition, input.Targets[index].DungeonLocalPosition);
+                if (distanceSquared > maximumDistanceSquared || distanceSquared >= bestDistanceSquared)
+                    continue;
+
+                bestDistanceSquared = distanceSquared;
+                targetIndex = index;
+            }
+
+            return targetIndex >= 0;
+        }
+
+        static bool IsValidTarget(DFMPDynamicEnemyAiInput input, int targetIndex, float maximumDistanceSquared)
+        {
+            DFMPDynamicEnemySensoryTarget target = input.Targets[targetIndex];
+            if (target.ConnectionId <= 0 || !target.SpawnConfirmed || target.IsDead)
+                return false;
+            if (input.RequireLineOfSight && !target.HasLineOfSight)
+                return false;
+
+            return GetPlanarDistanceSquared(input.EnemyPosition, target.DungeonLocalPosition) <= maximumDistanceSquared;
+        }
+
+        static float GetPlanarDistanceSquared(Vector3 first, Vector3 second)
+        {
+            Vector3 offset = second - first;
+            offset.y = 0f;
+            return offset.sqrMagnitude;
+        }
+
+        static float YawFromDirection(Vector3 direction)
+        {
+            return NormalizeYaw(Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg);
+        }
+
+        static float NormalizeYaw(float yaw)
+        {
+            yaw %= 360f;
+            return yaw < 0f ? yaw + 360f : yaw;
+        }
     }
 
     public static class DFMPDungeonRosterPolicy
@@ -514,6 +646,32 @@ namespace DFMP.Runtime
                 killed = true;
             }
 
+            recordsByEnemyId[enemyId] = record;
+            updatedRecord = record;
+            return DFMPDynamicEnemyRegistryResult.Accepted;
+        }
+
+        public DFMPDynamicEnemyRegistryResult TryUpdateAiState(
+            bool isServerAuthority,
+            string enemyId,
+            DFMPDynamicEnemyDescriptor descriptor,
+            int targetConnectionId,
+            bool isMoving,
+            out DFMPDynamicEnemyRecord updatedRecord)
+        {
+            updatedRecord = default(DFMPDynamicEnemyRecord);
+            if (!isServerAuthority)
+                return DFMPDynamicEnemyRegistryResult.InvalidAuthority;
+
+            DFMPDynamicEnemyRecord record;
+            if (!recordsByEnemyId.TryGetValue(enemyId ?? string.Empty, out record))
+                return DFMPDynamicEnemyRegistryResult.MissingEnemy;
+            if (record.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
+                return DFMPDynamicEnemyRegistryResult.InvalidTransition;
+
+            record.Descriptor = descriptor;
+            record.TargetConnectionId = targetConnectionId;
+            record.IsMoving = isMoving;
             recordsByEnemyId[enemyId] = record;
             updatedRecord = record;
             return DFMPDynamicEnemyRegistryResult.Accepted;

@@ -31,6 +31,12 @@ namespace DFMP.Runtime
         [SyncVar]
         int mobileType;
 
+        [SyncVar]
+        int targetConnectionId;
+
+        [SyncVar]
+        bool isMoving;
+
         public DFMPDynamicEnemyProviderKind ProviderKind { get { return (DFMPDynamicEnemyProviderKind)providerKind; } }
         public string EncounterId { get { return encounterId; } }
         public int RosterIndex { get { return rosterIndex; } }
@@ -39,11 +45,27 @@ namespace DFMP.Runtime
         public Vector3 DungeonLocalPosition { get { return dungeonLocalPosition; } }
         public float FacingYaw { get { return facingYaw; } }
         public int MobileType { get { return mobileType; } }
+        public int TargetConnectionId { get { return targetConnectionId; } }
+        public bool IsMoving { get { return isMoving; } }
         public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType }; } }
 
         public void SetLifecycleState(DFMPDynamicEnemyLifecycleState state)
         {
             lifecycleState = (int)state;
+            if (state != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
+            {
+                targetConnectionId = -1;
+                isMoving = false;
+            }
+        }
+
+        public void SetAiState(DFMPDynamicEnemyDescriptor descriptor, int newTargetConnectionId, bool newIsMoving)
+        {
+            dungeonLocalPosition = descriptor.DungeonLocalPosition;
+            facingYaw = descriptor.FacingYaw;
+            mobileType = descriptor.MobileType;
+            targetConnectionId = newTargetConnectionId;
+            isMoving = newIsMoving;
         }
 
         public void Initialize(DFMPDynamicEnemyRecord record)
@@ -56,6 +78,8 @@ namespace DFMP.Runtime
             dungeonLocalPosition = record.Descriptor.DungeonLocalPosition;
             facingYaw = record.Descriptor.FacingYaw;
             mobileType = record.Descriptor.MobileType;
+            targetConnectionId = record.TargetConnectionId;
+            isMoving = record.IsMoving;
         }
 
         public override void OnStartClient()
