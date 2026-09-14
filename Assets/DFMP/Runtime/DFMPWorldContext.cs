@@ -38,6 +38,32 @@ namespace DFMP.Runtime
                 string.Equals(InstanceId ?? string.Empty, other.InstanceId ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
 
+        public bool SharesInterestScope(DFMPWorldContextKey other)
+        {
+            if (Kind != other.Kind)
+                return false;
+
+            switch (Kind)
+            {
+                case DFMPWorldContextKind.Dungeon:
+                    return RegionIndex == other.RegionIndex &&
+                        LocationIndex == other.LocationIndex &&
+                        string.Equals(LocationId ?? string.Empty, other.LocationId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(InstanceId ?? string.Empty, other.InstanceId ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+                case DFMPWorldContextKind.BuildingInterior:
+                    return MapPixelX == other.MapPixelX &&
+                        MapPixelY == other.MapPixelY &&
+                        BuildingKey == other.BuildingKey &&
+                        string.Equals(InstanceId ?? string.Empty, other.InstanceId ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+                case DFMPWorldContextKind.Exterior:
+                default:
+                    return MapPixelX == other.MapPixelX &&
+                        MapPixelY == other.MapPixelY;
+            }
+        }
+
         public override bool Equals(object obj)
         {
             return obj is DFMPWorldContextKey && Equals((DFMPWorldContextKey)obj);
@@ -226,6 +252,17 @@ namespace DFMP.Runtime
             int[] result = new int[connections.Count];
             connections.CopyTo(result);
             return result;
+        }
+
+        public int[] GetConnectionsInInterestScope(DFMPWorldContextKey context)
+        {
+            var result = new List<int>();
+            foreach (var kvp in contextByConnection)
+            {
+                if (kvp.Value.SharesInterestScope(context))
+                    result.Add(kvp.Key);
+            }
+            return result.ToArray();
         }
 
         public void Remove(int connectionId)

@@ -1,3 +1,4 @@
+using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;
 using kcp2k;
 using Mirror;
@@ -78,9 +79,13 @@ namespace DFMP.Runtime
             NetworkClient.RegisterHandler<DFMPCharacterSnapshotMessage>(OnCharacterSnapshotReceived);
             NetworkClient.RegisterHandler<DFMPVitalSnapshot>(OnVitalSnapshotReceived);
             NetworkClient.RegisterHandler<DFMPRestResponse>(OnRestResponseReceived);
+            NetworkClient.RegisterHandler<DFMPActionDoorSyncMessage>(OnActionDoorSyncReceived);
             DFMPPositionReporter.EnsureInstance();
             DFMPRemotePlayerPresentationController.EnsureInstance();
             DFMPDynamicEnemyPresentationController.EnsureInstance();
+
+            if (DaggerfallUnity.Instance != null)
+                DaggerfallUnity.Instance.Option_ImportEnemyPrefabs = false;
 
             UnityEngine.Object.DontDestroyOnLoad(networkGo);
             networkGo.SetActive(true);
@@ -229,6 +234,22 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Combat] Applied authoritative vital snapshot: health={message.Health}/{message.MaxHealth}, fatigue={message.Fatigue}/{message.MaxFatigue}, spellPoints={message.SpellPoints}/{message.MaxSpellPoints}, dead={message.IsDead}.");
         }
 
+        static void OnActionDoorSyncReceived(DFMPActionDoorSyncMessage message)
+        {
+            if (message.LoadID == 0)
+                return;
+
+            foreach (DaggerfallActionDoor door in ActiveGameObjectDatabase.GetActiveActionDoors())
+            {
+                if (door != null && door.LoadID == message.LoadID)
+                {
+                    door.SetOpen(message.IsOpen);
+                    Debug.Log($"[DFMP World] Applied synced action door state: loadID={message.LoadID}, isOpen={message.IsOpen}.");
+                    break;
+                }
+            }
+        }
+
         static string GetDefaultAccountId()
         {
             string userName = Environment.UserName;
@@ -248,6 +269,10 @@ namespace DFMP.Runtime
             DFMPPositionReporter.Reset();
             DFMPRemotePlayerPresentationController.Reset();
             DFMPDynamicEnemyPresentationController.Reset();
+
+            if (DaggerfallUnity.Instance != null)
+                DaggerfallUnity.Instance.Option_ImportEnemyPrefabs = true;
+
             Manager = null;
             Transport = null;
             Address = "127.0.0.1";

@@ -5,7 +5,7 @@
 // Source Code:     https://github.com/Interkarma/daggerfall-unity
 // Original Author: Gavin Clayton (interkarma@dfworkshop.net)
 // Contributors:    LypyL (lypyl@dfworkshop.net)
-// 
+//
 // Notes:
 //
 
@@ -303,6 +303,9 @@ namespace DaggerfallWorkshop
 
             currentState = ActionState.PlayingForward;
 
+            if (activatedByPlayer && DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled != null)
+                DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled(loadID, true);
+
             // Set flag
             //IsMagicallyHeld = false;
             CurrentLockValue = 0;
@@ -323,6 +326,9 @@ namespace DaggerfallWorkshop
                 "oncompleteparams", duration);
             __ExternalAssets.iTween.RotateTo(gameObject, rotateParams);
             currentState = ActionState.PlayingReverse;
+
+            if (activatedByPlayer && DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled != null)
+                DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled(loadID, false);
 
             // For doors that are also action objects, execute action when door opened / closed
             // Only doing so if player was the activator, to keep DoorText actions from running

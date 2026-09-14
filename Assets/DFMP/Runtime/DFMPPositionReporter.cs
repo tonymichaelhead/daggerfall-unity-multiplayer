@@ -32,6 +32,7 @@ namespace DFMP.Runtime
             instance = reporterGo.AddComponent<DFMPPositionReporter>();
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit = TryHandlePlayerMissileHit;
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = TryHandlePlayerWeaponHit;
+            DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled = OnActionDoorToggled;
         }
 
         public static void Reset()
@@ -41,6 +42,7 @@ namespace DFMP.Runtime
 
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit = null;
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = null;
+            DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled = null;
             nextDamageRequestId = 1;
             nextDamageSequence = 1;
             instance = null;
@@ -239,6 +241,25 @@ namespace DFMP.Runtime
             }
 
             return false;
+        }
+
+        static void OnActionDoorToggled(ulong loadID, bool isOpen)
+        {
+            if (loadID == 0 || !NetworkClient.isConnected || !NetworkClient.ready)
+                return;
+
+            StreamingWorld streamingWorld = FindObjectOfType<StreamingWorld>();
+            DFMPWorldContextReport report;
+            if (streamingWorld != null && TryBuildWorldContextReport(streamingWorld, out report))
+            {
+                NetworkClient.Send(new DFMPActionDoorSyncMessage
+                {
+                    LoadID = loadID,
+                    IsOpen = isOpen,
+                    Context = report
+                });
+                Debug.Log($"[DFMP World] Sent action door sync report: loadID={loadID}, isOpen={isOpen}.");
+            }
         }
 
         void SendIdentityReport()

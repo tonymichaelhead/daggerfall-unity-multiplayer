@@ -495,6 +495,18 @@ namespace DFMP.Runtime
             {
                 fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
                 transitionApplied = false;
+
+                // If teleporting to an exterior context (such as death respawn or fast travel), ensure any active dungeon/interior parent is cleanly torn down
+                if (transitionState.Assignment.ContextKind == DFMPWorldContextKind.Exterior && GameManager.HasInstance)
+                {
+                    PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
+                    if (playerEnterExit != null && playerEnterExit.IsPlayerInside)
+                    {
+                        playerEnterExit.EnableExteriorParent(cleanup: true);
+                        Debug.Log("[DFMP Transition] Cleaned up interior/dungeon parent before assigned exterior teleport.");
+                    }
+                }
+
                 if (string.IsNullOrWhiteSpace(transitionState.Assignment.StartMarkerName) &&
                     (transitionState.Assignment.WorldX != 0 || transitionState.Assignment.WorldZ != 0))
                 {

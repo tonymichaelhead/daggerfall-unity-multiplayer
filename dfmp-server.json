@@ -20,7 +20,7 @@
   },
   "Enemies": {
     "WorldSeed": "default",
-    "DungeonRosterSize": 2,
+    "DungeonRosterSize": 6,
     "DespawnDelaySeconds": 0.0
   },
   "Developer": {

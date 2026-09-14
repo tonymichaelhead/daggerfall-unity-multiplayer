@@ -38,10 +38,7 @@ namespace DFMP.Runtime
             if (carrier == null)
                 return true;
 
-            return carrier.Context.Kind == DFMPWorldContextKind.Dungeon &&
-                carrier.Context.RegionIndex == playerContext.RegionIndex &&
-                carrier.Context.LocationIndex == playerContext.LocationIndex &&
-                carrier.Context.DungeonBlockIndex == playerContext.DungeonBlockIndex;
+            return carrier.Context.Equals(playerContext);
         }
 
         public static bool IsCorpseEligible(
@@ -59,10 +56,7 @@ namespace DFMP.Runtime
             if (carrier == null)
                 return true;
 
-            return carrier.Context.Kind == DFMPWorldContextKind.Dungeon &&
-                carrier.Context.RegionIndex == playerContext.RegionIndex &&
-                carrier.Context.LocationIndex == playerContext.LocationIndex &&
-                carrier.Context.DungeonBlockIndex == playerContext.DungeonBlockIndex;
+            return carrier.Context.Equals(playerContext);
         }
 
         public static bool TryCreateCorpseLootContainer(
@@ -191,12 +185,28 @@ namespace DFMP.Runtime
             if (!NetworkClient.isConnected)
                 return;
 
+            // DaggerfallUnity is a per-scene singleton, so this must be re-asserted rather than set once at connect.
+            if (DaggerfallUnity.Instance != null && DaggerfallUnity.Instance.Option_ImportEnemyPrefabs)
+            {
+                DaggerfallUnity.Instance.Option_ImportEnemyPrefabs = false;
+                Debug.Log("[DFMP Enemy] Suppressed client-local native enemy import for multiplayer session.");
+            }
+
             StreamingWorld streamingWorld = FindObjectOfType<StreamingWorld>();
-            PlayerEnterExit playerEnterExit = GameManager.Instance != null ? GameManager.Instance.PlayerEnterExit : null;
+            if (streamingWorld == null || !streamingWorld.IsReady || streamingWorld.LocalPlayerGPS == null)
+                return;
+
+            if (!GameManager.HasInstance || GameObject.FindGameObjectWithTag("Player") == null)
+                return;
+
+            if (GameManager.Instance.PlayerEntity != null)
+                GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
+
+            PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
             bool isInsideDungeon = playerEnterExit != null && playerEnterExit.IsPlayerInsideDungeon && playerEnterExit.Dungeon != null;
             DFMPWorldContextKey playerContext = new DFMPWorldContextKey();
             DFMPWorldContextReport contextReport;
-            if (streamingWorld != null && DFMPPositionReporter.TryBuildWorldContextReport(streamingWorld, out contextReport))
+            if (DFMPPositionReporter.TryBuildWorldContextReport(streamingWorld, out contextReport))
                 DFMPWorldContextProtocol.TryCreateKey(contextReport, out playerContext);
 
             var liveStateIds = new HashSet<int>();

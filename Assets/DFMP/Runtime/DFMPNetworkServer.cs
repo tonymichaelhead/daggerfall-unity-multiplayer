@@ -80,6 +80,11 @@ namespace DFMP.Runtime
             return worldOccupancy.GetConnectionsInContext(context);
         }
 
+        public static int[] GetConnectionsInInterestScope(DFMPWorldContextKey context)
+        {
+            return worldOccupancy.GetConnectionsInInterestScope(context);
+        }
+
         public static bool TryGetStartMarkerAssignment(int connectionId, out string markerName)
         {
             return startMarkerAssignments.TryGetValue(connectionId, out markerName);
@@ -286,6 +291,9 @@ namespace DFMP.Runtime
 
             networkGo.AddComponent<DFMPWorldInterestManagement>();
 
+            if (DaggerfallUnity.Instance != null)
+                DaggerfallUnity.Instance.Option_ImportEnemyPrefabs = false;
+
             DungeonEnemyRosterService = networkGo.AddComponent<DFMPDungeonEnemyRosterService>();
             DungeonEnemyRosterService.Initialize(Config.Enemies);
 
@@ -309,6 +317,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPFastTravelRequest>(OnFastTravelRequest);
             NetworkServer.RegisterHandler<DFMPDoorTransitionRequest>(OnDoorTransitionRequest);
             NetworkServer.RegisterHandler<DFMPDungeonTransitionRequest>(OnDungeonTransitionRequest);
+            NetworkServer.RegisterHandler<DFMPActionDoorSyncMessage>(OnActionDoorSyncMessage);
             NetworkServer.RegisterHandler<DFMPVampirismTransformationRequest>(OnVampirismTransformationRequest);
             NetworkServer.RegisterHandler<DFMPPlayerDeathReport>(OnPlayerDeathReport);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
@@ -890,6 +899,34 @@ namespace DFMP.Runtime
             }
 
             Debug.Log($"[DFMP Transition] Accepted dungeon transition request: connectionId={conn.connectionId}, enterDungeon={request.EnterDungeon}, mapPixel={request.MapPixelX}/{request.MapPixelY}, location='{request.LocationId}'.");
+        }
+
+        private static void OnActionDoorSyncMessage(NetworkConnectionToClient conn, DFMPActionDoorSyncMessage message)
+        {
+            if (conn == null || message.LoadID == 0)
+                return;
+
+            DFMPWorldContextKey senderContext;
+            if (!worldOccupancy.TryGetContext(conn.connectionId, out senderContext))
+                return;
+
+            int[] coLocated = GetConnectionsInInterestScope(senderContext);
+            int relayedCount = 0;
+            for (int i = 0; i < coLocated.Length; i++)
+            {
+                int targetConnId = coLocated[i];
+                if (targetConnId == conn.connectionId)
+                    continue;
+
+                NetworkConnectionToClient targetConn;
+                if (NetworkServer.connections.TryGetValue(targetConnId, out targetConn) && targetConn != null)
+                {
+                    targetConn.Send(message);
+                    relayedCount++;
+                }
+            }
+
+            Debug.Log($"[DFMP World] Relayed action door sync: sender={conn.connectionId}, loadID={message.LoadID}, isOpen={message.IsOpen}, context={senderContext}, recipients={relayedCount}.");
         }
 
         private static void OnVampirismTransformationRequest(NetworkConnectionToClient conn, DFMPVampirismTransformationRequest request)

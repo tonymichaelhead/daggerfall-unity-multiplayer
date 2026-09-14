@@ -275,8 +275,8 @@ namespace DFMP.Tests
                 {
                     FlatResource = new DFBlock.RdbFlatResource
                     {
-                        TextureArchive = 199,
-                        TextureRecord = 15 // random enemy flat, not 11
+                        TextureArchive = 200,
+                        TextureRecord = 0 // non-marker archive
                     }
                 }
             };
@@ -316,6 +316,21 @@ namespace DFMP.Tests
             };
             Assert.IsFalse(DFMPDungeonRosterPolicy.TryScanSpawnMarkers(emptyBlock, 0, 0, out candidates));
             Assert.AreEqual(0, candidates.Length);
+        }
+
+        [Test]
+        public void DungeonRoster_IsSpawnMarker_RecognizesAllNativeMonsterAndLayoutRecords()
+        {
+            Assert.IsTrue(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 15)); // Random Monster
+            Assert.IsTrue(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 16)); // Fixed Monster
+            Assert.IsTrue(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 11)); // Quest Marker
+            Assert.IsTrue(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 18)); // Item Marker
+            Assert.IsTrue(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 10)); // Start Marker
+            Assert.IsTrue(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 8));  // Enter Marker
+
+            Assert.IsFalse(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 0));
+            Assert.IsFalse(DFMPDungeonRosterPolicy.IsSpawnMarker(199, 99));
+            Assert.IsFalse(DFMPDungeonRosterPolicy.IsSpawnMarker(200, 15));
         }
 
         [Test]
@@ -365,12 +380,15 @@ namespace DFMP.Tests
                 state.Initialize(record);
 
                 DFMPWorldContextKey matchingContext = record.Identity.Encounter.Context;
-                DFMPWorldContextKey otherContext = matchingContext;
-                otherContext.DungeonBlockIndex = 99;
+                DFMPWorldContextKey otherBlockContext = matchingContext;
+                otherBlockContext.DungeonBlockIndex = 99;
+                DFMPWorldContextKey otherDungeonContext = matchingContext;
+                otherDungeonContext.LocationIndex = 999;
 
                 Assert.IsTrue(DFMPDynamicEnemyPresentation.IsVisualEligible(state, true, matchingContext));
                 Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisualEligible(state, false, matchingContext));
-                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisualEligible(state, true, otherContext));
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisualEligible(state, true, otherBlockContext));
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisualEligible(state, true, otherDungeonContext));
 
                 record.LifecycleState = DFMPDynamicEnemyLifecycleState.DespawnedAlive;
                 state.Initialize(record);
@@ -556,25 +574,65 @@ namespace DFMP.Tests
                 state.Initialize(record);
 
                 DFMPWorldContextKey matchingContext = record.Identity.Encounter.Context;
-                DFMPWorldContextKey otherContext = matchingContext;
-                otherContext.DungeonBlockIndex = 99;
+                DFMPWorldContextKey otherBlockContext = matchingContext;
+                otherBlockContext.DungeonBlockIndex = 99;
+                DFMPWorldContextKey otherDungeonContext = matchingContext;
+                otherDungeonContext.LocationIndex = 999;
 
                 // When alive, corpse is not eligible
                 Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, matchingContext));
 
-                // When dead and co-located in dungeon, corpse is eligible
+                // When dead and co-located in dungeon block, corpse is eligible
                 record.LifecycleState = DFMPDynamicEnemyLifecycleState.Dead;
                 state.Initialize(record);
                 Assert.IsTrue(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, matchingContext));
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, otherBlockContext));
 
                 // When player is not in dungeon or in another context
                 Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, false, matchingContext));
-                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, otherContext));
+                Assert.IsFalse(DFMPDynamicEnemyPresentation.IsCorpseEligible(state, true, otherDungeonContext));
             }
             finally
             {
                 UnityObject.DestroyImmediate(enemyObject);
             }
+        }
+
+        [Test]
+        public void WorldContext_SharesInterestScope_MatchesExpectedRules()
+        {
+            DFMPWorldContextKey dungeonBlock0 = CreateDungeonContext();
+            dungeonBlock0.DungeonBlockIndex = 0;
+            DFMPWorldContextKey dungeonBlock2 = dungeonBlock0;
+            dungeonBlock2.DungeonBlockIndex = 2;
+            dungeonBlock2.DungeonBlockName = "M0000004.RDB";
+
+            DFMPWorldContextKey differentDungeon = dungeonBlock0;
+            differentDungeon.LocationIndex = 999;
+
+            DFMPWorldContextKey exterior = dungeonBlock0;
+            exterior.Kind = DFMPWorldContextKind.Exterior;
+
+            Assert.IsTrue(dungeonBlock0.SharesInterestScope(dungeonBlock2));
+            Assert.IsTrue(dungeonBlock2.SharesInterestScope(dungeonBlock0));
+            Assert.IsFalse(dungeonBlock0.SharesInterestScope(differentDungeon));
+            Assert.IsFalse(dungeonBlock0.SharesInterestScope(exterior));
+
+            DFMPWorldContextKey interiorA = new DFMPWorldContextKey { Kind = DFMPWorldContextKind.BuildingInterior, MapPixelX = 10, MapPixelY = 20, BuildingKey = 100 };
+            DFMPWorldContextKey interiorSame = new DFMPWorldContextKey { Kind = DFMPWorldContextKind.BuildingInterior, MapPixelX = 10, MapPixelY = 20, BuildingKey = 100 };
+            DFMPWorldContextKey interiorDifferent = new DFMPWorldContextKey { Kind = DFMPWorldContextKind.BuildingInterior, MapPixelX = 10, MapPixelY = 20, BuildingKey = 101 };
+
+            Assert.IsTrue(interiorA.SharesInterestScope(interiorSame));
+            Assert.IsFalse(interiorA.SharesInterestScope(interiorDifferent));
+
+            var registry = new DFMPWorldOccupancyRegistry();
+            registry.SetContext(1, dungeonBlock0);
+            registry.SetContext(2, dungeonBlock2);
+            registry.SetContext(3, differentDungeon);
+
+            int[] dungeonOccupants = registry.GetConnectionsInInterestScope(dungeonBlock0);
+            Assert.AreEqual(2, dungeonOccupants.Length);
+            CollectionAssert.AreEquivalent(new int[] { 1, 2 }, dungeonOccupants);
         }
 
         static DFMPDynamicEnemyRecord[] CreateRoster()

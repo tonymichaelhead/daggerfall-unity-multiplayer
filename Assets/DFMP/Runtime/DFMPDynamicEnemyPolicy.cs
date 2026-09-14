@@ -140,6 +140,24 @@ namespace DFMP.Runtime
         public const int MaximumRosterSize = 64;
         public const int SpawnMarkerTextureArchive = 199;
         public const int SpawnMarkerTextureRecord = 11;
+        public const int RandomMonsterTextureRecord = 15;
+        public const int FixedMonsterTextureRecord = 16;
+        public const int ItemMarkerTextureRecord = 18;
+        public const int StartMarkerTextureRecord = 10;
+        public const int EnterMarkerTextureRecord = 8;
+
+        public static bool IsSpawnMarker(int archive, int record)
+        {
+            if (archive != SpawnMarkerTextureArchive)
+                return false;
+
+            return record == RandomMonsterTextureRecord ||
+                record == FixedMonsterTextureRecord ||
+                record == SpawnMarkerTextureRecord ||
+                record == ItemMarkerTextureRecord ||
+                record == StartMarkerTextureRecord ||
+                record == EnterMarkerTextureRecord;
+        }
 
         public static readonly MobileTypes[] CuratedDungeonMobileTypes = new MobileTypes[]
         {
@@ -193,8 +211,7 @@ namespace DFMP.Runtime
                 {
                     var obj = group.RdbObjects[objIndex];
                     if (obj.Type == DFBlock.RdbResourceTypes.Flat &&
-                        obj.Resources.FlatResource.TextureArchive == SpawnMarkerTextureArchive &&
-                        obj.Resources.FlatResource.TextureRecord == SpawnMarkerTextureRecord)
+                        IsSpawnMarker(obj.Resources.FlatResource.TextureArchive, obj.Resources.FlatResource.TextureRecord))
                     {
                         Vector3 markerPosition = new Vector3(obj.XPos, -obj.YPos, obj.ZPos) * MeshReader.GlobalScale;
                         candidates.Add(blockOffset + markerPosition);
@@ -324,16 +341,39 @@ namespace DFMP.Runtime
                 return false;
 
             ContentReader contentReader = DaggerfallUnity.Instance.ContentReader;
-            if (contentReader.MapFileReader == null || contentReader.BlockFileReader == null)
+            if (contentReader.BlockFileReader == null)
                 return false;
 
-            DFLocation location = contentReader.MapFileReader.GetLocation(context.RegionIndex, context.LocationIndex);
-            if (!location.Loaded || !location.HasDungeon || location.Dungeon.Blocks == null || context.DungeonBlockIndex >= location.Dungeon.Blocks.Length)
-                return false;
+            int blockX = 0;
+            int blockZ = 0;
+            if (contentReader.MapFileReader != null)
+            {
+                DFLocation location = contentReader.MapFileReader.GetLocation(context.RegionIndex, context.LocationIndex);
+                if (location.Loaded && location.HasDungeon && location.Dungeon.Blocks != null)
+                {
+                    if (context.DungeonBlockIndex >= 0 && context.DungeonBlockIndex < location.Dungeon.Blocks.Length)
+                    {
+                        var block = location.Dungeon.Blocks[context.DungeonBlockIndex];
+                        blockX = block.X;
+                        blockZ = block.Z;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < location.Dungeon.Blocks.Length; i++)
+                        {
+                            if (string.Equals(location.Dungeon.Blocks[i].BlockName, context.DungeonBlockName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                blockX = location.Dungeon.Blocks[i].X;
+                                blockZ = location.Dungeon.Blocks[i].Z;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
 
-            var dungeonBlock = location.Dungeon.Blocks[context.DungeonBlockIndex];
-            DFBlock blockData = contentReader.BlockFileReader.GetBlock(dungeonBlock.BlockName);
-            return TryScanSpawnMarkers(blockData, dungeonBlock.X, dungeonBlock.Z, out candidatePositions);
+            DFBlock blockData = contentReader.BlockFileReader.GetBlock(context.DungeonBlockName);
+            return TryScanSpawnMarkers(blockData, blockX, blockZ, out candidatePositions);
         }
 
         static string CreateDungeonDescriptorSeedMaterial(ulong serverWorldSeed, DFMPWorldContextKey context, int rosterIndex)

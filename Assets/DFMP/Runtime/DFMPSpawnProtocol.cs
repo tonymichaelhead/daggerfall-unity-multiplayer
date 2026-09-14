@@ -109,6 +109,13 @@ namespace DFMP.Runtime
     {
     }
 
+    public struct DFMPActionDoorSyncMessage : Mirror.NetworkMessage
+    {
+        public ulong LoadID;
+        public bool IsOpen;
+        public DFMPWorldContextReport Context;
+    }
+
     public enum DFMPDoorTransitionRejectionReason
     {
         None,

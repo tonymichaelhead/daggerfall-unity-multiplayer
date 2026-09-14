@@ -323,12 +323,14 @@ Status: Complete.
 M8 closeout notes:
 - Server-owned provider-agnostic enemy registry supports `SpawnedAlive`, `DespawnedAlive`, `Dead`, and `Retired` lifecycle transitions.
 - Context-scoped Mirror state identities (`DFMPDynamicEnemyState`) replicate durable identity, provider kind, encounter key, lifecycle, and presentation descriptors without attaching local colliders, AI, or game logic to the replicated state object.
-- Presentation descriptors (dungeon local position, facing yaw, mobile type) are deterministically generated from RDB spawn markers (`TEXTURE.199` record 11) using the server world seed + context + roster index.
+- Presentation descriptors (dungeon local position, facing yaw, mobile type) are deterministically generated from native RDB editor markers in `TEXTURE.199` (random monster 15, fixed monster 16, quest 11, item 18, start 10, enter 8) using the server world seed + context + roster index.
+- `DungeonRosterSize` is scoped per dungeon **block**, because the roster is keyed by `WorldContextKey`, which includes the block index and name. A five-block smaller-dungeon layout therefore holds up to five rosters, each activated lazily on first block occupancy.
 - Client-side visual proxies render billboard sprites via bare `DaggerfallMobileUnit` and expose hit targets for weapon/missile combat without native gameplay enemy components.
 - Server applies authoritative damage to dynamic enemies through the M7 damage chokepoint, transitioning enemies to `Dead` upon lethal damage.
 - When dynamic enemies are killed, personal corpse loot containers (`DaggerfallLoot`) are spawned locally on each client using the enemy's corpse texture and loot table key, avoiding loot races and duplication exploits.
 - Vacated context despawn supports configurable delay (`DespawnDelaySeconds`) with automatic cancellation upon player re-entry.
 - Event bus publishes `EnemySpawned`, `EnemyDied`, and `LootGenerated` events.
+- All unsynchronized client-local native enemy spawns are suppressed during multiplayer sessions: dungeon layout imports are disabled via `Option_ImportEnemyPrefabs = false`, and intermittent random exterior encounters are suppressed by asserting `PlayerEntity.PreventEnemySpawns = true` every frame. Only synchronized server-owned dynamic enemies exist in the world.
 
 Verification:
 

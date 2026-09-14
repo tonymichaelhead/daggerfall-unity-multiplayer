@@ -27,5 +27,6 @@ namespace DFMP.Hooks
         public static Func<bool> ShouldForceStartupMenu;
         public static Action<object> ConfigureStartupLaunchButton;
         public static Func<bool> TryHandleStartupLaunch;
+        public static Action<ulong, bool> OnActionDoorToggled;
     }
 }
