@@ -59,6 +59,7 @@ namespace DFMP.Runtime
         public float AwarenessRange = 32f;
         public float AttackRange = 2.25f;
         public float MoveSpeed = 3.5f;
+        public float AiTickIntervalSeconds = 0.1f;
         public float AttackCooldownSeconds = 1.8f;
         public int AttackDamage = 4;
         public bool RequireLineOfSight = true;
@@ -71,6 +72,7 @@ namespace DFMP.Runtime
             AwarenessRange = AwarenessRange > 0f && AwarenessRange <= 256f ? AwarenessRange : 32f;
             AttackRange = AttackRange > 0f && AttackRange <= AwarenessRange ? AttackRange : Math.Min(2.25f, AwarenessRange);
             MoveSpeed = MoveSpeed > 0f && MoveSpeed <= 32f ? MoveSpeed : 3.5f;
+            AiTickIntervalSeconds = AiTickIntervalSeconds > 0f && AiTickIntervalSeconds <= 5f ? AiTickIntervalSeconds : 0.1f;
             AttackCooldownSeconds = AttackCooldownSeconds > 0f && AttackCooldownSeconds <= 60f ? AttackCooldownSeconds : 1.8f;
             AttackDamage = AttackDamage > 0 && AttackDamage <= 1000 ? AttackDamage : 4;
         }

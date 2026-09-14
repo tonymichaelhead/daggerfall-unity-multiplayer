@@ -727,6 +727,116 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRosterService_AiTickCadence_WaitsForConfiguredInterval()
+        {
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceAiCadenceTest");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceAiCadenceSession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "ai-cadence-seed",
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 10f,
+                    AiTickIntervalSeconds = 0.25f,
+                    RequireLineOfSight = false
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(67, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext();
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(67, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("ai-cadence-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 initialPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(10f, 0f, 0f));
+
+                service.ProcessAiTickCadence(10f, 0.1f);
+                Assert.AreEqual(initialPosition, GetRecord(service, enemyId).Descriptor.DungeonLocalPosition);
+
+                service.ProcessAiTickCadence(10.1f, 0.1f);
+                Assert.AreEqual(initialPosition, GetRecord(service, enemyId).Descriptor.DungeonLocalPosition);
+
+                service.ProcessAiTickCadence(10.25f, 0.05f);
+                Assert.AreEqual(initialPosition + new Vector3(2.5f, 0f, 0f), GetRecord(service, enemyId).Descriptor.DungeonLocalPosition);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonRosterService_AiTick_AttacksTargetOnCooldownThroughDamageApplier()
+        {
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceAiAttackTest");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceAiAttackSession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                int attackCount = 0;
+                string attackedEnemyId = string.Empty;
+                int attackedConnectionId = -1;
+                int attackedAmount = 0;
+                service.SetServerEnemyDamageApplierForTesting((appliedEnemyId, appliedTargetConnectionId, appliedAmount) =>
+                {
+                    attackCount++;
+                    attackedEnemyId = appliedEnemyId;
+                    attackedConnectionId = appliedTargetConnectionId;
+                    attackedAmount = appliedAmount;
+                    return true;
+                });
+
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "ai-attack-seed",
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 10f,
+                    AttackCooldownSeconds = 1.5f,
+                    AttackDamage = 7,
+                    RequireLineOfSight = false
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(68, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext();
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(68, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("ai-attack-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                session.SetDungeonLocalPosition(true, roster[0].Descriptor.DungeonLocalPosition + new Vector3(1f, 0f, 0f));
+
+                service.ProcessAiTick(10f, 0.1f);
+                service.ProcessAiTick(11f, 0.1f);
+                service.ProcessAiTick(11.5f, 0.1f);
+
+                Assert.AreEqual(2, attackCount);
+                Assert.AreEqual(enemyId, attackedEnemyId);
+                Assert.AreEqual(68, attackedConnectionId);
+                Assert.AreEqual(7, attackedAmount);
+                Assert.IsFalse(GetRecord(service, enemyId).IsMoving);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DynamicEnemyPresentation_CalculatesCorpseEligibility()
         {
             GameObject enemyObject = new GameObject("DFMP_CorpseEligibilityTest");

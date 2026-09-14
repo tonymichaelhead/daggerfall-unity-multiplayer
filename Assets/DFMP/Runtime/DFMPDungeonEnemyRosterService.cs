@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Mirror;
 using UnityEngine;
@@ -17,9 +18,12 @@ namespace DFMP.Runtime
         float awarenessRange;
         float attackRange;
         float moveSpeed;
+        float aiTickIntervalSeconds;
+        float aiTickAccumulator;
         float attackCooldownSeconds;
         int attackDamage;
         bool requireLineOfSight;
+        Func<string, int, int, bool> serverEnemyDamageApplier = DFMPNetworkServer.TryApplyServerEnemyDamage;
         bool isSubscribed;
 
         public int RosterCount
@@ -37,6 +41,8 @@ namespace DFMP.Runtime
             awarenessRange = config.AwarenessRange;
             attackRange = config.AttackRange;
             moveSpeed = config.MoveSpeed;
+            aiTickIntervalSeconds = config.AiTickIntervalSeconds;
+            aiTickAccumulator = 0f;
             attackCooldownSeconds = config.AttackCooldownSeconds;
             attackDamage = config.AttackDamage;
             requireLineOfSight = config.RequireLineOfSight;
@@ -50,12 +56,31 @@ namespace DFMP.Runtime
 
         void Update()
         {
-            ProcessAiTick(Time.unscaledTime, Time.deltaTime);
+            ProcessAiTickCadence(Time.unscaledTime, Time.deltaTime);
 
             if (pendingDespawnTimes.Count == 0)
                 return;
 
             ProcessPendingDespawns(Time.unscaledTime);
+        }
+
+        public void SetServerEnemyDamageApplierForTesting(Func<string, int, int, bool> damageApplier)
+        {
+            serverEnemyDamageApplier = damageApplier ?? DFMPNetworkServer.TryApplyServerEnemyDamage;
+        }
+
+        public void ProcessAiTickCadence(float currentTime, float deltaTime)
+        {
+            if (deltaTime <= 0f)
+                return;
+
+            aiTickAccumulator += deltaTime;
+            if (aiTickAccumulator < aiTickIntervalSeconds)
+                return;
+
+            float tickDeltaTime = aiTickAccumulator;
+            aiTickAccumulator = 0f;
+            ProcessAiTick(currentTime, tickDeltaTime);
         }
 
         public void ProcessAiTick(float currentTime, float deltaTime)
@@ -200,7 +225,7 @@ namespace DFMP.Runtime
             if (lastAttackTimesByEnemyId.TryGetValue(enemyId, out lastAttackTime) && currentTime - lastAttackTime < attackCooldownSeconds)
                 return;
 
-            if (DFMPNetworkServer.TryApplyServerEnemyDamage(enemyId, targetConnectionId, attackDamage))
+            if (serverEnemyDamageApplier != null && serverEnemyDamageApplier(enemyId, targetConnectionId, attackDamage))
                 lastAttackTimesByEnemyId[enemyId] = currentTime;
         }
 
@@ -379,7 +404,7 @@ namespace DFMP.Runtime
                 enemyGo.AddComponent<NetworkIdentity>();
                 enemyGo.AddComponent<DFMPWorldContextCarrier>().Initialize(context);
                 enemyGo.AddComponent<DFMPDynamicEnemyState>().Initialize(record);
-                Object.DontDestroyOnLoad(enemyGo);
+                UnityEngine.Object.DontDestroyOnLoad(enemyGo);
                 enemyGo.SetActive(true);
                 NetworkServer.Spawn(enemyGo, DFMPDynamicEnemyState.AssetId);
                 stateObjectsByEnemyId.Add(record.Identity.EnemyId, enemyGo);

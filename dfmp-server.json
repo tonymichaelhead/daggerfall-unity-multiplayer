@@ -25,6 +25,7 @@
     "AwarenessRange": 32.0,
     "AttackRange": 2.25,
     "MoveSpeed": 3.5,
+    "AiTickIntervalSeconds": 0.1,
     "AttackCooldownSeconds": 1.8,
     "AttackDamage": 4,
     "RequireLineOfSight": true
