@@ -655,10 +655,10 @@ namespace DFMP.Runtime
             waterEnemies = new MobileTypes[256];
             DFRandom.srand(inputs.DungeonRecordId);
             for (int index = 0; index < 256; index++)
-            {
                 nonWaterEnemies[index] = ChooseClassicRandomEnemyType(RandomEncounters.EncounterTables[dungeonIndex], playerLevel);
+
+            for (int index = 0; index < 256; index++)
                 waterEnemies[index] = ChooseClassicRandomEnemyType(RandomEncounters.EncounterTables[19], playerLevel);
-            }
 
             return true;
         }
