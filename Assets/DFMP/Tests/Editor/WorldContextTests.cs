@@ -527,6 +527,83 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_Grounding_FindsNearestFloorAndPreservesXz()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryGroundingTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryGroundingSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "grounding-floor");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(116, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = new Vector3(0f, -1f, 0f);
+                floor.transform.localScale = new Vector3(10f, 0.25f, 10f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 grounded;
+                bool foundGround;
+                Vector3 aboveFloor = new Vector3(3f, 4f, 5f);
+                Assert.IsTrue(service.TryResolveGroundedDungeonLocalPosition(dungeon, aboveFloor, out grounded, out foundGround));
+                Assert.IsTrue(foundGround);
+                Assert.AreEqual(3f, grounded.x);
+                Assert.AreEqual(5f, grounded.z);
+                Assert.AreEqual(-0.875f, grounded.y, 0.02f);
+
+                Vector3 belowFloor = new Vector3(-2f, -6f, -3f);
+                Assert.IsTrue(service.TryResolveGroundedDungeonLocalPosition(dungeon, belowFloor, out grounded, out foundGround));
+                Assert.IsTrue(foundGround);
+                Assert.AreEqual(-2f, grounded.x);
+                Assert.AreEqual(-3f, grounded.z);
+                Assert.AreEqual(-0.875f, grounded.y, 0.02f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_Grounding_FailsClosedWhenGeometryUnavailable()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryGroundingUnavailableTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryGroundingUnavailableSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "grounding-unavailable");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(117, session, dungeon, "test"));
+
+                Vector3 grounded;
+                bool foundGround;
+                Vector3 original = new Vector3(2f, 9f, 4f);
+                Assert.IsFalse(service.TryResolveGroundedDungeonLocalPosition(dungeon, original, out grounded, out foundGround));
+                Assert.IsFalse(foundGround);
+                Assert.AreEqual(original, grounded);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void NetworkServer_TryApplyWorldContextReport_UpdatesOccupancy()
         {
             GameObject go = new GameObject("DFMP_ContextApplyTest");

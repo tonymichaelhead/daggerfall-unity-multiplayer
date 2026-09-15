@@ -1165,6 +1165,19 @@ namespace DFMP.Runtime
             }
 
             DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
+            int startingBlockIndex = 0;
+            if (location.Dungeon.Blocks != null)
+            {
+                for (int index = 0; index < location.Dungeon.Blocks.Length; index++)
+                {
+                    if (location.Dungeon.Blocks[index].IsStartingBlock)
+                    {
+                        startingBlockIndex = index;
+                        break;
+                    }
+                }
+            }
+
             DFMPWorldContextKey context = new DFMPWorldContextKey
             {
                 Kind = DFMPWorldContextKind.Dungeon,
@@ -1174,8 +1187,8 @@ namespace DFMP.Runtime
                 LocationIndex = location.LocationIndex,
                 LocationId = location.Name,
                 InstanceId = string.Empty,
-                DungeonBlockIndex = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? 0 : -1,
-                DungeonBlockName = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? location.Dungeon.Blocks[0].BlockName : string.Empty
+                DungeonBlockIndex = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? startingBlockIndex : -1,
+                DungeonBlockName = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? location.Dungeon.Blocks[startingBlockIndex].BlockName : string.Empty
             };
             if (context.DungeonBlockIndex < 0)
             {

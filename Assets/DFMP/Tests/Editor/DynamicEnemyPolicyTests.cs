@@ -375,7 +375,8 @@ namespace DFMP.Tests
 
             Assert.IsTrue(DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(dungeonRoot, dungeonRoot + new Vector3(10f, 0f, 10f), 20f));
             Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(dungeonRoot, dungeonRoot + new Vector3(50f, 0f, 50f), 20f));
-            Assert.AreEqual(Vector3.zero, DFMPDynamicEnemyPresentation.GetAvatarLocalPosition());
+            Assert.AreEqual(Vector3.zero, DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(0f));
+            Assert.AreEqual(new Vector3(0f, 1.5f, 0f), DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(1.5f));
             Assert.AreEqual(new Vector3(10f, 4f, 30f), DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(null, new Vector3(10f, 4f, 30f)));
 
             GameObject enemyObject = new GameObject("DFMP_PresentationEligibilityTest");
@@ -818,6 +819,14 @@ namespace DFMP.Tests
             Assert.AreEqual(9.6f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(1));
             Assert.AreEqual(19.2f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(3));
             Assert.AreEqual(19.2f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(99));
+        }
+
+        [Test]
+        public void DungeonRoster_FlyingEnemiesReceiveHoverOffsetAfterGrounding()
+        {
+            Assert.AreEqual(0.75f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.GiantBat));
+            Assert.AreEqual(0.75f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.Imp));
+            Assert.AreEqual(0f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.Rat));
         }
 
         [Test]

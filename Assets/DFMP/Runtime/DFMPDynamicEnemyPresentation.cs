@@ -50,9 +50,9 @@ namespace DFMP.Runtime
             return foundGround ? groundPosition : scenePosition;
         }
 
-        public static Vector3 GetAvatarLocalPosition()
+        public static Vector3 GetAvatarLocalPosition(float spriteHalfHeight = 0f)
         {
-            return Vector3.zero;
+            return new Vector3(0f, Mathf.Max(0f, spriteHalfHeight), 0f);
         }
 
         public static bool IsVisibleInLocalDungeon(Vector3 playerScenePosition, Vector3 enemyScenePosition, float maxDistance = MaximumVisibleDistance)
@@ -180,7 +180,7 @@ namespace DFMP.Runtime
                         : MobileReactions.Hostile;
                     mobile.SetEnemy(DaggerfallUnity.Instance, enemy, nativeReaction, nativeGender);
                     mobile.ChangeEnemyState(MobileStates.Idle);
-                    transform.localPosition = DFMPDynamicEnemyPresentation.GetAvatarLocalPosition();
+                    transform.localPosition = DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(mobile.GetSize().y * 0.5f);
                 }
 
                 mobileType = targetMobileType;

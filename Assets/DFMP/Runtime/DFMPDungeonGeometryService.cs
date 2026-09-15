@@ -220,6 +220,39 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public bool TryResolveGroundedDungeonLocalPosition(DFMPWorldContextKey context, Vector3 dungeonLocalPosition, out Vector3 groundedDungeonLocalPosition, out bool foundGround)
+        {
+            groundedDungeonLocalPosition = dungeonLocalPosition;
+            foundGround = false;
+
+            DFMPDungeonGeometryScopeKey scope;
+            if (!TryCreateScope(context, out scope))
+                return false;
+
+            HostedDungeonGeometry hostedGeometry;
+            if (!hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) || hostedGeometry == null || hostedGeometry.Root == null || !hostedGeometry.GeometryAvailable)
+                return false;
+
+            Vector3 worldPosition = DungeonLocalToHostedWorldPosition(hostedGeometry.Root.transform, dungeonLocalPosition + Vector3.up * 8f);
+            RaycastHit[] hits = Physics.RaycastAll(worldPosition, Vector3.down, 16f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            float nearestDistance = float.MaxValue;
+            for (int index = 0; index < hits.Length; index++)
+            {
+                Collider hitCollider = hits[index].collider;
+                if (hitCollider == null || hitCollider.transform == null || !hitCollider.transform.IsChildOf(hostedGeometry.Root.transform))
+                    continue;
+
+                if (hits[index].distance < nearestDistance)
+                {
+                    nearestDistance = hits[index].distance;
+                    groundedDungeonLocalPosition = hostedGeometry.Root.transform.InverseTransformPoint(hits[index].point);
+                    foundGround = true;
+                }
+            }
+
+            return true;
+        }
+
         public static Vector3 DungeonLocalToHostedWorldPosition(Transform root, Vector3 dungeonLocalPosition)
         {
             return root != null ? root.TransformPoint(dungeonLocalPosition) : dungeonLocalPosition;

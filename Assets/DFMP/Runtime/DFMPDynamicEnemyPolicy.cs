@@ -586,6 +586,20 @@ namespace DFMP.Runtime
                     if (!ShouldSpawnNativeEnemy((MobileTypes)mobileType, inputs.WaterLevel, marker.MarkerY))
                         continue;
 
+                    Vector3 groundedMarkerPosition = marker.DungeonLocalPosition;
+                    DFMPDungeonGeometryService geometryService = DFMPNetworkServer.DungeonGeometryService;
+                    if (geometryService != null)
+                    {
+                        bool foundGround;
+                        Vector3 resolvedGroundedPosition;
+                        if (!geometryService.TryResolveGroundedDungeonLocalPosition(context, marker.DungeonLocalPosition, out resolvedGroundedPosition, out foundGround) || !foundGround)
+                            return false;
+
+                        groundedMarkerPosition = resolvedGroundedPosition;
+                    }
+
+                    groundedMarkerPosition.y += GetNativeFlyingHeightOffset(mobileType);
+
                     ulong descriptorSeed = ComputeStableHash(string.Format(
                         CultureInfo.InvariantCulture,
                         "dfmp-native-descriptor-v1|{0}|{1}|{2}",
@@ -594,7 +608,7 @@ namespace DFMP.Runtime
                         index));
                     nativeDescriptors.Add(new DFMPDynamicEnemyDescriptor
                     {
-                        DungeonLocalPosition = marker.DungeonLocalPosition,
+                        DungeonLocalPosition = groundedMarkerPosition,
                         FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
                         MobileType = mobileType,
                         Gender = isFixedMarker ? GetNativeGender(marker, mobileType) : (int)MobileGender.Unspecified,
@@ -622,6 +636,15 @@ namespace DFMP.Runtime
                 mobileType != MobileTypes.Dreugh &&
                 mobileType != MobileTypes.Lamia ||
                 waterLevel != 10000 && waterLevel - 20 <= markerY;
+        }
+
+        public static float GetNativeFlyingHeightOffset(int mobileType)
+        {
+            MobileEnemy enemy;
+            if (EnemyBasics.GetEnemy((MobileTypes)mobileType, out enemy) && enemy.Behaviour == MobileBehaviour.Flying)
+                return 0.75f;
+
+            return 0f;
         }
 
         public static float GetNativeAwarenessRange(int classicSpawnDistanceType)
