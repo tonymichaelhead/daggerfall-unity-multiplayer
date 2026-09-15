@@ -811,6 +811,41 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_NativeGenderFlagsApplyOnlyToHumanoidFixedEnemies()
+        {
+            DFMPWorldContextKey context = CreateDungeonContext();
+            var inputs = new DFMPDungeonRosterPolicy.NativeDungeonGenerationInputs
+            {
+                DungeonType = DFRegion.DungeonTypes.Crypt,
+                DungeonRecordId = 42,
+                BlockSeed = 123,
+                WaterLevel = 10000
+            };
+            var markers = new DFMPDungeonRosterPolicy.NativeDungeonMarker[]
+            {
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
+                    DungeonLocalPosition = Vector3.zero,
+                    TextureRecord = DFMPDungeonRosterPolicy.FixedMonsterTextureRecord,
+                    FixedMobileType = (int)MobileTypes.Orc,
+                    ClassicSlot = (int)DFBlock.EnemyGenders.Female
+                },
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
+                    DungeonLocalPosition = Vector3.one,
+                    TextureRecord = DFMPDungeonRosterPolicy.FixedMonsterTextureRecord,
+                    FixedMobileType = (int)MobileTypes.Archer,
+                    ClassicSlot = (int)DFBlock.EnemyGenders.Female
+                }
+            };
+
+            DFMPDynamicEnemyDescriptor[] descriptors;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateNativeDescriptors(1234UL, context, inputs, markers, 0f, 4, out descriptors));
+            Assert.AreEqual((int)MobileGender.Unspecified, descriptors[0].Gender);
+            Assert.AreEqual((int)MobileGender.Female, descriptors[1].Gender);
+        }
+
+        [Test]
         public void DungeonRoster_ResolvesNativeDungeonTypeBlockCoordinatesAndWaterLevel()
         {
             DFLocation location = new DFLocation

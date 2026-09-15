@@ -594,7 +594,7 @@ namespace DFMP.Runtime
                         DungeonLocalPosition = marker.DungeonLocalPosition,
                         FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
                         MobileType = mobileType,
-                        Gender = isFixedMarker ? GetNativeGender(marker) : (int)MobileGender.Unspecified,
+                        Gender = isFixedMarker ? GetNativeGender(marker, mobileType) : (int)MobileGender.Unspecified,
                         Reaction = isFixedMarker ? marker.Reaction : (int)DFBlock.EnemyReactionTypes.Hostile
                     });
                 }
@@ -620,8 +620,11 @@ namespace DFMP.Runtime
                 waterLevel != 10000 && waterLevel - 20 <= markerY;
         }
 
-        static int GetNativeGender(NativeDungeonMarker marker)
+        static int GetNativeGender(NativeDungeonMarker marker, int mobileType)
         {
+            if (mobileType <= 43)
+                return (int)MobileGender.Unspecified;
+
             if ((marker.ClassicSlot & (int)DFBlock.EnemyGenders.Female) == (int)DFBlock.EnemyGenders.Female)
                 return (int)MobileGender.Female;
             if ((marker.ClassicSlot & (int)DFBlock.EnemyGenders.Male) == (int)DFBlock.EnemyGenders.Male)
