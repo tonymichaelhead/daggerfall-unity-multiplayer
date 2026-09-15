@@ -373,6 +373,7 @@ namespace DFMP.Runtime
             public int FixedMobileType;
             public byte SoundIndex;
             public int ClassicSlot;
+            public bool IsCustomData;
 
             public bool IsFixedMonster
             {
@@ -468,6 +469,11 @@ namespace DFMP.Runtime
             return Mathf.Clamp01(Mathf.Max(1, playerLevel) / 20f);
         }
 
+        static bool IsValidNativeMobileType(int mobileType)
+        {
+            return mobileType >= 0 && mobileType < 43 || mobileType >= 128 && mobileType <= 146;
+        }
+
         public static bool TryResolveNativeDungeonGenerationInputs(
             DFLocation location,
             DFMPWorldContextKey context,
@@ -535,6 +541,8 @@ namespace DFMP.Runtime
                     int mobileType;
                     if (isFixedMarker)
                     {
+                        if (!IsValidNativeMobileType(marker.FixedMobileType))
+                            continue;
                         mobileType = marker.FixedMobileType;
                     }
                     else
@@ -740,9 +748,12 @@ namespace DFMP.Runtime
                         DungeonLocalPosition = blockOffset + markerPosition,
                         TextureRecord = textureRecord,
                         MarkerY = obj.YPos,
-                        FixedMobileType = (int)(obj.Resources.FlatResource.FactionOrMobileId & 0xff),
+                        FixedMobileType = obj.Resources.FlatResource.IsCustomData
+                            ? (int)obj.Resources.FlatResource.FactionOrMobileId
+                            : (int)(obj.Resources.FlatResource.FactionOrMobileId & 0xff),
                         SoundIndex = obj.Resources.FlatResource.SoundIndex,
-                        ClassicSlot = obj.Resources.FlatResource.Flags
+                        ClassicSlot = obj.Resources.FlatResource.Flags,
+                        IsCustomData = obj.Resources.FlatResource.IsCustomData
                     });
                 }
             }

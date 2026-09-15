@@ -802,6 +802,13 @@ namespace DFMP.Tests
             {
                 new DFMPDungeonRosterPolicy.NativeDungeonMarker
                 {
+                    DungeonLocalPosition = new Vector3(-1f, 0f, -2f),
+                    TextureRecord = DFMPDungeonRosterPolicy.FixedMonsterTextureRecord,
+                    FixedMobileType = 99,
+                    MarkerY = 0
+                },
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
                     DungeonLocalPosition = new Vector3(1f, 2f, 3f),
                     TextureRecord = DFMPDungeonRosterPolicy.FixedMonsterTextureRecord,
                     FixedMobileType = (int)MobileTypes.SkeletalWarrior,
