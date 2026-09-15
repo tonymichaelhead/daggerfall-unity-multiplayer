@@ -20,6 +20,7 @@
   },
   "Enemies": {
     "WorldSeed": "default",
+    "EnemyRosterMode": "DevelopmentScaffold",
     "DungeonRosterSize": 6,
     "DespawnDelaySeconds": 0.0,
     "AwarenessRange": 32.0,

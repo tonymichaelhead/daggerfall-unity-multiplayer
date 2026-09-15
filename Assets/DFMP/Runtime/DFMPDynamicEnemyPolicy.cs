@@ -550,6 +550,42 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static bool TryCreateRosterFromDescriptors(
+            ulong serverWorldSeed,
+            DFMPWorldContextKey context,
+            DFMPDynamicEnemyDescriptor[] descriptors,
+            out DFMPDynamicEnemyRecord[] roster)
+        {
+            roster = new DFMPDynamicEnemyRecord[0];
+            DFMPDynamicEncounterKey encounter;
+            if (!TryCreateEncounterKey(serverWorldSeed, context, out encounter) ||
+                descriptors == null ||
+                descriptors.Length == 0 ||
+                descriptors.Length > MaximumRosterSize)
+                return false;
+
+            roster = new DFMPDynamicEnemyRecord[descriptors.Length];
+            for (int index = 0; index < descriptors.Length; index++)
+            {
+                int health = GetInitialEnemyHealth(descriptors[index].MobileType);
+                roster[index] = new DFMPDynamicEnemyRecord
+                {
+                    Identity = new DFMPDynamicEnemyIdentity
+                    {
+                        Encounter = encounter,
+                        RosterIndex = index,
+                        EnemyId = encounter.EncounterId + "-enemy-" + index.ToString(CultureInfo.InvariantCulture)
+                    },
+                    LifecycleState = DFMPDynamicEnemyLifecycleState.SpawnedAlive,
+                    Descriptor = descriptors[index],
+                    Health = health,
+                    MaxHealth = health
+                };
+            }
+
+            return true;
+        }
+
         public static ulong CreateServerWorldSeed(string configuredSeed)
         {
             return ComputeStableHash(string.IsNullOrWhiteSpace(configuredSeed) ? "default" : configuredSeed.Trim());

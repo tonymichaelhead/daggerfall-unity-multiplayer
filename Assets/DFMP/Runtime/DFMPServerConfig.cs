@@ -4,6 +4,12 @@ using UnityEngine;
 
 namespace DFMP.Runtime
 {
+    public static class DFMPEnemyRosterModes
+    {
+        public const string DevelopmentScaffold = "DevelopmentScaffold";
+        public const string NativeParity = "NativeParity";
+    }
+
     [Serializable]
     public class DFMPServerChatConfig
     {
@@ -54,6 +60,7 @@ namespace DFMP.Runtime
     public class DFMPServerEnemyConfig
     {
         public string WorldSeed = "default";
+        public string EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold;
         public int DungeonRosterSize = 8;
         public float DespawnDelaySeconds = 0f;
         public float AwarenessRange = 32f;
@@ -74,6 +81,9 @@ namespace DFMP.Runtime
         public void Normalize()
         {
             WorldSeed = string.IsNullOrWhiteSpace(WorldSeed) ? "default" : WorldSeed.Trim();
+            EnemyRosterMode = string.Equals(EnemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.OrdinalIgnoreCase)
+                ? DFMPEnemyRosterModes.NativeParity
+                : DFMPEnemyRosterModes.DevelopmentScaffold;
             DungeonRosterSize = DungeonRosterSize > 0 && DungeonRosterSize <= DFMPDungeonRosterPolicy.MaximumRosterSize ? DungeonRosterSize : 8;
             DespawnDelaySeconds = DespawnDelaySeconds >= 0f && DespawnDelaySeconds <= 3600f ? DespawnDelaySeconds : 0f;
             AwarenessRange = AwarenessRange > 0f && AwarenessRange <= 256f ? AwarenessRange : 32f;

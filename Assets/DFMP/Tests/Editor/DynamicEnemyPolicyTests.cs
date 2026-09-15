@@ -821,6 +821,25 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_NativeDescriptorRecordsUseNativeDescriptorCount()
+        {
+            DFMPWorldContextKey context = CreateDungeonContext();
+            DFMPDynamicEnemyDescriptor[] descriptors = new DFMPDynamicEnemyDescriptor[]
+            {
+                new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = new Vector3(1f, 0f, 2f), MobileType = (int)MobileTypes.Rat },
+                new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = new Vector3(3f, 0f, 4f), MobileType = (int)MobileTypes.SkeletalWarrior }
+            };
+
+            DFMPDynamicEnemyRecord[] roster;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRosterFromDescriptors(1234UL, context, descriptors, out roster));
+            Assert.AreEqual(2, roster.Length);
+            Assert.AreEqual(descriptors[0], roster[0].Descriptor);
+            Assert.AreEqual(descriptors[1], roster[1].Descriptor);
+            Assert.AreEqual(0, roster[0].Identity.RosterIndex);
+            Assert.AreEqual(1, roster[1].Identity.RosterIndex);
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest
