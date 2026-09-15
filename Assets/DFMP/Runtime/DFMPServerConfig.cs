@@ -60,7 +60,7 @@ namespace DFMP.Runtime
     public class DFMPServerEnemyConfig
     {
         public string WorldSeed = "default";
-        public string EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold;
+        public string EnemyRosterMode = DFMPEnemyRosterModes.NativeParity;
         public float NativeMonsterPower;
         public int NativeMonsterVariance = 4;
         public int DungeonRosterSize = 8;

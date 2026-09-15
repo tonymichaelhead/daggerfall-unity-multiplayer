@@ -29,7 +29,7 @@ namespace DFMP.Tests
             Assert.IsFalse(config.Developer.CommandsEnabled);
             Assert.NotNull(config.Enemies);
             Assert.AreEqual("default", config.Enemies.WorldSeed);
-            Assert.AreEqual(DFMPEnemyRosterModes.DevelopmentScaffold, config.Enemies.EnemyRosterMode);
+            Assert.AreEqual(DFMPEnemyRosterModes.NativeParity, config.Enemies.EnemyRosterMode);
             Assert.AreEqual(0f, config.Enemies.NativeMonsterPower);
             Assert.AreEqual(4, config.Enemies.NativeMonsterVariance);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);

@@ -20,7 +20,7 @@
   },
   "Enemies": {
     "WorldSeed": "default",
-    "EnemyRosterMode": "DevelopmentScaffold",
+    "EnemyRosterMode": "NativeParity",
     "NativeMonsterPower": 0.0,
     "NativeMonsterVariance": 4,
     "DungeonRosterSize": 6,

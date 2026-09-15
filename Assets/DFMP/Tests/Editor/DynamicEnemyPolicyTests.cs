@@ -161,7 +161,7 @@ namespace DFMP.Tests
             try
             {
                 var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
-                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "test-seed", DungeonRosterSize = 2 });
+                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "test-seed", EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold, DungeonRosterSize = 2 });
                 var firstSession = firstSessionObject.AddComponent<DFMPPlayerSessionState>();
                 var secondSession = secondSessionObject.AddComponent<DFMPPlayerSessionState>();
                 DFMPWorldContextKey dungeon = CreateDungeonContext();
@@ -202,7 +202,7 @@ namespace DFMP.Tests
             try
             {
                 var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
-                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "delayed-seed", DungeonRosterSize = 2, DespawnDelaySeconds = 10f });
+                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "delayed-seed", EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold, DungeonRosterSize = 2, DespawnDelaySeconds = 10f });
                 var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
                 DFMPWorldContextKey dungeon = CreateDungeonContext();
                 DFMPWorldContextKey exterior = dungeon;
@@ -934,7 +934,7 @@ namespace DFMP.Tests
             try
             {
                 var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
-                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "damage-test-seed", DungeonRosterSize = 2 });
+                service.Initialize(new DFMPServerEnemyConfig { WorldSeed = "damage-test-seed", EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold, DungeonRosterSize = 2 });
                 var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
                 DFMPWorldContextKey dungeon = CreateDungeonContext();
 
@@ -985,6 +985,7 @@ namespace DFMP.Tests
                 service.Initialize(new DFMPServerEnemyConfig
                 {
                     WorldSeed = "ai-tick-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
                     DungeonRosterSize = 1,
                     AwarenessRange = 64f,
                     AttackRange = 2f,
@@ -1035,6 +1036,7 @@ namespace DFMP.Tests
                 service.Initialize(new DFMPServerEnemyConfig
                 {
                     WorldSeed = "blocked-geometry-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
                     DungeonRosterSize = 1,
                     AwarenessRange = 64f,
                     AttackRange = 2f,
@@ -1096,6 +1098,7 @@ namespace DFMP.Tests
                 service.Initialize(new DFMPServerEnemyConfig
                 {
                     WorldSeed = "unavailable-geometry-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
                     DungeonRosterSize = 1,
                     AwarenessRange = 64f,
                     AttackRange = 2f,
@@ -1140,6 +1143,7 @@ namespace DFMP.Tests
                 service.Initialize(new DFMPServerEnemyConfig
                 {
                     WorldSeed = "ai-strict-los-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
                     DungeonRosterSize = 1,
                     AwarenessRange = 64f,
                     AttackRange = 2f,
@@ -1185,6 +1189,7 @@ namespace DFMP.Tests
                 service.Initialize(new DFMPServerEnemyConfig
                 {
                     WorldSeed = "ai-cadence-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
                     DungeonRosterSize = 1,
                     AwarenessRange = 64f,
                     AttackRange = 2f,
@@ -1246,6 +1251,7 @@ namespace DFMP.Tests
                 service.Initialize(new DFMPServerEnemyConfig
                 {
                     WorldSeed = "ai-attack-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
                     DungeonRosterSize = 1,
                     AwarenessRange = 64f,
                     AttackRange = 2f,
