@@ -515,7 +515,7 @@ namespace DFMP.Runtime
             sessionGo.SetActive(true);
 
             NetworkServer.Spawn(sessionGo, DFMPPlayerSessionState.AssetId);
-            playerSessionStates.Add(conn.connectionId, sessionState);
+            playerSessionStates[conn.connectionId] = sessionState;
             DFMPVitalState initialVitals;
             if (vitalStates.TryGetValue(conn.connectionId, out initialVitals))
                 conn.Send(CreateVitalSnapshot(initialVitals, conn.connectionId, sessionState.IsDead));
