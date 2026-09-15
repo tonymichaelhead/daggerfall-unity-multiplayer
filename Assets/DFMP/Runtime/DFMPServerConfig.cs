@@ -6,6 +6,7 @@ namespace DFMP.Runtime
 {
     public static class DFMPEnemyRosterModes
     {
+        public const string ConfiguredRoster = "ConfiguredRoster";
         public const string DevelopmentScaffold = "DevelopmentScaffold";
         public const string NativeParity = "NativeParity";
     }
@@ -85,7 +86,7 @@ namespace DFMP.Runtime
             WorldSeed = string.IsNullOrWhiteSpace(WorldSeed) ? "default" : WorldSeed.Trim();
             EnemyRosterMode = string.Equals(EnemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.OrdinalIgnoreCase)
                 ? DFMPEnemyRosterModes.NativeParity
-                : DFMPEnemyRosterModes.DevelopmentScaffold;
+                : DFMPEnemyRosterModes.ConfiguredRoster;
             NativeMonsterPower = NativeMonsterPower >= 0f && NativeMonsterPower <= 1f ? NativeMonsterPower : 0f;
             NativeMonsterVariance = NativeMonsterVariance >= 0 && NativeMonsterVariance <= 32 ? NativeMonsterVariance : 4;
             DungeonRosterSize = DungeonRosterSize > 0 && DungeonRosterSize <= DFMPDungeonRosterPolicy.MaximumRosterSize ? DungeonRosterSize : 8;
