@@ -359,6 +359,7 @@ namespace DFMP.Runtime
         {
             public DFRegion.DungeonTypes DungeonType;
             public int DungeonRecordId;
+            public int BlockSeed;
             public int BlockX;
             public int BlockZ;
             public int WaterLevel;
@@ -490,6 +491,7 @@ namespace DFMP.Runtime
             {
                 DungeonType = location.MapTableData.DungeonType,
                 DungeonRecordId = location.Dungeon.RecordElement.Header.LocationId,
+                BlockSeed = CreateNativeBlockSeed(location.MapTableData.MapId, context.DungeonBlockIndex),
                 BlockX = block.X,
                 BlockZ = block.Z,
                 WaterLevel = block.WaterLevel
@@ -514,12 +516,14 @@ namespace DFMP.Runtime
             MobileTypes[] nonWaterEnemies;
             MobileTypes[] waterEnemies;
             DFRandom.SaveSeed();
+            UnityEngine.Random.State savedUnityRandomState = UnityEngine.Random.state;
             try
             {
                 if (!TryCreateClassicEncounterSlots(inputs, monsterPower, monsterVariance, out nonWaterEnemies, out waterEnemies))
                     return false;
 
                 DFRandom.srand(inputs.DungeonRecordId);
+                UnityEngine.Random.InitState(inputs.BlockSeed);
                 for (int index = 0; index < markers.Length; index++)
                 {
                     NativeDungeonMarker marker = markers[index];
@@ -535,7 +539,7 @@ namespace DFMP.Runtime
                     }
                     else
                     {
-                        int slot = marker.ClassicSlot == 0 ? DFRandom.random_range(1, 7) : marker.ClassicSlot;
+                        int slot = marker.ClassicSlot == 0 ? UnityEngine.Random.Range(1, 7) : marker.ClassicSlot;
                         if (slot < 0 || slot >= nonWaterEnemies.Length)
                             return false;
 
@@ -560,6 +564,7 @@ namespace DFMP.Runtime
             finally
             {
                 DFRandom.RestoreSeed();
+                UnityEngine.Random.state = savedUnityRandomState;
             }
 
             if (nativeDescriptors.Count == 0)
@@ -567,6 +572,14 @@ namespace DFMP.Runtime
 
             descriptors = nativeDescriptors.ToArray();
             return true;
+        }
+
+        static int CreateNativeBlockSeed(int locationMapId, int dungeonBlockIndex)
+        {
+            unchecked
+            {
+                return locationMapId ^ (dungeonBlockIndex * 397);
+            }
         }
 
         static bool TryCreateClassicEncounterSlots(
