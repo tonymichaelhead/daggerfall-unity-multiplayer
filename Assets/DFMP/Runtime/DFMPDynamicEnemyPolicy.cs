@@ -489,6 +489,67 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static bool TryCreateNativeDescriptors(
+            ulong serverWorldSeed,
+            DFMPWorldContextKey context,
+            NativeDungeonGenerationInputs inputs,
+            NativeDungeonMarker[] markers,
+            float monsterPower,
+            int monsterVariance,
+            out DFMPDynamicEnemyDescriptor[] descriptors)
+        {
+            descriptors = new DFMPDynamicEnemyDescriptor[0];
+            if (markers == null || markers.Length == 0 || monsterPower < 0f || monsterPower > 1f || monsterVariance < 0)
+                return false;
+
+            var nativeDescriptors = new List<DFMPDynamicEnemyDescriptor>();
+            int randomMarkerOrdinal = 0;
+            for (int index = 0; index < markers.Length; index++)
+            {
+                NativeDungeonMarker marker = markers[index];
+                bool isRandomMarker = marker.TextureRecord == RandomMonsterTextureRecord;
+                bool isFixedMarker = marker.TextureRecord == FixedMonsterTextureRecord;
+                if (!isRandomMarker && !isFixedMarker)
+                    continue;
+
+                int mobileType;
+                if (!TryResolveNativeEnemyType(
+                    inputs.DungeonType,
+                    isFixedMarker,
+                    marker.FixedMobileType,
+                    marker.MarkerY,
+                    inputs.WaterLevel,
+                    monsterPower,
+                    monsterVariance,
+                    serverWorldSeed,
+                    randomMarkerOrdinal,
+                    out mobileType))
+                    return false;
+
+                if (isRandomMarker)
+                    randomMarkerOrdinal++;
+
+                ulong descriptorSeed = ComputeStableHash(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "dfmp-native-descriptor-v1|{0}|{1}|{2}",
+                    serverWorldSeed,
+                    CreateDungeonSeedMaterial(serverWorldSeed, context),
+                    index));
+                nativeDescriptors.Add(new DFMPDynamicEnemyDescriptor
+                {
+                    DungeonLocalPosition = marker.DungeonLocalPosition,
+                    FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
+                    MobileType = mobileType
+                });
+            }
+
+            if (nativeDescriptors.Count == 0)
+                return false;
+
+            descriptors = nativeDescriptors.ToArray();
+            return true;
+        }
+
         public static ulong CreateServerWorldSeed(string configuredSeed)
         {
             return ComputeStableHash(string.IsNullOrWhiteSpace(configuredSeed) ? "default" : configuredSeed.Trim());

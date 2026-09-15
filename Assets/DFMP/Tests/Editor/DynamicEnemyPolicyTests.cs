@@ -779,6 +779,48 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_NativeDescriptorsKeepOnlyMonsterMarkersAndPreservePositions()
+        {
+            DFMPWorldContextKey context = CreateDungeonContext();
+            var inputs = new DFMPDungeonRosterPolicy.NativeDungeonGenerationInputs
+            {
+                DungeonType = DFRegion.DungeonTypes.Crypt,
+                BlockX = 0,
+                BlockZ = 0,
+                WaterLevel = 10000
+            };
+            var markers = new DFMPDungeonRosterPolicy.NativeDungeonMarker[]
+            {
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
+                    DungeonLocalPosition = new Vector3(1f, 2f, 3f),
+                    TextureRecord = DFMPDungeonRosterPolicy.FixedMonsterTextureRecord,
+                    FixedMobileType = (int)MobileTypes.SkeletalWarrior,
+                    MarkerY = 0
+                },
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
+                    DungeonLocalPosition = new Vector3(4f, 5f, 6f),
+                    TextureRecord = DFMPDungeonRosterPolicy.ItemMarkerTextureRecord,
+                    MarkerY = 0
+                },
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
+                    DungeonLocalPosition = new Vector3(7f, 8f, 9f),
+                    TextureRecord = DFMPDungeonRosterPolicy.RandomMonsterTextureRecord,
+                    MarkerY = 0
+                }
+            };
+
+            DFMPDynamicEnemyDescriptor[] descriptors;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateNativeDescriptors(1234UL, context, inputs, markers, 0f, 4, out descriptors));
+            Assert.AreEqual(2, descriptors.Length);
+            Assert.AreEqual(new Vector3(1f, 2f, 3f), descriptors[0].DungeonLocalPosition);
+            Assert.AreEqual((int)MobileTypes.SkeletalWarrior, descriptors[0].MobileType);
+            Assert.AreEqual(new Vector3(7f, 8f, 9f), descriptors[1].DungeonLocalPosition);
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest
