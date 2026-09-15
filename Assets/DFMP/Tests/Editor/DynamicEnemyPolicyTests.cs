@@ -435,6 +435,7 @@ namespace DFMP.Tests
                 Assert.AreEqual(record.Descriptor.FacingYaw, state.FacingYaw);
                 Assert.AreEqual(record.Descriptor.MobileType, state.MobileType);
                 Assert.AreEqual(record.Descriptor.Gender, state.Gender);
+                Assert.AreEqual(record.Descriptor.Reaction, state.Reaction);
                 Assert.AreEqual(record.TargetConnectionId, state.TargetConnectionId);
                 Assert.AreEqual(record.IsMoving, state.IsMoving);
                 Assert.AreEqual(0, state.AttackSequence);

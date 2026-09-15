@@ -42,13 +42,15 @@ namespace DFMP.Runtime
         public float FacingYaw;
         public int MobileType;
         public int Gender;
+        public int Reaction;
 
         public bool Equals(DFMPDynamicEnemyDescriptor other)
         {
             return DungeonLocalPosition == other.DungeonLocalPosition &&
                 Mathf.Approximately(FacingYaw, other.FacingYaw) &&
                 MobileType == other.MobileType &&
-                Gender == other.Gender;
+                Gender == other.Gender &&
+                Reaction == other.Reaction;
         }
 
         public override bool Equals(object obj)
@@ -64,6 +66,7 @@ namespace DFMP.Runtime
                 hash = (hash * 397) ^ FacingYaw.GetHashCode();
                 hash = (hash * 397) ^ MobileType;
                 hash = (hash * 397) ^ Gender;
+                hash = (hash * 397) ^ Reaction;
                 return hash;
             }
         }
@@ -377,6 +380,7 @@ namespace DFMP.Runtime
             public byte SoundIndex;
             public int ClassicSlot;
             public bool IsCustomData;
+            public int Reaction;
 
             public bool IsFixedMonster
             {
@@ -572,7 +576,8 @@ namespace DFMP.Runtime
                         DungeonLocalPosition = marker.DungeonLocalPosition,
                         FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
                         MobileType = mobileType,
-                        Gender = isFixedMarker ? GetNativeGender(marker) : (int)MobileGender.Unspecified
+                        Gender = isFixedMarker ? GetNativeGender(marker) : (int)MobileGender.Unspecified,
+                        Reaction = isFixedMarker ? marker.Reaction : (int)DFBlock.EnemyReactionTypes.Hostile
                     });
                 }
             }
@@ -777,7 +782,8 @@ namespace DFMP.Runtime
                             : (int)(obj.Resources.FlatResource.FactionOrMobileId & 0xff),
                         SoundIndex = obj.Resources.FlatResource.SoundIndex,
                         ClassicSlot = obj.Resources.FlatResource.Flags,
-                        IsCustomData = obj.Resources.FlatResource.IsCustomData
+                        IsCustomData = obj.Resources.FlatResource.IsCustomData,
+                        Reaction = obj.Resources.FlatResource.Action
                     });
                 }
             }
