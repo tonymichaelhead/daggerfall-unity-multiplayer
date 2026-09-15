@@ -864,33 +864,53 @@ namespace DFMP.Runtime
             int monsterVariance,
             out DFMPDynamicEnemyRecord[] roster)
         {
+            NativeDungeonGenerationInputs inputs;
+            return TryCreateNativeRoster(serverWorldSeed, context, monsterPower, monsterVariance, out roster, out inputs);
+        }
+
+        public static bool TryCreateNativeRoster(
+            ulong serverWorldSeed,
+            DFMPWorldContextKey context,
+            float monsterPower,
+            int monsterVariance,
+            out DFMPDynamicEnemyRecord[] roster,
+            out NativeDungeonGenerationInputs inputs)
+        {
             roster = new DFMPDynamicEnemyRecord[0];
+            inputs = new NativeDungeonGenerationInputs();
             if (DaggerfallUnity.Instance == null ||
                 !DaggerfallUnity.Instance.IsReady ||
                 DaggerfallUnity.Instance.ContentReader == null)
                 return false;
 
-            DFLocation location;
-            if (!DaggerfallUnity.Instance.ContentReader.GetLocation(context.RegionIndex, context.LocationIndex, out location))
-                return false;
+                try
+                {
+                    DFLocation location;
+                    if (!DaggerfallUnity.Instance.ContentReader.GetLocation(context.RegionIndex, context.LocationIndex, out location))
+                        return false;
 
-            NativeDungeonGenerationInputs inputs;
-            if (!TryResolveNativeDungeonGenerationInputs(location, context, out inputs))
-                return false;
+                    if (!TryResolveNativeDungeonGenerationInputs(location, context, out inputs))
+                        return false;
 
-            if (DaggerfallUnity.Instance.ContentReader.BlockFileReader == null)
-                return false;
+                    if (DaggerfallUnity.Instance.ContentReader.BlockFileReader == null)
+                        return false;
 
-            DFBlock blockData = DaggerfallUnity.Instance.ContentReader.BlockFileReader.GetBlock(context.DungeonBlockName);
-            NativeDungeonMarker[] markers;
-            if (!TryScanNativeDungeonMarkers(blockData, inputs.BlockX, inputs.BlockZ, out markers))
-                return false;
+                    DFBlock blockData = DaggerfallUnity.Instance.ContentReader.BlockFileReader.GetBlock(context.DungeonBlockName);
+                    NativeDungeonMarker[] markers;
+                    if (!TryScanNativeDungeonMarkers(blockData, inputs.BlockX, inputs.BlockZ, out markers))
+                        return false;
 
-            DFMPDynamicEnemyDescriptor[] descriptors;
-            if (!TryCreateNativeDescriptors(serverWorldSeed, context, inputs, markers, monsterPower, monsterVariance, out descriptors))
-                return false;
+                    DFMPDynamicEnemyDescriptor[] descriptors;
+                    if (!TryCreateNativeDescriptors(serverWorldSeed, context, inputs, markers, monsterPower, monsterVariance, out descriptors))
+                        return false;
 
-            return TryCreateRosterFromDescriptors(serverWorldSeed, context, descriptors, out roster);
+                    return TryCreateRosterFromDescriptors(serverWorldSeed, context, descriptors, out roster);
+                }
+                catch (Exception)
+                {
+                    roster = new DFMPDynamicEnemyRecord[0];
+                    return false;
+                }
         }
 
         public static Func<DFMPWorldContextKey, Vector3[]> MarkerProviderForTesting;

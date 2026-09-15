@@ -781,6 +781,7 @@ namespace DFMP.Tests
             DFMPDungeonRosterPolicy.NativeDungeonGenerationInputs inputs;
             Assert.IsTrue(DFMPDungeonRosterPolicy.TryResolveNativeDungeonGenerationInputs(location, context, out inputs));
             Assert.AreEqual(DFRegion.DungeonTypes.Crypt, inputs.DungeonType);
+            Assert.AreEqual(0, inputs.DungeonRecordId);
             Assert.AreEqual(0, inputs.BlockSeed);
             Assert.AreEqual(-2, inputs.BlockX);
             Assert.AreEqual(3, inputs.BlockZ);

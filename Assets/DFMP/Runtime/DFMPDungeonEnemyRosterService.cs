@@ -471,14 +471,32 @@ namespace DFMP.Runtime
             {
                 DFMPDynamicEnemyRecord[] roster;
                 bool nativeParity = string.Equals(enemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.Ordinal);
-                bool rosterCreated = nativeParity
-                    ? DFMPDungeonRosterPolicy.TryCreateNativeRoster(serverWorldSeed, context, ResolveNativeMonsterPower(context), nativeMonsterVariance, out roster)
-                    : DFMPDungeonRosterPolicy.TryCreateRoster(serverWorldSeed, context, dungeonRosterSize, out roster);
+                float resolvedMonsterPower = ResolveNativeMonsterPower(context);
+                DFMPDungeonRosterPolicy.NativeDungeonGenerationInputs nativeInputs;
+                bool rosterCreated;
+                if (nativeParity)
+                {
+                    rosterCreated = DFMPDungeonRosterPolicy.TryCreateNativeRoster(
+                        serverWorldSeed,
+                        context,
+                        resolvedMonsterPower,
+                        nativeMonsterVariance,
+                        out roster,
+                        out nativeInputs);
+                }
+                else
+                {
+                    nativeInputs = new DFMPDungeonRosterPolicy.NativeDungeonGenerationInputs();
+                    rosterCreated = DFMPDungeonRosterPolicy.TryCreateRoster(serverWorldSeed, context, dungeonRosterSize, out roster);
+                }
                 if (!rosterCreated)
                 {
                     Debug.LogWarning($"[DFMP Enemy] Rejected {(nativeParity ? "native" : "development")} dungeon roster activation: context={context}.");
                     return;
                 }
+
+                if (nativeParity)
+                    Debug.Log($"[DFMP Enemy] Native roster inputs: context={context}, dungeonType={nativeInputs.DungeonType}, recordId={nativeInputs.DungeonRecordId}, blockSeed={nativeInputs.BlockSeed}, waterLevel={nativeInputs.WaterLevel}, monsterPower={resolvedMonsterPower:0.###}, monsterVariance={nativeMonsterVariance}, count={roster.Length}.");
 
                 DFMPDynamicEnemyRegistryResult result = registry.RegisterRoster(true, roster);
                 if (result != DFMPDynamicEnemyRegistryResult.Accepted && result != DFMPDynamicEnemyRegistryResult.AlreadyRegistered)
