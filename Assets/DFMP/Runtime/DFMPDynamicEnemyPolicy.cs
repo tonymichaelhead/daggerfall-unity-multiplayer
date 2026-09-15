@@ -43,6 +43,7 @@ namespace DFMP.Runtime
         public int MobileType;
         public int Gender;
         public int Reaction;
+        public int ClassicSpawnDistanceType;
 
         public bool Equals(DFMPDynamicEnemyDescriptor other)
         {
@@ -50,7 +51,8 @@ namespace DFMP.Runtime
                 Mathf.Approximately(FacingYaw, other.FacingYaw) &&
                 MobileType == other.MobileType &&
                 Gender == other.Gender &&
-                Reaction == other.Reaction;
+                Reaction == other.Reaction &&
+                ClassicSpawnDistanceType == other.ClassicSpawnDistanceType;
         }
 
         public override bool Equals(object obj)
@@ -67,6 +69,7 @@ namespace DFMP.Runtime
                 hash = (hash * 397) ^ MobileType;
                 hash = (hash * 397) ^ Gender;
                 hash = (hash * 397) ^ Reaction;
+                hash = (hash * 397) ^ ClassicSpawnDistanceType;
                 return hash;
             }
         }
@@ -595,7 +598,8 @@ namespace DFMP.Runtime
                         FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
                         MobileType = mobileType,
                         Gender = isFixedMarker ? GetNativeGender(marker, mobileType) : (int)MobileGender.Unspecified,
-                        Reaction = isFixedMarker ? marker.Reaction : (int)DFBlock.EnemyReactionTypes.Hostile
+                        Reaction = isFixedMarker ? marker.Reaction : (int)DFBlock.EnemyReactionTypes.Hostile,
+                        ClassicSpawnDistanceType = marker.SoundIndex
                     });
                 }
             }
@@ -618,6 +622,13 @@ namespace DFMP.Runtime
                 mobileType != MobileTypes.Dreugh &&
                 mobileType != MobileTypes.Lamia ||
                 waterLevel != 10000 && waterLevel - 20 <= markerY;
+        }
+
+        public static float GetNativeAwarenessRange(int classicSpawnDistanceType)
+        {
+            short[] classicSpawnDistanceArray = { 1024, 384, 640, 768, 768, 768, 768 };
+            int index = Mathf.Clamp(classicSpawnDistanceType, 0, classicSpawnDistanceArray.Length - 1);
+            return classicSpawnDistanceArray[index] * MeshReader.GlobalScale;
         }
 
         static int GetNativeGender(NativeDungeonMarker marker, int mobileType)

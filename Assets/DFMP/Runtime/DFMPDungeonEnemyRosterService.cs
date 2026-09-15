@@ -209,7 +209,9 @@ namespace DFMP.Runtime
                     FacingYaw = record.Descriptor.FacingYaw,
                     CurrentTargetConnectionId = record.TargetConnectionId,
                     Targets = CreateSensoryTargets(context, record.Descriptor.DungeonLocalPosition),
-                    AwarenessRange = awarenessRange,
+                    AwarenessRange = string.Equals(enemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.Ordinal)
+                        ? DFMPDungeonRosterPolicy.GetNativeAwarenessRange(record.Descriptor.ClassicSpawnDistanceType)
+                        : awarenessRange,
                     AttackRange = attackProfile.Range,
                     MoveSpeed = moveSpeed,
                     DeltaTime = deltaTime,

@@ -436,6 +436,7 @@ namespace DFMP.Tests
                 Assert.AreEqual(record.Descriptor.MobileType, state.MobileType);
                 Assert.AreEqual(record.Descriptor.Gender, state.Gender);
                 Assert.AreEqual(record.Descriptor.Reaction, state.Reaction);
+                Assert.AreEqual(record.Descriptor.ClassicSpawnDistanceType, state.ClassicSpawnDistanceType);
                 Assert.AreEqual(record.TargetConnectionId, state.TargetConnectionId);
                 Assert.AreEqual(record.IsMoving, state.IsMoving);
                 Assert.AreEqual(0, state.AttackSequence);
@@ -808,6 +809,15 @@ namespace DFMP.Tests
             Assert.IsFalse(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Slaughterfish, 10000, 0));
             Assert.IsFalse(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Dreugh, 100, 50));
             Assert.IsTrue(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Dreugh, 100, 110));
+        }
+
+        [Test]
+        public void DungeonRoster_NativeAwarenessRangeMatchesDfuSpawnDistanceTable()
+        {
+            Assert.AreEqual(25.6f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(0));
+            Assert.AreEqual(9.6f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(1));
+            Assert.AreEqual(19.2f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(3));
+            Assert.AreEqual(19.2f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(99));
         }
 
         [Test]

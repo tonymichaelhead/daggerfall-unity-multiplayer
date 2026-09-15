@@ -38,6 +38,9 @@ namespace DFMP.Runtime
         int reaction;
 
         [SyncVar]
+        int classicSpawnDistanceType;
+
+        [SyncVar]
         int targetConnectionId;
 
         [SyncVar]
@@ -59,11 +62,12 @@ namespace DFMP.Runtime
         public int MobileType { get { return mobileType; } }
         public int Gender { get { return gender; } }
         public int Reaction { get { return reaction; } }
+        public int ClassicSpawnDistanceType { get { return classicSpawnDistanceType; } }
         public int TargetConnectionId { get { return targetConnectionId; } }
         public bool IsMoving { get { return isMoving; } }
         public int AttackSequence { get { return attackSequence; } }
         public DFMPDynamicEnemyAttackKind AttackKind { get { return (DFMPDynamicEnemyAttackKind)attackKind; } }
-        public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType, Gender = gender, Reaction = reaction }; } }
+        public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType, Gender = gender, Reaction = reaction, ClassicSpawnDistanceType = classicSpawnDistanceType }; } }
 
         public void SetLifecycleState(DFMPDynamicEnemyLifecycleState state)
         {
@@ -82,6 +86,7 @@ namespace DFMP.Runtime
             mobileType = descriptor.MobileType;
             gender = descriptor.Gender;
             reaction = descriptor.Reaction;
+            classicSpawnDistanceType = descriptor.ClassicSpawnDistanceType;
             targetConnectionId = newTargetConnectionId;
             isMoving = newIsMoving;
         }
@@ -104,6 +109,7 @@ namespace DFMP.Runtime
             mobileType = record.Descriptor.MobileType;
             gender = record.Descriptor.Gender;
             reaction = record.Descriptor.Reaction;
+            classicSpawnDistanceType = record.Descriptor.ClassicSpawnDistanceType;
             targetConnectionId = record.TargetConnectionId;
             isMoving = record.IsMoving;
             attackSequence = 0;
