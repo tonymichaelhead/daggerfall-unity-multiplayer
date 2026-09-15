@@ -751,6 +751,15 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_NativeWaterEnemyEligibilityMatchesDfu()
+        {
+            Assert.IsTrue(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Rat, 10000, 0));
+            Assert.IsFalse(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Slaughterfish, 10000, 0));
+            Assert.IsFalse(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Dreugh, 100, 50));
+            Assert.IsTrue(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Dreugh, 100, 110));
+        }
+
+        [Test]
         public void DungeonRoster_ResolvesNativeDungeonTypeBlockCoordinatesAndWaterLevel()
         {
             DFLocation location = new DFLocation

@@ -555,6 +555,9 @@ namespace DFMP.Runtime
                         mobileType = (int)(underwater ? waterEnemies[slot] : nonWaterEnemies[slot]);
                     }
 
+                    if (!ShouldSpawnNativeEnemy((MobileTypes)mobileType, inputs.WaterLevel, marker.MarkerY))
+                        continue;
+
                     ulong descriptorSeed = ComputeStableHash(string.Format(
                         CultureInfo.InvariantCulture,
                         "dfmp-native-descriptor-v1|{0}|{1}|{2}",
@@ -580,6 +583,14 @@ namespace DFMP.Runtime
 
             descriptors = nativeDescriptors.ToArray();
             return true;
+        }
+
+        public static bool ShouldSpawnNativeEnemy(MobileTypes mobileType, int waterLevel, int markerY)
+        {
+            return mobileType != MobileTypes.Slaughterfish &&
+                mobileType != MobileTypes.Dreugh &&
+                mobileType != MobileTypes.Lamia ||
+                waterLevel != 10000 && waterLevel - 20 <= markerY;
         }
 
         static int CreateNativeBlockSeed(int locationMapId, int dungeonBlockIndex)
