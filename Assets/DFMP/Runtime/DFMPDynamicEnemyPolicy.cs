@@ -235,7 +235,7 @@ namespace DFMP.Runtime
             };
 
             int targetIndex;
-            if (input.IsPassive)
+            if (input.IsPassive && input.CurrentTargetConnectionId <= 0)
                 return decision;
 
             float leashRange = Mathf.Max(0f, input.PursuitLeashRange);
@@ -302,6 +302,20 @@ namespace DFMP.Runtime
                 return false;
 
             float maximumDistanceSquared = input.AwarenessRange * input.AwarenessRange;
+            if (input.IsPassive)
+            {
+                for (int index = 0; index < input.Targets.Length; index++)
+                {
+                    if (input.Targets[index].ConnectionId == input.CurrentTargetConnectionId && IsValidTarget(input, index, maximumDistanceSquared))
+                    {
+                        targetIndex = index;
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
             for (int index = 0; index < input.Targets.Length; index++)
             {
                 if (input.Targets[index].ConnectionId == input.CurrentTargetConnectionId && !IsIgnoredTarget(input, index) && IsValidTarget(input, index, maximumDistanceSquared))

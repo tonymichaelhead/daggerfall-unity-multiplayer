@@ -392,6 +392,12 @@ namespace DFMP.Runtime
             if (result != DFMPDynamicEnemyRegistryResult.Accepted)
                 return false;
 
+            if (!killed && killerConnectionId > 0)
+            {
+                if (registry.TryUpdateAiState(true, enemyId, updatedRecord.Descriptor, killerConnectionId, false, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
+                    UpdateStateProjection(updatedRecord);
+            }
+
             if (killed)
             {
                 ClearTransientAiState(enemyId);

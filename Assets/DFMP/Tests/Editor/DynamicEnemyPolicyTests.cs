@@ -723,6 +723,31 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyAi_ProvokedPassiveEnemyRetainsOnlyCurrentTarget()
+        {
+            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = Vector3.zero,
+                CurrentTargetConnectionId = 46,
+                IsPassive = true,
+                Targets = new DFMPDynamicEnemySensoryTarget[]
+                {
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 46, DungeonLocalPosition = new Vector3(1f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
+                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 47, DungeonLocalPosition = new Vector3(2f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
+                },
+                AwarenessRange = 64f,
+                AttackRange = 2f,
+                MoveSpeed = 4f,
+                DeltaTime = 0.1f,
+                RequireLineOfSight = false
+            });
+
+            Assert.IsTrue(decision.HasTarget);
+            Assert.AreEqual(46, decision.TargetConnectionId);
+            Assert.IsTrue(decision.InAttackRange);
+        }
+
+        [Test]
         public void DynamicEnemyAttackPolicy_SelectsMeleeRangedAndMagicProfiles()
         {
             DFMPDynamicEnemyAttackProfile melee = DFMPDynamicEnemyAttackPolicy.GetProfile((int)MobileTypes.Orc, 2f, 8f, 12f);
