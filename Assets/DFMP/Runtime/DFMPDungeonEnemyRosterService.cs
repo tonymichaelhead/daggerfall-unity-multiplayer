@@ -472,7 +472,7 @@ namespace DFMP.Runtime
                 DFMPDynamicEnemyRecord[] roster;
                 bool nativeParity = string.Equals(enemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.Ordinal);
                 bool rosterCreated = nativeParity
-                    ? DFMPDungeonRosterPolicy.TryCreateNativeRoster(serverWorldSeed, context, nativeMonsterPower, nativeMonsterVariance, out roster)
+                    ? DFMPDungeonRosterPolicy.TryCreateNativeRoster(serverWorldSeed, context, ResolveNativeMonsterPower(context), nativeMonsterVariance, out roster)
                     : DFMPDungeonRosterPolicy.TryCreateRoster(serverWorldSeed, context, dungeonRosterSize, out roster);
                 if (!rosterCreated)
                 {
@@ -524,6 +524,23 @@ namespace DFMP.Runtime
 
             homePositionsByEnemyId[record.Identity.EnemyId] = record.Descriptor.DungeonLocalPosition;
             return record.Descriptor.DungeonLocalPosition;
+        }
+
+        float ResolveNativeMonsterPower(DFMPWorldContextKey context)
+        {
+            if (nativeMonsterPower > 0f)
+                return nativeMonsterPower;
+
+            int highestPlayerLevel = 1;
+            int[] connectionIds = DFMPNetworkServer.GetConnectionsInWorldContext(context);
+            for (int index = 0; index < connectionIds.Length; index++)
+            {
+                int playerLevel;
+                if (DFMPNetworkServer.TryGetPlayerLevel(connectionIds[index], out playerLevel))
+                    highestPlayerLevel = Math.Max(highestPlayerLevel, playerLevel);
+            }
+
+            return DFMPDungeonRosterPolicy.CalculateNativeMonsterPower(highestPlayerLevel);
         }
 
         void DespawnContext(DFMPWorldContextKey context)

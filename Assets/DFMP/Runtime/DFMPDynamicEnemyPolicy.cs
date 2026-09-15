@@ -460,6 +460,11 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static float CalculateNativeMonsterPower(int playerLevel)
+        {
+            return Mathf.Clamp01(Mathf.Max(1, playerLevel) / 20f);
+        }
+
         public static bool TryResolveNativeDungeonGenerationInputs(
             DFLocation location,
             DFMPWorldContextKey context,

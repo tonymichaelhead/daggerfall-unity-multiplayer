@@ -743,6 +743,14 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_CalculatesNativeMonsterPowerFromPlayerLevel()
+        {
+            Assert.AreEqual(0.05f, DFMPDungeonRosterPolicy.CalculateNativeMonsterPower(1));
+            Assert.AreEqual(0.5f, DFMPDungeonRosterPolicy.CalculateNativeMonsterPower(10));
+            Assert.AreEqual(1f, DFMPDungeonRosterPolicy.CalculateNativeMonsterPower(30));
+        }
+
+        [Test]
         public void DungeonRoster_ResolvesNativeDungeonTypeBlockCoordinatesAndWaterLevel()
         {
             DFLocation location = new DFLocation

@@ -91,6 +91,17 @@ namespace DFMP.Runtime
             return playerSessionStates.TryGetValue(connectionId, out sessionState);
         }
 
+        public static bool TryGetPlayerLevel(int connectionId, out int level)
+        {
+            level = 1;
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(connectionId, out joinDecision) || joinDecision.CharacterRecord == null)
+                return false;
+
+            level = Mathf.Max(1, joinDecision.CharacterRecord.Level);
+            return true;
+        }
+
         public static bool TryGetStartMarkerAssignment(int connectionId, out string markerName)
         {
             return startMarkerAssignments.TryGetValue(connectionId, out markerName);
