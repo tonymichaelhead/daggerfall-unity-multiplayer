@@ -30,6 +30,7 @@ namespace DFMP.Tests
             Assert.NotNull(config.Enemies);
             Assert.AreEqual("default", config.Enemies.WorldSeed);
             Assert.AreEqual(DFMPEnemyRosterModes.NativeParity, config.Enemies.EnemyRosterMode);
+            Assert.AreEqual(DFMPNativeRandomSelectionModes.Classic, config.Enemies.NativeRandomSelectionMode);
             Assert.AreEqual(0f, config.Enemies.NativeMonsterPower);
             Assert.AreEqual(4, config.Enemies.NativeMonsterVariance);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
@@ -51,6 +52,7 @@ namespace DFMP.Tests
                 {
                     WorldSeed = "  test-world  ",
                     EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
+                    NativeRandomSelectionMode = DFMPNativeRandomSelectionModes.Alternate,
                     NativeMonsterPower = 2f,
                     NativeMonsterVariance = 64,
                     DungeonRosterSize = DFMPDungeonRosterPolicy.MaximumRosterSize + 1,
@@ -74,6 +76,7 @@ namespace DFMP.Tests
 
             Assert.AreEqual("test-world", config.Enemies.WorldSeed);
             Assert.AreEqual(DFMPEnemyRosterModes.ConfiguredRoster, config.Enemies.EnemyRosterMode);
+            Assert.AreEqual(DFMPNativeRandomSelectionModes.Classic, config.Enemies.NativeRandomSelectionMode);
             Assert.AreEqual(0f, config.Enemies.NativeMonsterPower);
             Assert.AreEqual(4, config.Enemies.NativeMonsterVariance);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);

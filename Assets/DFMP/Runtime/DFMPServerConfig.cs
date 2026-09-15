@@ -11,6 +11,12 @@ namespace DFMP.Runtime
         public const string NativeParity = "NativeParity";
     }
 
+    public static class DFMPNativeRandomSelectionModes
+    {
+        public const string Classic = "Classic";
+        public const string Alternate = "Alternate";
+    }
+
     [Serializable]
     public class DFMPServerChatConfig
     {
@@ -62,6 +68,7 @@ namespace DFMP.Runtime
     {
         public string WorldSeed = "default";
         public string EnemyRosterMode = DFMPEnemyRosterModes.NativeParity;
+        public string NativeRandomSelectionMode = DFMPNativeRandomSelectionModes.Classic;
         public float NativeMonsterPower;
         public int NativeMonsterVariance = 4;
         public int DungeonRosterSize = 8;
@@ -87,6 +94,7 @@ namespace DFMP.Runtime
             EnemyRosterMode = string.Equals(EnemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.OrdinalIgnoreCase)
                 ? DFMPEnemyRosterModes.NativeParity
                 : DFMPEnemyRosterModes.ConfiguredRoster;
+            NativeRandomSelectionMode = DFMPNativeRandomSelectionModes.Classic;
             NativeMonsterPower = NativeMonsterPower >= 0f && NativeMonsterPower <= 1f ? NativeMonsterPower : 0f;
             NativeMonsterVariance = NativeMonsterVariance >= 0 && NativeMonsterVariance <= 32 ? NativeMonsterVariance : 4;
             DungeonRosterSize = DungeonRosterSize > 0 && DungeonRosterSize <= DFMPDungeonRosterPolicy.MaximumRosterSize ? DungeonRosterSize : 8;

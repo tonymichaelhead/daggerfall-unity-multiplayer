@@ -331,6 +331,7 @@ M8 closeout notes:
 - Native-parity roster generation must preserve the native meaning of random-monster, fixed-monster, quest, item, start, and enter markers; use the dungeon's native generation inputs and seed semantics; and retain native enemy type/count decisions. It must not treat every marker category as an interchangeable monster spawn.
 - `DungeonRosterSize` applies only to the post-MVP `ConfiguredRoster` mode and must never override native roster count in `NativeParity` mode. The native mode derives its count from native monster markers and generation semantics.
 - Configured roster controls must remain explicit and opt-in; a native parity failure must not silently switch to `ConfiguredRoster`.
+- **Post-MVP candidate:** support DFU's `AlternateRandomEnemySelection` algorithm as an optional native selection mode. MVP NativeParity intentionally locks to the classic/default selection path with stable DFMP seeding.
 - Roster activation remains scoped per dungeon **block** for interest and lifecycle purposes, but native parity must derive the complete dungeon/block roster from the same layout inputs as DFU. A five-block smaller-dungeon layout must not silently become five independently invented rosters.
 - Client-side visual proxies render billboard sprites via bare `DaggerfallMobileUnit` and expose hit targets for weapon/missile combat without native gameplay enemy components.
 - Server applies authoritative damage to dynamic enemies through the M7 damage chokepoint, transitioning enemies to `Dead` upon lethal damage.

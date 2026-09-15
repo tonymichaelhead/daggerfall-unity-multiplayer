@@ -21,6 +21,7 @@
   "Enemies": {
     "WorldSeed": "default",
     "EnemyRosterMode": "NativeParity",
+    "NativeRandomSelectionMode": "Classic",
     "NativeMonsterPower": 0.0,
     "NativeMonsterVariance": 4,
     "DungeonRosterSize": 6,
