@@ -705,6 +705,37 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_NativeEnemyResolverUsesFixedTypeAndDungeonEncounterTable()
+        {
+            int mobileType;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryResolveNativeEnemyType(
+                DFRegion.DungeonTypes.HumanStronghold,
+                true,
+                (int)MobileTypes.SkeletalWarrior,
+                0,
+                10000,
+                0f,
+                4,
+                1234UL,
+                0,
+                out mobileType));
+            Assert.AreEqual((int)MobileTypes.SkeletalWarrior, mobileType);
+
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryResolveNativeEnemyType(
+                DFRegion.DungeonTypes.HumanStronghold,
+                false,
+                0,
+                0,
+                10000,
+                0f,
+                4,
+                1234UL,
+                1,
+                out mobileType));
+            Assert.IsTrue(EnemyBasics.GetEnemy((MobileTypes)mobileType, out _));
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest

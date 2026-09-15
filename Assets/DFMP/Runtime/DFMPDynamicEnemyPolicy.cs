@@ -390,6 +390,54 @@ namespace DFMP.Runtime
             MobileTypes.Lich
         };
 
+        public static bool TryResolveNativeEnemyType(
+            DFRegion.DungeonTypes dungeonType,
+            bool isFixedMarker,
+            int fixedMobileType,
+            int markerY,
+            int waterLevel,
+            float monsterPower,
+            int monsterVariance,
+            ulong nativeSeed,
+            int markerOrdinal,
+            out int mobileType)
+        {
+            mobileType = 0;
+            if (isFixedMarker)
+            {
+                mobileType = fixedMobileType;
+                return fixedMobileType >= 0 && fixedMobileType < 43 || fixedMobileType >= 128 && fixedMobileType <= 146;
+            }
+
+            int dungeonIndex = (int)dungeonType;
+            if (dungeonIndex < 0 || dungeonIndex >= RandomEncounters.EncounterTables.Length)
+                return false;
+
+            bool useWaterTable = waterLevel < markerY;
+            RandomEncounterTable table = useWaterTable
+                ? RandomEncounters.EncounterTables[19]
+                : RandomEncounters.EncounterTables[dungeonIndex];
+            if (table.Enemies == null || table.Enemies.Length == 0)
+                return false;
+
+            int baseMonsterIndex = (int)(table.Enemies.Length * Mathf.Clamp01(monsterPower));
+            int minimumIndex = Math.Max(0, baseMonsterIndex - Math.Max(0, monsterVariance));
+            int maximumIndex = Math.Min(table.Enemies.Length - 1, baseMonsterIndex + Math.Max(0, monsterVariance));
+            if (minimumIndex > maximumIndex)
+                return false;
+
+            ulong hash = ComputeStableHash(string.Format(
+                CultureInfo.InvariantCulture,
+                "dfmp-native-encounter-v1|{0}|{1}|{2}|{3}",
+                nativeSeed,
+                (int)dungeonType,
+                markerOrdinal,
+                markerY));
+            int selectedIndex = minimumIndex + (int)(hash % (ulong)(maximumIndex - minimumIndex + 1));
+            mobileType = (int)table.Enemies[selectedIndex];
+            return true;
+        }
+
         public static ulong CreateServerWorldSeed(string configuredSeed)
         {
             return ComputeStableHash(string.IsNullOrWhiteSpace(configuredSeed) ? "default" : configuredSeed.Trim());
