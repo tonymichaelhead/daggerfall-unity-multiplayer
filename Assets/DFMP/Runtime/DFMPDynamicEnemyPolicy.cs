@@ -642,7 +642,7 @@ namespace DFMP.Runtime
         {
             MobileEnemy enemy;
             if (EnemyBasics.GetEnemy((MobileTypes)mobileType, out enemy) && enemy.Behaviour == MobileBehaviour.Flying)
-                return 0.75f;
+                return 0.72f;
 
             return 0f;
         }

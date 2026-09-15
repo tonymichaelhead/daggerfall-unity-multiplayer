@@ -332,6 +332,7 @@ M8 closeout notes:
 - `DungeonRosterSize` applies only to the post-MVP `ConfiguredRoster` mode and must never override native roster count in `NativeParity` mode. The native mode derives its count from native monster markers and generation semantics.
 - Configured roster controls must remain explicit and opt-in; a native parity failure must not silently switch to `ConfiguredRoster`.
 - **Post-MVP candidate:** support DFU's `AlternateRandomEnemySelection` algorithm as an optional native selection mode. MVP NativeParity intentionally locks to the classic/default selection path with stable DFMP seeding.
+- **Remaining movement bug:** grounded enemies can retain a stale vertical position while following a sloped dungeon floor. Add slope-aware vertical movement/ground re-resolution in the movement-hardening slice; this is intentionally deferred until the current presentation fixes are validated.
 - Roster activation remains scoped per dungeon **block** for interest and lifecycle purposes, but native parity must derive the complete dungeon/block roster from the same layout inputs as DFU. A five-block smaller-dungeon layout must not silently become five independently invented rosters.
 - Client-side visual proxies render billboard sprites via bare `DaggerfallMobileUnit` and expose hit targets for weapon/missile combat without native gameplay enemy components.
 - Server applies authoritative damage to dynamic enemies through the M7 damage chokepoint, transitioning enemies to `Dead` upon lethal damage.

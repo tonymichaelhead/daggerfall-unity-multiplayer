@@ -30,7 +30,7 @@ namespace DFMP.Runtime
                 16f,
                 Physics.DefaultRaycastLayers,
                 QueryTriggerInteraction.Ignore);
-            float nearestDistance = float.MaxValue;
+            float highestGroundY = float.NegativeInfinity;
             Vector3 groundPosition = scenePosition;
             bool foundGround = false;
             for (int index = 0; index < hits.Length; index++)
@@ -39,9 +39,9 @@ namespace DFMP.Runtime
                 if (hitCollider == null || hitCollider.transform == null || !hitCollider.transform.IsChildOf(dungeonTransform))
                     continue;
 
-                if (hits[index].distance < nearestDistance)
+                if (hits[index].point.y <= scenePosition.y + 0.05f && hits[index].point.y > highestGroundY)
                 {
-                    nearestDistance = hits[index].distance;
+                    highestGroundY = hits[index].point.y;
                     groundPosition.y = hits[index].point.y;
                     foundGround = true;
                 }
@@ -210,6 +210,7 @@ namespace DFMP.Runtime
         static DFMPDynamicEnemyPresentationController instance;
         readonly Dictionary<int, GameObject> proxies = new Dictionary<int, GameObject>();
         readonly Dictionary<int, GameObject> corpses = new Dictionary<int, GameObject>();
+        readonly Dictionary<int, bool> corpseVisibilityByStateId = new Dictionary<int, bool>();
 
         public static void EnsureInstance()
         {
@@ -245,6 +246,7 @@ namespace DFMP.Runtime
 
             proxies.Clear();
             corpses.Clear();
+            corpseVisibilityByStateId.Clear();
             if (instance == this)
                 instance = null;
         }
@@ -252,7 +254,10 @@ namespace DFMP.Runtime
         void Update()
         {
             if (!NetworkClient.isConnected)
+            {
+                HideAllPresentations();
                 return;
+            }
 
             // DaggerfallUnity is a per-scene singleton, so this must be re-asserted rather than set once at connect.
             if (DaggerfallUnity.Instance != null && DaggerfallUnity.Instance.Option_ImportEnemyPrefabs)
@@ -263,10 +268,16 @@ namespace DFMP.Runtime
 
             StreamingWorld streamingWorld = FindObjectOfType<StreamingWorld>();
             if (streamingWorld == null || !streamingWorld.IsReady || streamingWorld.LocalPlayerGPS == null)
+            {
+                HideAllPresentations();
                 return;
+            }
 
             if (!GameManager.HasInstance || GameObject.FindGameObjectWithTag("Player") == null)
+            {
+                HideAllPresentations();
                 return;
+            }
 
             if (GameManager.Instance.PlayerEntity != null)
                 GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
@@ -330,9 +341,7 @@ namespace DFMP.Runtime
                     GameObject corpse = GetOrCreateCorpse(stateId, state, playerEnterExit.Dungeon.transform);
                     if (corpse != null)
                     {
-                        Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
-                            playerEnterExit.Dungeon.transform.position,
-                            state.DungeonLocalPosition);
+                        Vector3 targetPosition = GetCorpseScenePosition(stateId, state, playerEnterExit.Dungeon.transform);
                         targetPosition = DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(playerEnterExit.Dungeon.transform, targetPosition);
 
                         bool isVisible = DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(
@@ -340,13 +349,27 @@ namespace DFMP.Runtime
                             targetPosition);
 
                         corpse.SetActive(isVisible);
+                        bool wasVisible;
+                        if (!corpseVisibilityByStateId.TryGetValue(stateId, out wasVisible) || wasVisible != isVisible)
+                        {
+                            corpseVisibilityByStateId[stateId] = isVisible;
+                            Debug.Log($"[DFMP Enemy] Corpse presentation {(isVisible ? "visible" : "hidden")}: enemyId={state.EnemyId}, context={playerContext}.");
+                        }
                     }
                 }
                 else
                 {
                     GameObject corpse;
                     if (corpses.TryGetValue(stateId, out corpse) && corpse != null)
+                    {
                         corpse.SetActive(false);
+                        bool wasVisible;
+                        if (corpseVisibilityByStateId.TryGetValue(stateId, out wasVisible) && wasVisible)
+                        {
+                            corpseVisibilityByStateId[stateId] = false;
+                            Debug.Log($"[DFMP Enemy] Corpse presentation hidden: enemyId={state.EnemyId}, lifecycle={state.LifecycleState}, eligible={isCorpseEligible}.");
+                        }
+                    }
                 }
             }
 
@@ -379,9 +402,7 @@ namespace DFMP.Runtime
             if (corpses.TryGetValue(stateId, out corpse) && corpse != null)
                 return corpse;
 
-            Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
-                dungeonTransform.position,
-                state.DungeonLocalPosition);
+            Vector3 targetPosition = GetCorpseScenePosition(stateId, state, dungeonTransform);
             targetPosition = DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(dungeonTransform, targetPosition);
 
             DaggerfallLoot loot;
@@ -400,6 +421,32 @@ namespace DFMP.Runtime
             corpses[stateId] = corpse;
             Debug.Log($"[DFMP Enemy] Created client corpse loot proxy: enemyId={state.EnemyId}.");
             return corpse;
+        }
+
+        Vector3 GetCorpseScenePosition(int stateId, DFMPDynamicEnemyState state, Transform dungeonTransform)
+        {
+            GameObject proxy;
+            if (proxies.TryGetValue(stateId, out proxy) && proxy != null)
+                return proxy.transform.position;
+
+            return DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
+                dungeonTransform.position,
+                state.DungeonLocalPosition);
+        }
+
+        void HideAllPresentations()
+        {
+            foreach (GameObject proxy in proxies.Values)
+            {
+                if (proxy != null)
+                    proxy.SetActive(false);
+            }
+
+            foreach (GameObject corpse in corpses.Values)
+            {
+                if (corpse != null)
+                    corpse.SetActive(false);
+            }
         }
 
         static void CreateAvatarHierarchy(Transform parent)
@@ -447,6 +494,7 @@ namespace DFMP.Runtime
                     Destroy(corpse);
 
                 corpses.Remove(staleKey);
+                corpseVisibilityByStateId.Remove(staleKey);
             }
         }
     }

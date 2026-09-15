@@ -824,8 +824,8 @@ namespace DFMP.Tests
         [Test]
         public void DungeonRoster_FlyingEnemiesReceiveHoverOffsetAfterGrounding()
         {
-            Assert.AreEqual(0.75f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.GiantBat));
-            Assert.AreEqual(0.75f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.Imp));
+            Assert.AreEqual(0.72f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.GiantBat));
+            Assert.AreEqual(0.72f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.Imp));
             Assert.AreEqual(0f, DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset((int)MobileTypes.Rat));
         }
 
