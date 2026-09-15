@@ -166,6 +166,7 @@ namespace DFMP.Runtime
         public Vector3 HomePosition;
         public float PursuitLeashRange;
         public int IgnoredTargetConnectionId;
+        public bool IsPassive;
     }
 
     public struct DFMPDynamicEnemyAiDecision
@@ -234,6 +235,9 @@ namespace DFMP.Runtime
             };
 
             int targetIndex;
+            if (input.IsPassive)
+                return decision;
+
             float leashRange = Mathf.Max(0f, input.PursuitLeashRange);
             if (leashRange > 0f && GetPlanarDistanceSquared(input.EnemyPosition, input.HomePosition) > leashRange * leashRange)
             {

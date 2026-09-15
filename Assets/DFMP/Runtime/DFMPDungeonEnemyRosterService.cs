@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DaggerfallConnect;
 using Mirror;
 using UnityEngine;
 
@@ -215,7 +216,8 @@ namespace DFMP.Runtime
                     RequireLineOfSight = requireLineOfSight,
                     HomePosition = GetHomePosition(record),
                     PursuitLeashRange = pursuitLeashRange,
-                    IgnoredTargetConnectionId = GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime)
+                    IgnoredTargetConnectionId = GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime),
+                    IsPassive = record.Descriptor.Reaction == (int)DFBlock.EnemyReactionTypes.Passive
                 });
 
                 DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
