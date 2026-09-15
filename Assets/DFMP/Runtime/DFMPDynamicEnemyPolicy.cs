@@ -355,6 +355,20 @@ namespace DFMP.Runtime
 
     public static class DFMPDungeonRosterPolicy
     {
+        public struct NativeDungeonMarker
+        {
+            public Vector3 DungeonLocalPosition;
+            public int TextureRecord;
+            public int MarkerY;
+            public int FixedMobileType;
+            public byte SoundIndex;
+
+            public bool IsFixedMonster
+            {
+                get { return TextureRecord == FixedMonsterTextureRecord; }
+            }
+        }
+
         public const int MaximumRosterSize = 64;
         public const int SpawnMarkerTextureArchive = 199;
         public const int SpawnMarkerTextureRecord = 11;
@@ -463,13 +477,27 @@ namespace DFMP.Runtime
 
         public static bool TryScanSpawnMarkers(DFBlock blockData, int blockX, int blockZ, out Vector3[] candidatePositions)
         {
-            candidatePositions = new Vector3[0];
+            NativeDungeonMarker[] markers;
+            if (!TryScanNativeDungeonMarkers(blockData, blockX, blockZ, out markers))
+            {
+                candidatePositions = new Vector3[0];
+                return false;
+            }
+
+            candidatePositions = new Vector3[markers.Length];
+            for (int index = 0; index < markers.Length; index++)
+                candidatePositions[index] = markers[index].DungeonLocalPosition;
+            return true;
+        }
+
+        public static bool TryScanNativeDungeonMarkers(DFBlock blockData, int blockX, int blockZ, out NativeDungeonMarker[] markers)
+        {
+            markers = new NativeDungeonMarker[0];
             if (blockData.RdbBlock.ObjectRootList == null || blockData.RdbBlock.ObjectRootList.Length == 0)
                 return false;
 
-            var candidates = new List<Vector3>();
+            var candidates = new List<NativeDungeonMarker>();
             Vector3 blockOffset = new Vector3(blockX * RDBLayout.RDBSide, 0f, blockZ * RDBLayout.RDBSide);
-
             for (int groupIndex = 0; groupIndex < blockData.RdbBlock.ObjectRootList.Length; groupIndex++)
             {
                 var group = blockData.RdbBlock.ObjectRootList[groupIndex];
@@ -479,19 +507,27 @@ namespace DFMP.Runtime
                 for (int objIndex = 0; objIndex < group.RdbObjects.Length; objIndex++)
                 {
                     var obj = group.RdbObjects[objIndex];
-                    if (obj.Type == DFBlock.RdbResourceTypes.Flat &&
-                        IsSpawnMarker(obj.Resources.FlatResource.TextureArchive, obj.Resources.FlatResource.TextureRecord))
+                    int textureRecord = obj.Resources.FlatResource.TextureRecord;
+                    if (obj.Type != DFBlock.RdbResourceTypes.Flat ||
+                        !IsSpawnMarker(obj.Resources.FlatResource.TextureArchive, textureRecord))
+                        continue;
+
+                    Vector3 markerPosition = new Vector3(obj.XPos, -obj.YPos, obj.ZPos) * MeshReader.GlobalScale;
+                    candidates.Add(new NativeDungeonMarker
                     {
-                        Vector3 markerPosition = new Vector3(obj.XPos, -obj.YPos, obj.ZPos) * MeshReader.GlobalScale;
-                        candidates.Add(blockOffset + markerPosition);
-                    }
+                        DungeonLocalPosition = blockOffset + markerPosition,
+                        TextureRecord = textureRecord,
+                        MarkerY = obj.YPos,
+                        FixedMobileType = (int)(obj.Resources.FlatResource.FactionOrMobileId & 0xff),
+                        SoundIndex = obj.Resources.FlatResource.SoundIndex
+                    });
                 }
             }
 
             if (candidates.Count == 0)
                 return false;
 
-            candidatePositions = candidates.ToArray();
+            markers = candidates.ToArray();
             return true;
         }
 

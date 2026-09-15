@@ -302,6 +302,13 @@ namespace DFMP.Tests
             Assert.IsTrue(DFMPDungeonRosterPolicy.TryScanSpawnMarkers(blockData, 2, 3, out candidates));
             Assert.AreEqual(1, candidates.Length);
 
+            DFMPDungeonRosterPolicy.NativeDungeonMarker[] markers;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryScanNativeDungeonMarkers(blockData, 2, 3, out markers));
+            Assert.AreEqual(1, markers.Length);
+            Assert.AreEqual(DFMPDungeonRosterPolicy.SpawnMarkerTextureRecord, markers[0].TextureRecord);
+            Assert.AreEqual(validFlat.YPos, markers[0].MarkerY);
+            Assert.AreEqual(0, markers[0].FixedMobileType);
+
             Vector3 expectedBlockOffset = new Vector3(2 * RDBLayout.RDBSide, 0f, 3 * RDBLayout.RDBSide);
             Vector3 expectedMarkerOffset = new Vector3(512, 256, 1024) * MeshReader.GlobalScale;
             Vector3 expectedPosition = expectedBlockOffset + expectedMarkerOffset;
