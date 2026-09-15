@@ -18,6 +18,42 @@ namespace DFMP.Runtime
             return dungeonRootPosition + dungeonLocalPosition;
         }
 
+        public static Vector3 ResolveCorpseGroundPosition(Transform dungeonTransform, Vector3 scenePosition)
+        {
+            if (dungeonTransform == null)
+                return scenePosition;
+
+            RaycastHit[] hits = Physics.RaycastAll(
+                scenePosition + Vector3.up * 8f,
+                Vector3.down,
+                16f,
+                Physics.DefaultRaycastLayers,
+                QueryTriggerInteraction.Ignore);
+            float nearestDistance = float.MaxValue;
+            Vector3 groundPosition = scenePosition;
+            bool foundGround = false;
+            for (int index = 0; index < hits.Length; index++)
+            {
+                Collider hitCollider = hits[index].collider;
+                if (hitCollider == null || hitCollider.transform == null || !hitCollider.transform.IsChildOf(dungeonTransform))
+                    continue;
+
+                if (hits[index].distance < nearestDistance)
+                {
+                    nearestDistance = hits[index].distance;
+                    groundPosition.y = hits[index].point.y;
+                    foundGround = true;
+                }
+            }
+
+            return foundGround ? groundPosition : scenePosition;
+        }
+
+        public static Vector3 GetAvatarLocalPosition()
+        {
+            return Vector3.zero;
+        }
+
         public static bool IsVisibleInLocalDungeon(Vector3 playerScenePosition, Vector3 enemyScenePosition, float maxDistance = MaximumVisibleDistance)
         {
             return Vector3.SqrMagnitude(enemyScenePosition - playerScenePosition) <= maxDistance * maxDistance;
@@ -91,6 +127,8 @@ namespace DFMP.Runtime
                 if (!string.IsNullOrWhiteSpace(enemy.LootTableKey))
                     DaggerfallLoot.GenerateItems(enemy.LootTableKey, loot.Items);
 
+                Debug.Log($"[DFMP Enemy] Created personal corpse loot: mobileType={(MobileTypes)mobileType}, lootTable={enemy.LootTableKey ?? string.Empty}, itemCount={loot.Items.Count}.");
+
                 loot.entityName = TextManager.Instance != null
                     ? TextManager.Instance.GetLocalizedEnemyName(enemy.ID)
                     : enemy.ID.ToString();
@@ -137,7 +175,7 @@ namespace DFMP.Runtime
                 {
                     mobile.SetEnemy(DaggerfallUnity.Instance, enemy, MobileReactions.Hostile, 0);
                     mobile.ChangeEnemyState(MobileStates.Idle);
-                    transform.localPosition = new Vector3(0f, mobile.GetSize().y * 0.5f, 0f);
+                    transform.localPosition = DFMPDynamicEnemyPresentation.GetAvatarLocalPosition();
                 }
 
                 mobileType = targetMobileType;
@@ -290,6 +328,7 @@ namespace DFMP.Runtime
                         Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
                             playerEnterExit.Dungeon.transform.position,
                             state.DungeonLocalPosition);
+                        targetPosition = DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(playerEnterExit.Dungeon.transform, targetPosition);
 
                         bool isVisible = DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(
                             playerEnterExit.transform.position,
@@ -338,6 +377,7 @@ namespace DFMP.Runtime
             Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
                 dungeonTransform.position,
                 state.DungeonLocalPosition);
+            targetPosition = DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(dungeonTransform, targetPosition);
 
             DaggerfallLoot loot;
             if (DFMPDynamicEnemyPresentation.TryCreateCorpseLootContainer(state.MobileType, targetPosition, dungeonTransform, out loot) && loot != null)

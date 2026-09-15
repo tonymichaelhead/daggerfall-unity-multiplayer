@@ -368,6 +368,8 @@ namespace DFMP.Tests
 
             Assert.IsTrue(DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(dungeonRoot, dungeonRoot + new Vector3(10f, 0f, 10f), 20f));
             Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(dungeonRoot, dungeonRoot + new Vector3(50f, 0f, 50f), 20f));
+            Assert.AreEqual(Vector3.zero, DFMPDynamicEnemyPresentation.GetAvatarLocalPosition());
+            Assert.AreEqual(new Vector3(10f, 4f, 30f), DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(null, new Vector3(10f, 4f, 30f)));
 
             GameObject enemyObject = new GameObject("DFMP_PresentationEligibilityTest");
             try

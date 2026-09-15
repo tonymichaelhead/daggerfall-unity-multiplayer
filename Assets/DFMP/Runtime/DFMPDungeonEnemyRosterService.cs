@@ -416,6 +416,7 @@ namespace DFMP.Runtime
                     LootTableKey = lootTableKey
                 });
 
+                Debug.Log($"[DFMP Enemy] Loot generated: enemyId={enemyId}, killer={killerConnectionId}, lootTable={lootTableKey ?? string.Empty}.");
                 Debug.Log($"[DFMP Enemy] Enemy killed: enemyId={enemyId}, killer={killerConnectionId}, amount={appliedAmount}.");
             }
 
