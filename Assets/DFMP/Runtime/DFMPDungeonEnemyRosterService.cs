@@ -34,6 +34,9 @@ namespace DFMP.Runtime
         float pursuitLeashRange;
         int stuckMovementTickLimit;
         float stuckRecoverySeconds;
+        string enemyRosterMode;
+        float nativeMonsterPower;
+        int nativeMonsterVariance;
         const float EnemyMovementRadius = 0.35f;
         const float EnemyMovementHeight = 1.8f;
         DFMPDungeonGeometryService geometryServiceForTesting;
@@ -50,6 +53,9 @@ namespace DFMP.Runtime
             config = config ?? new DFMPServerEnemyConfig();
             config.Normalize();
             serverWorldSeed = DFMPDungeonRosterPolicy.CreateServerWorldSeed(config.WorldSeed);
+            enemyRosterMode = config.EnemyRosterMode;
+            nativeMonsterPower = config.NativeMonsterPower;
+            nativeMonsterVariance = config.NativeMonsterVariance;
             dungeonRosterSize = config.DungeonRosterSize;
             despawnDelaySeconds = config.DespawnDelaySeconds;
             awarenessRange = config.AwarenessRange;
@@ -464,9 +470,13 @@ namespace DFMP.Runtime
             if (!enemyIdsByContext.TryGetValue(context, out enemyIds))
             {
                 DFMPDynamicEnemyRecord[] roster;
-                if (!DFMPDungeonRosterPolicy.TryCreateRoster(serverWorldSeed, context, dungeonRosterSize, out roster))
+                bool nativeParity = string.Equals(enemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.Ordinal);
+                bool rosterCreated = nativeParity
+                    ? DFMPDungeonRosterPolicy.TryCreateNativeRoster(serverWorldSeed, context, nativeMonsterPower, nativeMonsterVariance, out roster)
+                    : DFMPDungeonRosterPolicy.TryCreateRoster(serverWorldSeed, context, dungeonRosterSize, out roster);
+                if (!rosterCreated)
                 {
-                    Debug.LogWarning($"[DFMP Enemy] Rejected dungeon roster activation: context={context}.");
+                    Debug.LogWarning($"[DFMP Enemy] Rejected {(nativeParity ? "native" : "development")} dungeon roster activation: context={context}.");
                     return;
                 }
 

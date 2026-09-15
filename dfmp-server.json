@@ -21,6 +21,8 @@
   "Enemies": {
     "WorldSeed": "default",
     "EnemyRosterMode": "DevelopmentScaffold",
+    "NativeMonsterPower": 0.0,
+    "NativeMonsterVariance": 4,
     "DungeonRosterSize": 6,
     "DespawnDelaySeconds": 0.0,
     "AwarenessRange": 32.0,

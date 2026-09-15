@@ -61,6 +61,8 @@ namespace DFMP.Runtime
     {
         public string WorldSeed = "default";
         public string EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold;
+        public float NativeMonsterPower;
+        public int NativeMonsterVariance = 4;
         public int DungeonRosterSize = 8;
         public float DespawnDelaySeconds = 0f;
         public float AwarenessRange = 32f;
@@ -84,6 +86,8 @@ namespace DFMP.Runtime
             EnemyRosterMode = string.Equals(EnemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.OrdinalIgnoreCase)
                 ? DFMPEnemyRosterModes.NativeParity
                 : DFMPEnemyRosterModes.DevelopmentScaffold;
+            NativeMonsterPower = NativeMonsterPower >= 0f && NativeMonsterPower <= 1f ? NativeMonsterPower : 0f;
+            NativeMonsterVariance = NativeMonsterVariance >= 0 && NativeMonsterVariance <= 32 ? NativeMonsterVariance : 4;
             DungeonRosterSize = DungeonRosterSize > 0 && DungeonRosterSize <= DFMPDungeonRosterPolicy.MaximumRosterSize ? DungeonRosterSize : 8;
             DespawnDelaySeconds = DespawnDelaySeconds >= 0f && DespawnDelaySeconds <= 3600f ? DespawnDelaySeconds : 0f;
             AwarenessRange = AwarenessRange > 0f && AwarenessRange <= 256f ? AwarenessRange : 32f;

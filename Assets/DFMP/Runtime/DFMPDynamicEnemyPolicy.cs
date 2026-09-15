@@ -757,6 +757,42 @@ namespace DFMP.Runtime
             return false;
         }
 
+        public static bool TryCreateNativeRoster(
+            ulong serverWorldSeed,
+            DFMPWorldContextKey context,
+            float monsterPower,
+            int monsterVariance,
+            out DFMPDynamicEnemyRecord[] roster)
+        {
+            roster = new DFMPDynamicEnemyRecord[0];
+            if (DaggerfallUnity.Instance == null ||
+                !DaggerfallUnity.Instance.IsReady ||
+                DaggerfallUnity.Instance.ContentReader == null)
+                return false;
+
+            DFLocation location;
+            if (!DaggerfallUnity.Instance.ContentReader.GetLocation(context.RegionIndex, context.LocationIndex, out location))
+                return false;
+
+            NativeDungeonGenerationInputs inputs;
+            if (!TryResolveNativeDungeonGenerationInputs(location, context, out inputs))
+                return false;
+
+            if (DaggerfallUnity.Instance.ContentReader.BlockFileReader == null)
+                return false;
+
+            DFBlock blockData = DaggerfallUnity.Instance.ContentReader.BlockFileReader.GetBlock(context.DungeonBlockName);
+            NativeDungeonMarker[] markers;
+            if (!TryScanNativeDungeonMarkers(blockData, inputs.BlockX, inputs.BlockZ, out markers))
+                return false;
+
+            DFMPDynamicEnemyDescriptor[] descriptors;
+            if (!TryCreateNativeDescriptors(serverWorldSeed, context, inputs, markers, monsterPower, monsterVariance, out descriptors))
+                return false;
+
+            return TryCreateRosterFromDescriptors(serverWorldSeed, context, descriptors, out roster);
+        }
+
         public static Func<DFMPWorldContextKey, Vector3[]> MarkerProviderForTesting;
 
         public static bool TryScanContextSpawnMarkers(DFMPWorldContextKey context, out Vector3[] candidatePositions)

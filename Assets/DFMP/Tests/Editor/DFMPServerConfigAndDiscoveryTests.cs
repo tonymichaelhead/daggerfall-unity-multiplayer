@@ -30,6 +30,8 @@ namespace DFMP.Tests
             Assert.NotNull(config.Enemies);
             Assert.AreEqual("default", config.Enemies.WorldSeed);
             Assert.AreEqual(DFMPEnemyRosterModes.DevelopmentScaffold, config.Enemies.EnemyRosterMode);
+            Assert.AreEqual(0f, config.Enemies.NativeMonsterPower);
+            Assert.AreEqual(4, config.Enemies.NativeMonsterVariance);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
             Assert.AreEqual(8f, config.Enemies.RangedAttackRange);
             Assert.AreEqual(12f, config.Enemies.MagicAttackRange);
@@ -49,6 +51,8 @@ namespace DFMP.Tests
                 {
                     WorldSeed = "  test-world  ",
                     EnemyRosterMode = "nativeparity",
+                    NativeMonsterPower = 2f,
+                    NativeMonsterVariance = 64,
                     DungeonRosterSize = DFMPDungeonRosterPolicy.MaximumRosterSize + 1,
                     AwarenessRange = 512f,
                     AttackRange = 512f,
@@ -70,6 +74,8 @@ namespace DFMP.Tests
 
             Assert.AreEqual("test-world", config.Enemies.WorldSeed);
             Assert.AreEqual(DFMPEnemyRosterModes.NativeParity, config.Enemies.EnemyRosterMode);
+            Assert.AreEqual(0f, config.Enemies.NativeMonsterPower);
+            Assert.AreEqual(4, config.Enemies.NativeMonsterVariance);
             Assert.AreEqual(8, config.Enemies.DungeonRosterSize);
             Assert.AreEqual(32f, config.Enemies.AwarenessRange);
             Assert.AreEqual(2.25f, config.Enemies.AttackRange);
