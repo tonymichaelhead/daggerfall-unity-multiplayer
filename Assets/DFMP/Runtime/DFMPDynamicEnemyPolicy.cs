@@ -41,12 +41,14 @@ namespace DFMP.Runtime
         public Vector3 DungeonLocalPosition;
         public float FacingYaw;
         public int MobileType;
+        public int Gender;
 
         public bool Equals(DFMPDynamicEnemyDescriptor other)
         {
             return DungeonLocalPosition == other.DungeonLocalPosition &&
                 Mathf.Approximately(FacingYaw, other.FacingYaw) &&
-                MobileType == other.MobileType;
+                MobileType == other.MobileType &&
+                Gender == other.Gender;
         }
 
         public override bool Equals(object obj)
@@ -61,6 +63,7 @@ namespace DFMP.Runtime
                 int hash = DungeonLocalPosition.GetHashCode();
                 hash = (hash * 397) ^ FacingYaw.GetHashCode();
                 hash = (hash * 397) ^ MobileType;
+                hash = (hash * 397) ^ Gender;
                 return hash;
             }
         }
@@ -568,7 +571,8 @@ namespace DFMP.Runtime
                     {
                         DungeonLocalPosition = marker.DungeonLocalPosition,
                         FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
-                        MobileType = mobileType
+                        MobileType = mobileType,
+                        Gender = isFixedMarker ? GetNativeGender(marker) : (int)MobileGender.Unspecified
                     });
                 }
             }
@@ -591,6 +595,15 @@ namespace DFMP.Runtime
                 mobileType != MobileTypes.Dreugh &&
                 mobileType != MobileTypes.Lamia ||
                 waterLevel != 10000 && waterLevel - 20 <= markerY;
+        }
+
+        static int GetNativeGender(NativeDungeonMarker marker)
+        {
+            if ((marker.ClassicSlot & (int)DFBlock.EnemyGenders.Female) == (int)DFBlock.EnemyGenders.Female)
+                return (int)MobileGender.Female;
+            if ((marker.ClassicSlot & (int)DFBlock.EnemyGenders.Male) == (int)DFBlock.EnemyGenders.Male)
+                return (int)MobileGender.Male;
+            return (int)MobileGender.Unspecified;
         }
 
         static int CreateNativeBlockSeed(int locationMapId, int dungeonBlockIndex)

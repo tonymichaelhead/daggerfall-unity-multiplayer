@@ -32,6 +32,9 @@ namespace DFMP.Runtime
         int mobileType;
 
         [SyncVar]
+        int gender;
+
+        [SyncVar]
         int targetConnectionId;
 
         [SyncVar]
@@ -51,11 +54,12 @@ namespace DFMP.Runtime
         public Vector3 DungeonLocalPosition { get { return dungeonLocalPosition; } }
         public float FacingYaw { get { return facingYaw; } }
         public int MobileType { get { return mobileType; } }
+        public int Gender { get { return gender; } }
         public int TargetConnectionId { get { return targetConnectionId; } }
         public bool IsMoving { get { return isMoving; } }
         public int AttackSequence { get { return attackSequence; } }
         public DFMPDynamicEnemyAttackKind AttackKind { get { return (DFMPDynamicEnemyAttackKind)attackKind; } }
-        public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType }; } }
+        public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType, Gender = gender }; } }
 
         public void SetLifecycleState(DFMPDynamicEnemyLifecycleState state)
         {
@@ -72,6 +76,7 @@ namespace DFMP.Runtime
             dungeonLocalPosition = descriptor.DungeonLocalPosition;
             facingYaw = descriptor.FacingYaw;
             mobileType = descriptor.MobileType;
+            gender = descriptor.Gender;
             targetConnectionId = newTargetConnectionId;
             isMoving = newIsMoving;
         }
@@ -92,6 +97,7 @@ namespace DFMP.Runtime
             dungeonLocalPosition = record.Descriptor.DungeonLocalPosition;
             facingYaw = record.Descriptor.FacingYaw;
             mobileType = record.Descriptor.MobileType;
+            gender = record.Descriptor.Gender;
             targetConnectionId = record.TargetConnectionId;
             isMoving = record.IsMoving;
             attackSequence = 0;
