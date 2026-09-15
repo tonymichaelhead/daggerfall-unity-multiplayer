@@ -358,6 +358,7 @@ namespace DFMP.Runtime
         public struct NativeDungeonGenerationInputs
         {
             public DFRegion.DungeonTypes DungeonType;
+            public int DungeonRecordId;
             public int BlockX;
             public int BlockZ;
             public int WaterLevel;
@@ -370,6 +371,7 @@ namespace DFMP.Runtime
             public int MarkerY;
             public int FixedMobileType;
             public byte SoundIndex;
+            public int ClassicSlot;
 
             public bool IsFixedMonster
             {
@@ -487,6 +489,7 @@ namespace DFMP.Runtime
             inputs = new NativeDungeonGenerationInputs
             {
                 DungeonType = location.MapTableData.DungeonType,
+                DungeonRecordId = location.Dungeon.RecordElement.Header.LocationId,
                 BlockX = block.X,
                 BlockZ = block.Z,
                 WaterLevel = block.WaterLevel
@@ -508,44 +511,55 @@ namespace DFMP.Runtime
                 return false;
 
             var nativeDescriptors = new List<DFMPDynamicEnemyDescriptor>();
-            int randomMarkerOrdinal = 0;
-            for (int index = 0; index < markers.Length; index++)
+            MobileTypes[] nonWaterEnemies;
+            MobileTypes[] waterEnemies;
+            DFRandom.SaveSeed();
+            try
             {
-                NativeDungeonMarker marker = markers[index];
-                bool isRandomMarker = marker.TextureRecord == RandomMonsterTextureRecord;
-                bool isFixedMarker = marker.TextureRecord == FixedMonsterTextureRecord;
-                if (!isRandomMarker && !isFixedMarker)
-                    continue;
-
-                int mobileType;
-                if (!TryResolveNativeEnemyType(
-                    inputs.DungeonType,
-                    isFixedMarker,
-                    marker.FixedMobileType,
-                    marker.MarkerY,
-                    inputs.WaterLevel,
-                    monsterPower,
-                    monsterVariance,
-                    serverWorldSeed,
-                    randomMarkerOrdinal,
-                    out mobileType))
+                if (!TryCreateClassicEncounterSlots(inputs, monsterPower, monsterVariance, out nonWaterEnemies, out waterEnemies))
                     return false;
 
-                if (isRandomMarker)
-                    randomMarkerOrdinal++;
-
-                ulong descriptorSeed = ComputeStableHash(string.Format(
-                    CultureInfo.InvariantCulture,
-                    "dfmp-native-descriptor-v1|{0}|{1}|{2}",
-                    serverWorldSeed,
-                    CreateDungeonSeedMaterial(serverWorldSeed, context),
-                    index));
-                nativeDescriptors.Add(new DFMPDynamicEnemyDescriptor
+                DFRandom.srand(inputs.DungeonRecordId);
+                for (int index = 0; index < markers.Length; index++)
                 {
-                    DungeonLocalPosition = marker.DungeonLocalPosition,
-                    FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
-                    MobileType = mobileType
-                });
+                    NativeDungeonMarker marker = markers[index];
+                    bool isRandomMarker = marker.TextureRecord == RandomMonsterTextureRecord;
+                    bool isFixedMarker = marker.TextureRecord == FixedMonsterTextureRecord;
+                    if (!isRandomMarker && !isFixedMarker)
+                        continue;
+
+                    int mobileType;
+                    if (isFixedMarker)
+                    {
+                        mobileType = marker.FixedMobileType;
+                    }
+                    else
+                    {
+                        int slot = marker.ClassicSlot == 0 ? DFRandom.random_range(1, 7) : marker.ClassicSlot;
+                        if (slot < 0 || slot >= nonWaterEnemies.Length)
+                            return false;
+
+                        bool underwater = inputs.WaterLevel < marker.MarkerY;
+                        mobileType = (int)(underwater ? waterEnemies[slot] : nonWaterEnemies[slot]);
+                    }
+
+                    ulong descriptorSeed = ComputeStableHash(string.Format(
+                        CultureInfo.InvariantCulture,
+                        "dfmp-native-descriptor-v1|{0}|{1}|{2}",
+                        serverWorldSeed,
+                        CreateDungeonSeedMaterial(serverWorldSeed, context),
+                        index));
+                    nativeDescriptors.Add(new DFMPDynamicEnemyDescriptor
+                    {
+                        DungeonLocalPosition = marker.DungeonLocalPosition,
+                        FacingYaw = (float)((descriptorSeed >> 16) % 360UL),
+                        MobileType = mobileType
+                    });
+                }
+            }
+            finally
+            {
+                DFRandom.RestoreSeed();
             }
 
             if (nativeDescriptors.Count == 0)
@@ -553,6 +567,62 @@ namespace DFMP.Runtime
 
             descriptors = nativeDescriptors.ToArray();
             return true;
+        }
+
+        static bool TryCreateClassicEncounterSlots(
+            NativeDungeonGenerationInputs inputs,
+            float monsterPower,
+            int monsterVariance,
+            out MobileTypes[] nonWaterEnemies,
+            out MobileTypes[] waterEnemies)
+        {
+            nonWaterEnemies = new MobileTypes[0];
+            waterEnemies = new MobileTypes[0];
+            int dungeonIndex = (int)inputs.DungeonType;
+            if (dungeonIndex < 0 || dungeonIndex >= RandomEncounters.EncounterTables.Length)
+                return false;
+
+            int playerLevel = Mathf.Max(1, Mathf.RoundToInt(monsterPower * 20f));
+            nonWaterEnemies = new MobileTypes[256];
+            waterEnemies = new MobileTypes[256];
+            DFRandom.srand(inputs.DungeonRecordId);
+            for (int index = 0; index < 256; index++)
+            {
+                nonWaterEnemies[index] = ChooseClassicRandomEnemyType(RandomEncounters.EncounterTables[dungeonIndex], playerLevel);
+                waterEnemies[index] = ChooseClassicRandomEnemyType(RandomEncounters.EncounterTables[19], playerLevel);
+            }
+
+            return true;
+        }
+
+        static MobileTypes ChooseClassicRandomEnemyType(RandomEncounterTable table, int playerLevel)
+        {
+            int minimumIndex = 0;
+            int maximumIndex = table.Enemies.Length;
+            int random = DFRandom.random_range_inclusive(1, 100);
+            if (random > 95 && playerLevel <= 5)
+                maximumIndex = playerLevel + 2;
+            else if (random > 80)
+                maximumIndex = playerLevel + 1;
+            else
+            {
+                minimumIndex = playerLevel - 3;
+                maximumIndex = playerLevel + 3;
+            }
+
+            if (minimumIndex < 0)
+            {
+                minimumIndex = 0;
+                maximumIndex = 5;
+            }
+            else if (maximumIndex > 19)
+            {
+                minimumIndex = 14;
+                maximumIndex = 19;
+            }
+
+            maximumIndex = Math.Min(maximumIndex, table.Enemies.Length - 1);
+            return table.Enemies[DFRandom.random_range_inclusive(minimumIndex, maximumIndex)];
         }
 
         public static bool TryCreateRosterFromDescriptors(
@@ -658,7 +728,8 @@ namespace DFMP.Runtime
                         TextureRecord = textureRecord,
                         MarkerY = obj.YPos,
                         FixedMobileType = (int)(obj.Resources.FlatResource.FactionOrMobileId & 0xff),
-                        SoundIndex = obj.Resources.FlatResource.SoundIndex
+                        SoundIndex = obj.Resources.FlatResource.SoundIndex,
+                        ClassicSlot = obj.Resources.FlatResource.Flags
                     });
                 }
             }
