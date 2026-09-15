@@ -743,6 +743,42 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_ResolvesNativeDungeonTypeBlockCoordinatesAndWaterLevel()
+        {
+            DFLocation location = new DFLocation
+            {
+                Loaded = true,
+                HasDungeon = true,
+                MapTableData = new DFRegion.RegionMapTable
+                {
+                    DungeonType = DFRegion.DungeonTypes.Crypt
+                },
+                Dungeon = new DFLocation.LocationDungeon
+                {
+                    Blocks = new DFLocation.DungeonBlock[]
+                    {
+                        new DFLocation.DungeonBlock
+                        {
+                            X = -2,
+                            Z = 3,
+                            BlockName = "S0000161.RDB",
+                            WaterLevel = 144
+                        }
+                    }
+                }
+            };
+            DFMPWorldContextKey context = CreateDungeonContext();
+            context.DungeonBlockIndex = 0;
+
+            DFMPDungeonRosterPolicy.NativeDungeonGenerationInputs inputs;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryResolveNativeDungeonGenerationInputs(location, context, out inputs));
+            Assert.AreEqual(DFRegion.DungeonTypes.Crypt, inputs.DungeonType);
+            Assert.AreEqual(-2, inputs.BlockX);
+            Assert.AreEqual(3, inputs.BlockZ);
+            Assert.AreEqual(144, inputs.WaterLevel);
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest

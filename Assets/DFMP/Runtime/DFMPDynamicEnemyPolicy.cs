@@ -355,6 +355,14 @@ namespace DFMP.Runtime
 
     public static class DFMPDungeonRosterPolicy
     {
+        public struct NativeDungeonGenerationInputs
+        {
+            public DFRegion.DungeonTypes DungeonType;
+            public int BlockX;
+            public int BlockZ;
+            public int WaterLevel;
+        }
+
         public struct NativeDungeonMarker
         {
             public Vector3 DungeonLocalPosition;
@@ -449,6 +457,35 @@ namespace DFMP.Runtime
                 markerY));
             int selectedIndex = minimumIndex + (int)(hash % (ulong)(maximumIndex - minimumIndex + 1));
             mobileType = (int)table.Enemies[selectedIndex];
+            return true;
+        }
+
+        public static bool TryResolveNativeDungeonGenerationInputs(
+            DFLocation location,
+            DFMPWorldContextKey context,
+            out NativeDungeonGenerationInputs inputs)
+        {
+            inputs = new NativeDungeonGenerationInputs();
+            if (context.Kind != DFMPWorldContextKind.Dungeon ||
+                !location.Loaded ||
+                !location.HasDungeon ||
+                location.Dungeon.Blocks == null ||
+                context.DungeonBlockIndex < 0 ||
+                context.DungeonBlockIndex >= location.Dungeon.Blocks.Length)
+                return false;
+
+            DFLocation.DungeonBlock block = location.Dungeon.Blocks[context.DungeonBlockIndex];
+            if (!string.IsNullOrWhiteSpace(context.DungeonBlockName) &&
+                !string.Equals(block.BlockName, context.DungeonBlockName, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            inputs = new NativeDungeonGenerationInputs
+            {
+                DungeonType = location.MapTableData.DungeonType,
+                BlockX = block.X,
+                BlockZ = block.Z,
+                WaterLevel = block.WaterLevel
+            };
             return true;
         }
 
