@@ -51,6 +51,7 @@ namespace DFMP.Runtime
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> pendingAdminKickConnections = new HashSet<int>();
+        static readonly HashSet<int> godModeConnections = new HashSet<int>();
         static readonly DFMPChatLifecycleNotifier chatLifecycleNotifier = new DFMPChatLifecycleNotifier();
         static int nextTransitionAssignmentId = 1;
 
@@ -352,6 +353,8 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPAdminRosterRequest>(OnAdminRosterRequest);
             NetworkServer.RegisterHandler<DFMPAdminKickRequest>(OnAdminKickRequest);
             NetworkServer.RegisterHandler<DFMPAdminKickAcknowledgement>(OnAdminKickAcknowledgement);
+            NetworkServer.RegisterHandler<DFMPDeveloperGodModeRequest>(OnDeveloperGodModeRequest);
+            NetworkServer.RegisterHandler<DFMPDeveloperTeleportDungeonRequest>(OnDeveloperTeleportDungeonRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperInfectSelfRequest>(OnDeveloperInfectSelfRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperAdvanceTimeRequest>(OnDeveloperAdvanceTimeRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperDamagePlayerRequest>(OnDeveloperDamagePlayerRequest);
@@ -1099,6 +1102,100 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Developer] Authorized vampirism infection: connectionId={conn.connectionId}.");
         }
 
+        private static void OnDeveloperGodModeRequest(NetworkConnectionToClient conn, DFMPDeveloperGodModeRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPDeveloperCommandRejectionReason rejectionReason = DFMPDeveloperCommandPolicy.GetInfectSelfRejectionReason(new DFMPDeveloperCommandContext
+            {
+                CommandsEnabled = Config != null && Config.Developer != null && Config.Developer.CommandsEnabled,
+                HasSession = sessionState != null,
+                SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed
+            });
+
+            if (!DFMPDeveloperCommandPolicy.IsAccepted(rejectionReason))
+            {
+                conn.Send(new DFMPDeveloperGodModeResponse { Accepted = false, Enabled = request.Enabled, Reason = rejectionReason.ToString() });
+                Debug.LogWarning($"[DFMP Developer] Rejected godmode: connectionId={conn.connectionId}, reason={rejectionReason}.");
+                return;
+            }
+
+            if (request.Enabled)
+                godModeConnections.Add(conn.connectionId);
+            else
+                godModeConnections.Remove(conn.connectionId);
+
+            conn.Send(new DFMPDeveloperGodModeResponse { Accepted = true, Enabled = request.Enabled, Reason = string.Empty });
+            Debug.Log($"[DFMP Developer] Godmode changed: connectionId={conn.connectionId}, enabled={request.Enabled}.");
+        }
+
+        private static void OnDeveloperTeleportDungeonRequest(NetworkConnectionToClient conn, DFMPDeveloperTeleportDungeonRequest request)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPDeveloperCommandRejectionReason commandReason = DFMPDeveloperCommandPolicy.GetInfectSelfRejectionReason(new DFMPDeveloperCommandContext
+            {
+                CommandsEnabled = Config != null && Config.Developer != null && Config.Developer.CommandsEnabled,
+                HasSession = sessionState != null,
+                SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed
+            });
+            if (!DFMPDeveloperCommandPolicy.IsAccepted(commandReason))
+            {
+                conn.Send(new DFMPDeveloperTeleportDungeonResponse { Accepted = false, RegionName = request.RegionName, LocationName = request.LocationName, Reason = commandReason.ToString() });
+                return;
+            }
+
+            if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.ContentReader == null || DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
+            {
+                conn.Send(new DFMPDeveloperTeleportDungeonResponse { Accepted = false, RegionName = request.RegionName, LocationName = request.LocationName, Reason = "Location data unavailable" });
+                return;
+            }
+
+            DFLocation location = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetLocation(request.RegionName, request.LocationName);
+            if (!location.Loaded || !location.HasDungeon)
+            {
+                conn.Send(new DFMPDeveloperTeleportDungeonResponse { Accepted = false, RegionName = request.RegionName, LocationName = request.LocationName, Reason = "Dungeon not found" });
+                return;
+            }
+
+            DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
+            DFMPWorldContextKey context = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Dungeon,
+                MapPixelX = mapPixel.X,
+                MapPixelY = mapPixel.Y,
+                RegionIndex = location.RegionIndex,
+                LocationIndex = location.LocationIndex,
+                LocationId = location.Name,
+                InstanceId = string.Empty,
+                DungeonBlockIndex = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? 0 : -1,
+                DungeonBlockName = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? location.Dungeon.Blocks[0].BlockName : string.Empty
+            };
+            if (context.DungeonBlockIndex < 0)
+            {
+                conn.Send(new DFMPDeveloperTeleportDungeonResponse { Accepted = false, RegionName = request.RegionName, LocationName = request.LocationName, Reason = "Dungeon has no blocks" });
+                return;
+            }
+
+            DFMPWorldPosition position = DFMPSpawnProtocol.GetMapPixelCenter(mapPixel.X, mapPixel.Y);
+            bool accepted = TrySendTransitionAssignment(conn, DFMPTransitionKind.DungeonEntry, position, context);
+            conn.Send(new DFMPDeveloperTeleportDungeonResponse
+            {
+                Accepted = accepted,
+                RegionName = request.RegionName,
+                LocationName = request.LocationName,
+                Reason = accepted ? string.Empty : "Transition assignment rejected"
+            });
+            if (accepted)
+                Debug.Log($"[DFMP Developer] Authorized dungeon teleport: connectionId={conn.connectionId}, region='{request.RegionName}', location='{request.LocationName}'.");
+        }
+
         private static void OnDeveloperAdvanceTimeRequest(NetworkConnectionToClient conn, DFMPDeveloperAdvanceTimeRequest request)
         {
             if (conn == null)
@@ -1389,6 +1486,15 @@ namespace DFMP.Runtime
                 return false;
             }
 
+            if (godModeConnections.Contains(intent.TargetConnectionId))
+            {
+                lastDamageSequences[conn.connectionId] = intent.Sequence;
+                lastDamageRequestIds[conn.connectionId] = intent.RequestId;
+                RecordAcceptedDamage(conn.connectionId);
+                Debug.Log($"[DFMP Developer] Suppressed player damage for godmode target: source={conn.connectionId}, target={intent.TargetConnectionId}, amount={intent.Amount}.");
+                return true;
+            }
+
             DFMPVitalApplicationResult applicationResult = targetVitals.ApplyDamage(intent.VitalKind, intent.Amount);
             if (!applicationResult.Accepted)
             {
@@ -1459,6 +1565,12 @@ namespace DFMP.Runtime
                 assignmentState != null && assignmentState.HasPendingAssignment;
             if (!targetSession.SpawnConfirmed || targetSession.IsDead || targetVitals.Health <= 0 || hasPendingTransition)
                 return false;
+
+            if (godModeConnections.Contains(targetConnectionId))
+            {
+                Debug.Log($"[DFMP Developer] Suppressed enemy damage for godmode player: target={targetConnectionId}, enemyId={enemyId}, amount={amount}.");
+                return true;
+            }
 
             DFMPVitalApplicationResult applicationResult = targetVitals.ApplyDamage(DFMPVitalKind.Health, amount);
             if (!applicationResult.Accepted)
@@ -1978,6 +2090,7 @@ namespace DFMP.Runtime
 
             playerSessionStates.Remove(conn.connectionId);
             joinDecisions.Remove(conn.connectionId);
+            godModeConnections.Remove(conn.connectionId);
             DFMPWorldContextKey previousContext;
             bool hadPreviousContext = worldOccupancy.TryGetContext(conn.connectionId, out previousContext);
             worldOccupancy.Remove(conn.connectionId);

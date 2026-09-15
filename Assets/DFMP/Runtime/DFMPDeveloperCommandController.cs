@@ -42,6 +42,18 @@ namespace DFMP.Runtime
                     "Ask the DFMP server to apply bounded local quest PvE damage to this player.",
                     "dfmp_damage_self <amount>",
                     DamageSelf);
+                NetworkClient.RegisterHandler<DFMPDeveloperGodModeResponse>(OnGodModeResponse);
+                ConsoleCommandsDatabase.RegisterCommand(
+                    "dfmp_godmode",
+                    "Toggle server-authorized invulnerability for this player.",
+                    "dfmp_godmode <on|off>",
+                    GodMode);
+                NetworkClient.RegisterHandler<DFMPDeveloperTeleportDungeonResponse>(OnTeleportDungeonResponse);
+                ConsoleCommandsDatabase.RegisterCommand(
+                    "dfmp_teleport_dungeon",
+                    "Teleport this player to a named dungeon for testing.",
+                    "dfmp_teleport_dungeon <region> <location>",
+                    TeleportDungeon);
                 registered = true;
             }
             catch (Exception ex)
@@ -133,6 +145,54 @@ namespace DFMP.Runtime
 
             NetworkClient.Send(new DFMPDeveloperDamageSelfRequest { Amount = amount });
             return $"Requested local quest PvE damage: amount={amount}.";
+        }
+
+
+        static string GodMode(params string[] args)
+        {
+            if (args == null || args.Length != 1 || (!string.Equals(args[0], "on", StringComparison.OrdinalIgnoreCase) && !string.Equals(args[0], "off", StringComparison.OrdinalIgnoreCase)))
+                return "Usage: dfmp_godmode <on|off>";
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return "DFMP client is not connected and ready.";
+
+            bool enabled = string.Equals(args[0], "on", StringComparison.OrdinalIgnoreCase);
+            NetworkClient.Send(new DFMPDeveloperGodModeRequest { Enabled = enabled });
+            return $"Requested server godmode: enabled={enabled}.";
+        }
+
+        static void OnGodModeResponse(DFMPDeveloperGodModeResponse response)
+        {
+            if (response.Accepted)
+                Debug.Log($"[DFMP Developer] Godmode {(response.Enabled ? "enabled" : "disabled") }.");
+            else
+                Debug.LogWarning($"[DFMP Developer] Server rejected godmode: reason={response.Reason}.");
+        }
+
+        static string TeleportDungeon(params string[] args)
+        {
+            if (args == null || args.Length < 2 || string.IsNullOrWhiteSpace(args[0]))
+                return "Usage: dfmp_teleport_dungeon <region> <location>";
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return "DFMP client is not connected and ready.";
+
+            string locationName = string.Join(" ", args, 1, args.Length - 1).Trim('"');
+            if (string.IsNullOrWhiteSpace(locationName))
+                return "Usage: dfmp_teleport_dungeon <region> <location>";
+
+            NetworkClient.Send(new DFMPDeveloperTeleportDungeonRequest
+            {
+                RegionName = args[0],
+                LocationName = locationName
+            });
+            return $"Requested dungeon teleport: region='{args[0]}', location='{locationName}'.";
+        }
+
+        static void OnTeleportDungeonResponse(DFMPDeveloperTeleportDungeonResponse response)
+        {
+            if (response.Accepted)
+                Debug.Log($"[DFMP Developer] Dungeon teleport accepted: region='{response.RegionName}', location='{response.LocationName}'.");
+            else
+                Debug.LogWarning($"[DFMP Developer] Dungeon teleport rejected: region='{response.RegionName}', location='{response.LocationName}', reason={response.Reason}.");
         }
     }
 }

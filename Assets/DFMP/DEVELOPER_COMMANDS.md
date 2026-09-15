@@ -72,6 +72,29 @@ dfmp_damage_self <amount>
 
 This exercises the beta-trusted local quest PvE path. The server derives both source and target from the submitting connection, so the request can only damage its owner. It uses the same bounds, cooldown, rate-limit, persistence, replication, and death/respawn chokepoint as PvP. It does not represent a synchronized quest enemy; actual quest-enemy production remains client-local and future native hooks remain out of scope.
 
+## `dfmp_godmode`
+
+Run this in the connected DFMP client's DFU console while developer commands are enabled:
+
+```text
+dfmp_godmode on
+dfmp_godmode off
+```
+
+This toggles server-side invulnerability for the requesting connection. While enabled, accepted player damage and server-owned enemy damage are suppressed at the authoritative damage boundary, so health, death, respawn, and persistence state are not changed by those hits. Suppressed hits are logged for testing.
+
+Godmode is an ephemeral developer test flag. It is cleared on disconnect, disabled unless developer commands are enabled, and is not an administrator permission or production gameplay feature. Admin-menu access is deferred to the future admin action surface.
+
+## `dfmp_teleport_dungeon`
+
+Run this in the connected DFMP client's DFU console while developer commands are enabled:
+
+```text
+dfmp_teleport_dungeon Daggerfall "Privateer's Hold"
+```
+
+The server resolves the region and location name, verifies that the location has a dungeon, and sends the normal server-authoritative dungeon-entry assignment. This works even when the location is not revealed on the local fast-travel map. The command is developer-only and intended for testing; it does not grant general teleport or administrator permissions.
+
 The command is intentionally developer-only and bounded. It accepts only a target connection ID and damage amount for this smoke-test path. Future server actions should use the same validated service boundary:
 
 - R2 scripts call server actions rather than mutating player objects directly.

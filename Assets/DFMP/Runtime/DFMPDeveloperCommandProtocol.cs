@@ -43,6 +43,32 @@ namespace DFMP.Runtime
         public int Amount;
     }
 
+    public struct DFMPDeveloperGodModeRequest : NetworkMessage
+    {
+        public bool Enabled;
+    }
+
+    public struct DFMPDeveloperGodModeResponse : NetworkMessage
+    {
+        public bool Accepted;
+        public bool Enabled;
+        public string Reason;
+    }
+
+    public struct DFMPDeveloperTeleportDungeonRequest : NetworkMessage
+    {
+        public string RegionName;
+        public string LocationName;
+    }
+
+    public struct DFMPDeveloperTeleportDungeonResponse : NetworkMessage
+    {
+        public bool Accepted;
+        public string RegionName;
+        public string LocationName;
+        public string Reason;
+    }
+
     public struct DFMPDeveloperCommandContext
     {
         public bool CommandsEnabled;
