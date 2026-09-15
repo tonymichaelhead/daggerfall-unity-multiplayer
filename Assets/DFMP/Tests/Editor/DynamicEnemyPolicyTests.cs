@@ -868,6 +868,45 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRoster_NativeMarkerPathBuildsEndToEndRecords()
+        {
+            DFMPWorldContextKey context = CreateDungeonContext();
+            var inputs = new DFMPDungeonRosterPolicy.NativeDungeonGenerationInputs
+            {
+                DungeonType = DFRegion.DungeonTypes.Crypt,
+                DungeonRecordId = 42,
+                BlockSeed = 123,
+                BlockX = 0,
+                BlockZ = 0,
+                WaterLevel = 10000
+            };
+            var markers = new DFMPDungeonRosterPolicy.NativeDungeonMarker[]
+            {
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
+                    DungeonLocalPosition = new Vector3(2f, 0f, 3f),
+                    TextureRecord = DFMPDungeonRosterPolicy.FixedMonsterTextureRecord,
+                    FixedMobileType = (int)MobileTypes.Rat,
+                    MarkerY = 0
+                },
+                new DFMPDungeonRosterPolicy.NativeDungeonMarker
+                {
+                    DungeonLocalPosition = new Vector3(5f, 0f, 6f),
+                    TextureRecord = DFMPDungeonRosterPolicy.ItemMarkerTextureRecord,
+                    MarkerY = 0
+                }
+            };
+
+            DFMPDynamicEnemyRecord[] roster;
+            Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateNativeRosterFromMarkers(1234UL, context, inputs, markers, 0f, 4, out roster));
+            Assert.AreEqual(1, roster.Length);
+            Assert.AreEqual(new Vector3(2f, 0f, 3f), roster[0].Descriptor.DungeonLocalPosition);
+            Assert.AreEqual((int)MobileTypes.Rat, roster[0].Descriptor.MobileType);
+            Assert.AreEqual(0, roster[0].Identity.RosterIndex);
+            Assert.Greater(roster[0].MaxHealth, 0);
+        }
+
+        [Test]
         public void DamagePolicy_ValidatesDynamicEnemyTarget_SameContextAndRange()
         {
             var request = new DFMPDamageValidationRequest

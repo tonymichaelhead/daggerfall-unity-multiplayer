@@ -711,6 +711,23 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static bool TryCreateNativeRosterFromMarkers(
+            ulong serverWorldSeed,
+            DFMPWorldContextKey context,
+            NativeDungeonGenerationInputs inputs,
+            NativeDungeonMarker[] markers,
+            float monsterPower,
+            int monsterVariance,
+            out DFMPDynamicEnemyRecord[] roster)
+        {
+            roster = new DFMPDynamicEnemyRecord[0];
+            DFMPDynamicEnemyDescriptor[] descriptors;
+            if (!TryCreateNativeDescriptors(serverWorldSeed, context, inputs, markers, monsterPower, monsterVariance, out descriptors))
+                return false;
+
+            return TryCreateRosterFromDescriptors(serverWorldSeed, context, descriptors, out roster);
+        }
+
         public static ulong CreateServerWorldSeed(string configuredSeed)
         {
             return ComputeStableHash(string.IsNullOrWhiteSpace(configuredSeed) ? "default" : configuredSeed.Trim());
@@ -930,11 +947,14 @@ namespace DFMP.Runtime
                     if (!TryScanNativeDungeonMarkers(blockData, inputs.BlockX, inputs.BlockZ, out markers))
                         return false;
 
-                    DFMPDynamicEnemyDescriptor[] descriptors;
-                    if (!TryCreateNativeDescriptors(serverWorldSeed, context, inputs, markers, monsterPower, monsterVariance, out descriptors))
-                        return false;
-
-                    return TryCreateRosterFromDescriptors(serverWorldSeed, context, descriptors, out roster);
+                    return TryCreateNativeRosterFromMarkers(
+                        serverWorldSeed,
+                        context,
+                        inputs,
+                        markers,
+                        monsterPower,
+                        monsterVariance,
+                        out roster);
                 }
                 catch (Exception)
                 {
