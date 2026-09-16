@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using DaggerfallConnect;
+using DaggerfallWorkshop;
 using Mirror;
 using UnityEngine;
 
@@ -225,13 +226,22 @@ namespace DFMP.Runtime
                 DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
                 bool movementBlocked;
                 Vector3 resolvedPosition;
-                bool movementAvailable = TryResolveEnemyMovement(context, record.Descriptor.DungeonLocalPosition, decision.NextDungeonLocalPosition, out resolvedPosition, out movementBlocked);
+                bool movementAvailable = TryResolveEnemyMovement(context, record.Descriptor.DungeonLocalPosition, decision.NextDungeonLocalPosition, record.Descriptor.MobileType, out resolvedPosition, out movementBlocked);
                 resolvedPosition = ResolveEnemyVerticalPosition(
                     context,
                     record.Descriptor.DungeonLocalPosition,
                     resolvedPosition,
                     record.Descriptor.MobileType);
-                UpdateBlockedMovement(record.Identity.EnemyId, decision, movementAvailable, movementBlocked, currentTime);
+                UpdateBlockedMovement(
+                    record.Identity.EnemyId,
+                    record.Descriptor.MobileType,
+                    record.Descriptor.DungeonLocalPosition,
+                    decision.NextDungeonLocalPosition,
+                    resolvedPosition,
+                    decision,
+                    movementAvailable,
+                    movementBlocked,
+                    currentTime);
                 LogTargetTransition(record.Identity.EnemyId, record.TargetConnectionId, decision.TargetConnectionId);
                 descriptor.DungeonLocalPosition = movementAvailable ? resolvedPosition : record.Descriptor.DungeonLocalPosition;
                 descriptor.FacingYaw = decision.FacingYaw;
@@ -245,7 +255,16 @@ namespace DFMP.Runtime
             }
         }
 
-        void UpdateBlockedMovement(string enemyId, DFMPDynamicEnemyAiDecision decision, bool movementAvailable, bool movementBlocked, float currentTime)
+        void UpdateBlockedMovement(
+            string enemyId,
+            int mobileType,
+            Vector3 currentPosition,
+            Vector3 desiredPosition,
+            Vector3 resolvedPosition,
+            DFMPDynamicEnemyAiDecision decision,
+            bool movementAvailable,
+            bool movementBlocked,
+            float currentTime)
         {
             if (!decision.HasTarget || !decision.IsMoving || !movementAvailable || !movementBlocked)
             {
@@ -263,7 +282,7 @@ namespace DFMP.Runtime
             blockedMovementTicksByEnemyId.Remove(enemyId);
             stuckRecoveryTimesByEnemyId[enemyId] = currentTime + stuckRecoverySeconds;
             stuckTargetConnectionIdsByEnemyId[enemyId] = decision.TargetConnectionId;
-            Debug.LogWarning($"[DFMP Enemy] Movement stuck; temporarily releasing target: enemyId={enemyId}, target={decision.TargetConnectionId}, blockedTicks={blockedTicks}.");
+            Debug.LogWarning($"[DFMP Enemy] Movement stuck; temporarily releasing target: enemyId={enemyId}, mobileType={(MobileTypes)mobileType}, target={decision.TargetConnectionId}, blockedTicks={blockedTicks}, current={currentPosition}, desired={desiredPosition}, resolved={resolvedPosition}.");
         }
 
         void LogTargetTransition(string enemyId, int previousTargetConnectionId, int nextTargetConnectionId)
@@ -295,7 +314,7 @@ namespace DFMP.Runtime
             return stuckTargetConnectionIdsByEnemyId.TryGetValue(enemyId, out targetConnectionId) ? targetConnectionId : -1;
         }
 
-        bool TryResolveEnemyMovement(DFMPWorldContextKey context, Vector3 fromPosition, Vector3 desiredPosition, out Vector3 resolvedPosition, out bool blocked)
+        bool TryResolveEnemyMovement(DFMPWorldContextKey context, Vector3 fromPosition, Vector3 desiredPosition, int mobileType, out Vector3 resolvedPosition, out bool blocked)
         {
             resolvedPosition = fromPosition;
             blocked = false;
@@ -306,14 +325,24 @@ namespace DFMP.Runtime
             }
 
             DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
-            if (geometryService != null && geometryService.TryResolveMovement(
-                context,
-                fromPosition,
-                desiredPosition,
-                EnemyMovementRadius,
-                EnemyMovementHeight,
-                out resolvedPosition,
-                out blocked))
+            bool isFlying = DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset(mobileType) > 0f;
+            if (geometryService != null && (isFlying
+                ? geometryService.TryResolveMovement(
+                    context,
+                    fromPosition,
+                    desiredPosition,
+                    EnemyMovementRadius,
+                    EnemyMovementHeight,
+                    out resolvedPosition,
+                    out blocked)
+                : geometryService.TryResolveGroundedMovement(
+                    context,
+                    fromPosition,
+                    desiredPosition,
+                    EnemyMovementRadius,
+                    EnemyMovementHeight,
+                    out resolvedPosition,
+                    out blocked)))
                 return true;
 
             if (!requireLineOfSight)
@@ -334,17 +363,7 @@ namespace DFMP.Runtime
             if (DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset(mobileType) > 0f)
                 return new Vector3(position.x, previousPosition.y, position.z);
 
-            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
-            if (geometryService == null)
-                return position;
-
-            Vector3 groundedPosition;
-            bool foundGround;
-            if (!geometryService.TryResolveGroundedDungeonLocalPosition(context, position, out groundedPosition, out foundGround) || !foundGround)
-                return position;
-
-            groundedPosition.y += DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset(mobileType);
-            return groundedPosition;
+            return position;
         }
 
         DFMPDynamicEnemySensoryTarget[] CreateSensoryTargets(DFMPWorldContextKey context, Vector3 enemyPosition)

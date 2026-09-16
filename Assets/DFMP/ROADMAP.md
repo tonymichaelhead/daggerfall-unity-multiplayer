@@ -382,6 +382,8 @@ The smallest amount of non-gameplay work required to actually put testers on the
 - Whitelist administered by hand, out of band via Discord, using the M5 whitelist store.
 - Manual operations are acceptable: file-copy character backups, restart by hand, read logs on disk.
 - Beta stability pass: run the server continuously for a multi-day soak, watch for leaks, unbounded growth in session or roster state, and reconnect edge cases.
+- Dungeon enemy navigation hardening: add a small server-side detour or wall-following strategy so blocked enemies can route around brazier sprites, doors, and other walkable obstacles instead of repeatedly stopping and reacquiring.
+- Dungeon enemy separation: add native-like enemy-to-enemy collision or local avoidance so pursuing enemies do not converge onto the same point and overlap.
 - Record the two-client exterior remote-presentation smoke: grounded named avatars, movement and facing, and presentation-scope culling.
 - A short tester-facing setup note and a bug reporting channel. This is not the Phase 2 documentation set.
 

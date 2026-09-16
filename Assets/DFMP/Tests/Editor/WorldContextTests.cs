@@ -461,6 +461,54 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_GroundedMovement_FollowsSlopeToDesiredPosition()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometrySlopeMovementTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometrySlopeMovementSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "slope-movement");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(116, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject slope = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                slope.transform.SetParent(root.transform, false);
+                slope.transform.localPosition = new Vector3(0f, 1f, 0f);
+                slope.transform.localRotation = Quaternion.Euler(-15f, 0f, 0f);
+                slope.transform.localScale = new Vector3(4f, 0.2f, 8f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 resolvedPosition;
+                bool blocked;
+                Assert.IsTrue(service.TryResolveGroundedMovement(
+                    dungeon,
+                    new Vector3(0f, 0f, -2f),
+                    new Vector3(0f, 0f, 2f),
+                    0.35f,
+                    1.8f,
+                    out resolvedPosition,
+                    out blocked));
+                Assert.IsFalse(blocked);
+                Assert.AreEqual(2f, resolvedPosition.z, 0.01f);
+                Assert.Greater(resolvedPosition.y, 0.5f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonGeometryService_Movement_StopsBeforeHostedSolidCollider()
         {
             GameObject serviceGo = new GameObject("DFMP_DungeonGeometryBlockedMovementTest");
@@ -572,6 +620,199 @@ namespace DFMP.Tests
                 Object.DestroyImmediate(serviceGo);
                 Object.DestroyImmediate(sessionGo);
                 DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_Grounding_PrefersFloorNearRequestedHeight()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryMultiLevelGroundingTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryMultiLevelGroundingSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "multi-level-grounding");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(117, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject lowerFloor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                lowerFloor.transform.SetParent(root.transform, false);
+                lowerFloor.transform.localPosition = new Vector3(0f, -1f, 0f);
+                lowerFloor.transform.localScale = new Vector3(10f, 0.25f, 10f);
+
+                GameObject upperFloor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                upperFloor.transform.SetParent(root.transform, false);
+                upperFloor.transform.localPosition = new Vector3(0f, 6f, 0f);
+                upperFloor.transform.localScale = new Vector3(10f, 0.25f, 10f);
+
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 grounded;
+                bool foundGround;
+                Assert.IsTrue(service.TryResolveGroundedDungeonLocalPosition(
+                    dungeon,
+                    new Vector3(2f, 0f, 3f),
+                    out grounded,
+                    out foundGround));
+                Assert.IsTrue(foundGround);
+                Assert.AreEqual(-0.875f, grounded.y, 0.02f);
+
+                Vector3 resolvedPosition;
+                bool blocked;
+                Assert.IsTrue(service.TryResolveGroundedMovement(
+                    dungeon,
+                    new Vector3(2f, -0.875f, 3f),
+                    new Vector3(3f, -0.875f, 3f),
+                    0.35f,
+                    1.8f,
+                    out resolvedPosition,
+                    out blocked));
+                Assert.IsFalse(blocked);
+                Assert.AreEqual(-0.875f, resolvedPosition.y, 0.02f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_GroundedMovement_DescendsFromLedgeWithoutAccumulatingHeight()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryLedgeDescentTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryLedgeDescentSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "ledge-descent");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(118, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject lowerFloor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                lowerFloor.transform.SetParent(root.transform, false);
+                lowerFloor.transform.localPosition = new Vector3(0f, -0.125f, 0f);
+                lowerFloor.transform.localScale = new Vector3(20f, 0.25f, 20f);
+
+                // Ledge top sits 3 units above the lower floor, a drop further than the allowed step up.
+                GameObject ledge = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                ledge.transform.SetParent(root.transform, false);
+                ledge.transform.localPosition = new Vector3(0f, 2.875f, -5.1f);
+                ledge.transform.localScale = new Vector3(20f, 0.25f, 10f);
+
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 currentPosition = new Vector3(0f, 3f, -1f);
+                float highestHeight = currentPosition.y;
+                for (int tick = 0; tick < 20; tick++)
+                {
+                    Vector3 resolvedPosition;
+                    bool blocked;
+                    Assert.IsTrue(service.TryResolveGroundedMovement(
+                        dungeon,
+                        currentPosition,
+                        currentPosition + new Vector3(0f, 0f, 0.25f),
+                        0.35f,
+                        1.8f,
+                        out resolvedPosition,
+                        out blocked));
+                    currentPosition = resolvedPosition;
+                    highestHeight = Mathf.Max(highestHeight, currentPosition.y);
+                }
+
+                Assert.LessOrEqual(highestHeight, 3.05f, "Grounded movement drifted upward above the ledge it started on.");
+                Assert.AreEqual(0f, currentPosition.y, 0.05f, "Grounded movement did not descend to the lower floor.");
+                Assert.AreEqual(4f, currentPosition.z, 0.05f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_Grounding_FindsFloorUnderfootWhenOneColliderSpansLevels()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometrySharedColliderGroundingTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometrySharedColliderGroundingSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "shared-collider-grounding");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(119, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                // Daggerfall combines a whole block into one mesh collider, and RaycastAll reports only one hit per
+                // collider, so both storeys must share a single collider for this to reproduce.
+                var combined = new GameObject("CombinedModels");
+                combined.transform.SetParent(root.transform, false);
+                var mesh = new Mesh();
+                CombineInstance[] storeys =
+                {
+                    BuildBoxInstance(new Vector3(0f, -0.125f, 0f), new Vector3(20f, 0.25f, 20f)),
+                    BuildBoxInstance(new Vector3(0f, 6.4f, 0f), new Vector3(20f, 0.25f, 20f))
+                };
+                mesh.CombineMeshes(storeys, true, true);
+                combined.AddComponent<MeshCollider>().sharedMesh = mesh;
+
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 grounded;
+                bool foundGround;
+                Assert.IsTrue(service.TryResolveGroundedDungeonLocalPosition(
+                    dungeon,
+                    new Vector3(2f, 0f, 3f),
+                    out grounded,
+                    out foundGround));
+                Assert.IsTrue(foundGround);
+                Assert.AreEqual(0f, grounded.y, 0.02f, "Grounding selected the storey above instead of the floor underfoot.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        static CombineInstance BuildBoxInstance(Vector3 center, Vector3 size)
+        {
+            GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            try
+            {
+                return new CombineInstance
+                {
+                    mesh = box.GetComponent<MeshFilter>().sharedMesh,
+                    transform = Matrix4x4.TRS(center, Quaternion.identity, size)
+                };
+            }
+            finally
+            {
+                Object.DestroyImmediate(box);
             }
         }
 

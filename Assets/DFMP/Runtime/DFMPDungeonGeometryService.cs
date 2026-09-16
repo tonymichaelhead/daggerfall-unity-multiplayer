@@ -63,6 +63,7 @@ namespace DFMP.Runtime
         readonly Dictionary<DFMPDungeonGeometryScopeKey, HostedDungeonGeometry> hostedGeometryByScope = new Dictionary<DFMPDungeonGeometryScopeKey, HostedDungeonGeometry>();
         readonly Dictionary<int, DFMPDungeonGeometryScopeKey> scopeByConnectionId = new Dictionary<int, DFMPDungeonGeometryScopeKey>();
         bool isSubscribed;
+        float nextUngroundedLogTime;
 
         public int HostedScopeCount
         {
@@ -190,6 +191,9 @@ namespace DFMP.Runtime
                 if (hitCollider == null || hitCollider.transform == null || !hitCollider.transform.IsChildOf(hostedGeometry.Root.transform))
                     continue;
 
+                if (hits[index].normal.y >= 0.5f)
+                    continue;
+
                 if (hits[index].distance < nearestHitDistance)
                 {
                     nearestHitDistance = hits[index].distance;
@@ -208,6 +212,76 @@ namespace DFMP.Runtime
             resolvedDungeonLocalPosition = hostedGeometry.Root.transform.InverseTransformPoint(resolvedWorldPosition);
             blocked = true;
             return true;
+        }
+
+        public bool TryResolveGroundedMovement(DFMPWorldContextKey context, Vector3 fromDungeonLocalPosition, Vector3 desiredDungeonLocalPosition, float radius, float height, out Vector3 resolvedDungeonLocalPosition, out bool blocked)
+        {
+            resolvedDungeonLocalPosition = fromDungeonLocalPosition;
+            blocked = false;
+
+            // Grounded enemies may only climb a short step, but they fall to whatever floor the downward probe finds.
+            const float maximumGroundStepUp = 2f;
+            Vector3 groundedFrom = fromDungeonLocalPosition;
+            Vector3 queriedGroundedFrom;
+            bool foundFromGround;
+            if (TryResolveGroundedDungeonLocalPosition(context, fromDungeonLocalPosition, out queriedGroundedFrom, out foundFromGround) &&
+                foundFromGround &&
+                queriedGroundedFrom.y <= fromDungeonLocalPosition.y + maximumGroundStepUp)
+                groundedFrom = queriedGroundedFrom;
+
+            Vector3 groundedDestination;
+            bool foundDestinationGround;
+            if (!TryResolveGroundedDungeonLocalPosition(context, desiredDungeonLocalPosition, out groundedDestination, out foundDestinationGround) || !foundDestinationGround)
+            {
+                LogUngroundedMovement("destination-ground-missing", fromDungeonLocalPosition, groundedFrom, foundFromGround, desiredDungeonLocalPosition, desiredDungeonLocalPosition, float.NaN);
+                return TryResolveMovement(context, fromDungeonLocalPosition, desiredDungeonLocalPosition, radius, height, out resolvedDungeonLocalPosition, out blocked);
+            }
+
+            // Sweep at a walkable height so a ledge face cannot block the descent; the re-ground below applies the drop.
+            Vector3 sweepDestination = groundedDestination;
+            if (sweepDestination.y < groundedFrom.y || sweepDestination.y > groundedFrom.y + maximumGroundStepUp)
+                sweepDestination.y = groundedFrom.y;
+
+            const float groundedProbeClearance = 0.1f;
+            if (!TryResolveMovement(
+                context,
+                groundedFrom + Vector3.up * groundedProbeClearance,
+                sweepDestination + Vector3.up * groundedProbeClearance,
+                radius,
+                height,
+                out resolvedDungeonLocalPosition,
+                out blocked))
+                return false;
+
+            // The clearance only lifts the collision capsule off the floor; leaving it in the result makes it accumulate every tick.
+            resolvedDungeonLocalPosition.y -= groundedProbeClearance;
+
+            Vector3 regroundedPosition;
+            bool foundResolvedGround;
+            if (TryResolveGroundedDungeonLocalPosition(context, resolvedDungeonLocalPosition, out regroundedPosition, out foundResolvedGround) &&
+                foundResolvedGround &&
+                regroundedPosition.y <= groundedFrom.y + maximumGroundStepUp)
+                resolvedDungeonLocalPosition = regroundedPosition;
+            else
+                LogUngroundedMovement(
+                    foundResolvedGround ? "resolved-ground-above-step-limit" : "resolved-ground-missing",
+                    fromDungeonLocalPosition,
+                    groundedFrom,
+                    foundFromGround,
+                    desiredDungeonLocalPosition,
+                    resolvedDungeonLocalPosition,
+                    foundResolvedGround ? regroundedPosition.y : float.NaN);
+
+            return true;
+        }
+
+        void LogUngroundedMovement(string reason, Vector3 from, Vector3 groundedFrom, bool foundFromGround, Vector3 desired, Vector3 resolved, float regroundedY)
+        {
+            if (Time.unscaledTime < nextUngroundedLogTime)
+                return;
+
+            nextUngroundedLogTime = Time.unscaledTime + 1f;
+            Debug.LogWarning($"[DFMP Dungeon Geometry] Grounded movement left enemy ungrounded: reason={reason}, from={from}, groundedFrom={groundedFrom}, foundFromGround={foundFromGround}, desired={desired}, resolved={resolved}, regroundedY={regroundedY}.");
         }
 
         public bool TryMarkGeometryAvailableForTesting(DFMPDungeonGeometryScopeKey scope)
@@ -233,24 +307,42 @@ namespace DFMP.Runtime
             if (!hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) || hostedGeometry == null || hostedGeometry.Root == null || !hostedGeometry.GeometryAvailable)
                 return false;
 
-            Vector3 worldPosition = DungeonLocalToHostedWorldPosition(hostedGeometry.Root.transform, dungeonLocalPosition + Vector3.up * 8f);
-            RaycastHit[] hits = Physics.RaycastAll(worldPosition, Vector3.down, 16f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            // A whole dungeon block is one combined mesh collider and RaycastAll reports only its first hit, so a probe
+            // starting high above returns the level above and hides the floor underfoot. Probe from just overhead first.
+            const float nearProbeRise = 0.5f;
+            const float farProbeRise = 8f;
+            foundGround =
+                TryProbeGroundBelow(hostedGeometry, dungeonLocalPosition, nearProbeRise, out groundedDungeonLocalPosition) ||
+                TryProbeGroundBelow(hostedGeometry, dungeonLocalPosition, farProbeRise, out groundedDungeonLocalPosition);
+
+            return true;
+        }
+
+        static bool TryProbeGroundBelow(HostedDungeonGeometry hostedGeometry, Vector3 dungeonLocalPosition, float rise, out Vector3 groundedDungeonLocalPosition)
+        {
+            groundedDungeonLocalPosition = dungeonLocalPosition;
+            Vector3 worldPosition = DungeonLocalToHostedWorldPosition(hostedGeometry.Root.transform, dungeonLocalPosition + Vector3.up * rise);
+            RaycastHit[] hits = Physics.RaycastAll(worldPosition, Vector3.down, rise + 16f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             float nearestDistance = float.MaxValue;
+            bool found = false;
             for (int index = 0; index < hits.Length; index++)
             {
                 Collider hitCollider = hits[index].collider;
                 if (hitCollider == null || hitCollider.transform == null || !hitCollider.transform.IsChildOf(hostedGeometry.Root.transform))
                     continue;
 
+                if (hits[index].normal.y < 0.5f)
+                    continue;
+
                 if (hits[index].distance < nearestDistance)
                 {
                     nearestDistance = hits[index].distance;
                     groundedDungeonLocalPosition = hostedGeometry.Root.transform.InverseTransformPoint(hits[index].point);
-                    foundGround = true;
+                    found = true;
                 }
             }
 
-            return true;
+            return found;
         }
 
         public static Vector3 DungeonLocalToHostedWorldPosition(Transform root, Vector3 dungeonLocalPosition)

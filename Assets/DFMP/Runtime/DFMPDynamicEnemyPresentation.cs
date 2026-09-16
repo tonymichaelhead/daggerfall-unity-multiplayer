@@ -211,6 +211,7 @@ namespace DFMP.Runtime
         static DFMPDynamicEnemyPresentationController instance;
         readonly Dictionary<int, GameObject> proxies = new Dictionary<int, GameObject>();
         readonly Dictionary<int, bool> proxyVisibilityByStateId = new Dictionary<int, bool>();
+        readonly Dictionary<int, Vector3> lastGroundedMeleePositionByStateId = new Dictionary<int, Vector3>();
         readonly Dictionary<int, GameObject> corpses = new Dictionary<int, GameObject>();
         readonly Dictionary<int, bool> corpseVisibilityByStateId = new Dictionary<int, bool>();
 
@@ -249,6 +250,7 @@ namespace DFMP.Runtime
             proxies.Clear();
             corpses.Clear();
             proxyVisibilityByStateId.Clear();
+            lastGroundedMeleePositionByStateId.Clear();
             corpseVisibilityByStateId.Clear();
             if (instance == this)
                 instance = null;
@@ -316,6 +318,9 @@ namespace DFMP.Runtime
 
                     proxy.transform.position = targetPosition;
                     proxy.transform.rotation = Quaternion.Euler(0f, state.FacingYaw, 0f);
+
+                    if (state.MobileType != (int)MobileTypes.GiantBat && state.MobileType != (int)MobileTypes.Harpy)
+                        LogGroundedMeleePositionChange(stateId, state, proxy, targetPosition);
 
                     bool isVisible = DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(
                         playerEnterExit.transform.position,
@@ -493,6 +498,7 @@ namespace DFMP.Runtime
 
                 proxies.Remove(staleKey);
                 proxyVisibilityByStateId.Remove(staleKey);
+                lastGroundedMeleePositionByStateId.Remove(staleKey);
                 Debug.Log($"[DFMP Enemy] Client removed state: staleStateId={staleKey}.");
             }
 
@@ -514,6 +520,19 @@ namespace DFMP.Runtime
                 corpseVisibilityByStateId.Remove(staleKey);
                 Debug.Log($"[DFMP Enemy] Client removed corpse: staleStateId={staleKey}.");
             }
+        }
+
+        void LogGroundedMeleePositionChange(int stateId, DFMPDynamicEnemyState state, GameObject proxy, Vector3 targetPosition)
+        {
+            Vector3 previousPosition;
+            if (lastGroundedMeleePositionByStateId.TryGetValue(stateId, out previousPosition) &&
+                Vector3.SqrMagnitude(targetPosition - previousPosition) < 0.0625f)
+                return;
+
+            lastGroundedMeleePositionByStateId[stateId] = targetPosition;
+            DaggerfallMobileUnit mobile = proxy.GetComponentInChildren<DaggerfallMobileUnit>();
+            Renderer renderer = proxy.GetComponentInChildren<Renderer>();
+            Debug.Log($"[DFMP Enemy] Grounded melee presentation position: enemyId={state.EnemyId}, mobileType={(MobileTypes)state.MobileType}, position={targetPosition}, previousPosition={previousPosition}, state={(mobile != null ? mobile.EnemyState.ToString() : "<null>")}, proxyActive={proxy.activeSelf}, mobileInHierarchy={(mobile != null && mobile.gameObject.activeInHierarchy)}, rendererEnabled={(renderer != null && renderer.enabled)}, rendererBounds={(renderer != null ? renderer.bounds.ToString() : "<none>")}.");
         }
     }
 }
