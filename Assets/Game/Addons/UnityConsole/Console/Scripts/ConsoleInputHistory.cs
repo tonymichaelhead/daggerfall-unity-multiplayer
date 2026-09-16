@@ -1,17 +1,19 @@
 ﻿using UnityEngine;
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Wenzil.Console
 {
     /// <summary>
-    /// Utility for caching and navigating recently executed console commands. 
+    /// Utility for caching and navigating recently executed console commands.
     /// </summary>
     public class ConsoleInputHistory
     {
         // Input history from most recent to oldest
         private List<string> inputHistory;
         public int maxCapacity;
+        private string persistencePath;
 
         // The go-to input entry index. The one to navigate to when first navigating up. It's usually the one most recently navigated-to.
         private int currentInput;
@@ -24,6 +26,29 @@ namespace Wenzil.Console
             this.maxCapacity = maxCapacity;
         }
 
+        public void EnablePersistence(string path)
+        {
+            persistencePath = path;
+
+            try
+            {
+                if (!File.Exists(persistencePath))
+                    return;
+
+                string[] persistedInputs = File.ReadAllLines(persistencePath);
+                int inputCount = Math.Min(persistedInputs.Length, maxCapacity);
+                for (int index = 0; index < inputCount; index++)
+                {
+                    if (!string.IsNullOrEmpty(persistedInputs[index]))
+                        inputHistory.Add(persistedInputs[index]);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarningFormat("Could not load console input history: {0}", exception.Message);
+            }
+        }
+
         /// <summary>
         /// Navigates up or down the input history
         /// </summary>
@@ -31,7 +56,7 @@ namespace Wenzil.Console
         public string Navigate(bool up)
         {
             bool down = !up;
-            
+
             // When first navigating up (if there is an input entry), navigate to the go-to input entry (we actually are already there)
             // If navigating up again, navigate to the input entry ABOVE (if there is one) the go-to input entry
             // If navigating down at any time, navigate to the input entry BELOW (if there is one) the go-to input entry
@@ -66,7 +91,7 @@ namespace Wenzil.Console
             // If we went over capacity, remove the oldest input entry to make room for a new one
             if (inputHistory.Count == maxCapacity)
                 inputHistory.RemoveAt(maxCapacity - 1);
-            
+
             // Insert the new input entry
             inputHistory.Insert(0, input);
 
@@ -77,10 +102,12 @@ namespace Wenzil.Console
             // Note that if there was no input entry before, then the go-to input entry index remains 0 which is the new input entry
             else
                 currentInput = Mathf.Clamp(++currentInput, 0, inputHistory.Count - 1);
-            
+
             // If the new input entry is different than the go-to input entry, then it becomes the go-to input entry
             if (!input.Equals(inputHistory[currentInput], StringComparison.OrdinalIgnoreCase))
                 currentInput = 0;
+
+            Save();
         }
 
         public void Clear()
@@ -88,6 +115,22 @@ namespace Wenzil.Console
             inputHistory.Clear();
             currentInput = 0;
             isNavigating = false;
+            Save();
+        }
+
+        private void Save()
+        {
+            if (string.IsNullOrEmpty(persistencePath))
+                return;
+
+            try
+            {
+                File.WriteAllLines(persistencePath, inputHistory.ToArray());
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarningFormat("Could not save console input history: {0}", exception.Message);
+            }
         }
     }
 }

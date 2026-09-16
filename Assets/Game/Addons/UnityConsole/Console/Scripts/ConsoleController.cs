@@ -2,6 +2,7 @@ using UnityEngine;
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.IO;
 
 
 namespace Wenzil.Console
@@ -13,7 +14,8 @@ namespace Wenzil.Console
     [RequireComponent(typeof(ConsoleController))]
     public class ConsoleController : MonoBehaviour
     {
-        private const int inputHistoryCapacity = 20;
+        private const int inputHistoryCapacity = 50;
+        private const string inputHistoryFilename = "console_history.txt";
 
         public ConsoleUI ui;
         public KeyCode toggleKey = KeyCode.BackQuote;
@@ -26,12 +28,13 @@ namespace Wenzil.Console
         {
             /* This instantiation causes a bug when Unity rebuilds the project while in play mode
                Solution: move it to class level initialization, and make inputHistoryCapacity a const */
-            // inputHistory = new ConsoleInputHistory(inputHistoryCapacity); 
+            // inputHistory = new ConsoleInputHistory(inputHistoryCapacity);
         }
 
         void Start()
         {
             DaggerfallWorkshop.Game.InputManager.OnSavedKeyBinds += GetConsoleKeyBind;
+            inputHistory.EnablePersistence(Path.Combine(DaggerfallWorkshop.DaggerfallUnity.Settings.PersistentDataPath, inputHistoryFilename));
         }
 
         void OnEnable()
