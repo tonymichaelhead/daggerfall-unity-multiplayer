@@ -188,7 +188,8 @@ namespace DFMP.Runtime
 
             if (!isMoving.HasValue || isMoving.Value != targetIsMoving)
             {
-                mobile.ChangeEnemyState(targetIsMoving ? MobileStates.Move : MobileStates.Idle);
+                MobileStates movementState = targetIsMoving ? MobileStates.Move : MobileStates.Idle;
+                mobile.ChangeEnemyState(movementState);
                 isMoving = targetIsMoving;
             }
 
@@ -209,6 +210,7 @@ namespace DFMP.Runtime
     {
         static DFMPDynamicEnemyPresentationController instance;
         readonly Dictionary<int, GameObject> proxies = new Dictionary<int, GameObject>();
+        readonly Dictionary<int, bool> proxyVisibilityByStateId = new Dictionary<int, bool>();
         readonly Dictionary<int, GameObject> corpses = new Dictionary<int, GameObject>();
         readonly Dictionary<int, bool> corpseVisibilityByStateId = new Dictionary<int, bool>();
 
@@ -246,6 +248,7 @@ namespace DFMP.Runtime
 
             proxies.Clear();
             corpses.Clear();
+            proxyVisibilityByStateId.Clear();
             corpseVisibilityByStateId.Clear();
             if (instance == this)
                 instance = null;
@@ -319,6 +322,12 @@ namespace DFMP.Runtime
                         targetPosition);
 
                     proxy.SetActive(isVisible);
+                    bool wasVisible;
+                    if (!proxyVisibilityByStateId.TryGetValue(stateId, out wasVisible) || wasVisible != isVisible)
+                    {
+                        proxyVisibilityByStateId[stateId] = isVisible;
+                        Debug.Log($"[DFMP Enemy] Proxy visibility changed: stateId={stateId}, enemyId={state.EnemyId}, mobileType={state.MobileType}, visible={isVisible}, eligible={isEligible}, targetPosition={targetPosition}, dungeonLocalPosition={state.DungeonLocalPosition}, localPlayer={(playerEnterExit != null ? playerEnterExit.transform.position : Vector3.zero)}.");
+                    }
                     var hitTarget = proxy.GetComponent<DFMPDynamicEnemyHitTarget>();
                     if (hitTarget != null)
                         hitTarget.SetDamageable(isVisible);
@@ -329,6 +338,12 @@ namespace DFMP.Runtime
                     if (proxies.TryGetValue(stateId, out proxy) && proxy != null)
                     {
                         proxy.SetActive(false);
+                        bool wasVisible;
+                        if (proxyVisibilityByStateId.TryGetValue(stateId, out wasVisible) && wasVisible)
+                        {
+                            proxyVisibilityByStateId[stateId] = false;
+                            Debug.Log($"[DFMP Enemy] Proxy hidden: stateId={stateId}, enemyId={state.EnemyId}, mobileType={state.MobileType}, eligible={isEligible}, playerInsideDungeon={isInsideDungeon}, playerContext={playerContext}, dungeonLocalPosition={state.DungeonLocalPosition}.");
+                        }
                         var hitTarget = proxy.GetComponent<DFMPDynamicEnemyHitTarget>();
                         if (hitTarget != null)
                             hitTarget.SetDamageable(false);
@@ -392,7 +407,7 @@ namespace DFMP.Runtime
             proxy.SetActive(false);
             Object.DontDestroyOnLoad(proxy);
             proxies[stateId] = proxy;
-            Debug.Log($"[DFMP Enemy] Created client enemy visual proxy: enemyId={enemyId}.");
+            Debug.Log($"[DFMP Enemy] Created client enemy visual proxy: stateId={stateId}, enemyId={enemyId}.");
             return proxy;
         }
 
@@ -419,7 +434,7 @@ namespace DFMP.Runtime
 
             Object.DontDestroyOnLoad(corpse);
             corpses[stateId] = corpse;
-            Debug.Log($"[DFMP Enemy] Created client corpse loot proxy: enemyId={state.EnemyId}.");
+            Debug.Log($"[DFMP Enemy] Created client corpse loot proxy: stateId={stateId}, enemyId={state.EnemyId}, mobileType={state.MobileType}, dungeonLocalPosition={state.DungeonLocalPosition}.");
             return corpse;
         }
 
@@ -477,6 +492,8 @@ namespace DFMP.Runtime
                     Destroy(proxy);
 
                 proxies.Remove(staleKey);
+                proxyVisibilityByStateId.Remove(staleKey);
+                Debug.Log($"[DFMP Enemy] Client removed state: staleStateId={staleKey}.");
             }
 
             staleKeys.Clear();
@@ -495,6 +512,7 @@ namespace DFMP.Runtime
 
                 corpses.Remove(staleKey);
                 corpseVisibilityByStateId.Remove(staleKey);
+                Debug.Log($"[DFMP Enemy] Client removed corpse: staleStateId={staleKey}.");
             }
         }
     }

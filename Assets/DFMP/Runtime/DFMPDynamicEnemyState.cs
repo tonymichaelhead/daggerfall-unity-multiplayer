@@ -119,7 +119,7 @@ namespace DFMP.Runtime
         public override void OnStartClient()
         {
             base.OnStartClient();
-            Debug.Log($"[DFMP Enemy] Client received state: enemyId={EnemyId}, encounterId={EncounterId}, lifecycle={LifecycleState}.");
+            Debug.Log($"[DFMP Enemy] Client received state: stateId={GetInstanceID()}, enemyId={EnemyId}, mobileType={MobileType}, encounterId={EncounterId}, lifecycle={LifecycleState}, position={DungeonLocalPosition}, facingYaw={FacingYaw}.");
         }
 
         public static void RegisterClientSpawnHandler()

@@ -226,6 +226,11 @@ namespace DFMP.Runtime
                 bool movementBlocked;
                 Vector3 resolvedPosition;
                 bool movementAvailable = TryResolveEnemyMovement(context, record.Descriptor.DungeonLocalPosition, decision.NextDungeonLocalPosition, out resolvedPosition, out movementBlocked);
+                resolvedPosition = ResolveEnemyVerticalPosition(
+                    context,
+                    record.Descriptor.DungeonLocalPosition,
+                    resolvedPosition,
+                    record.Descriptor.MobileType);
                 UpdateBlockedMovement(record.Identity.EnemyId, decision, movementAvailable, movementBlocked, currentTime);
                 LogTargetTransition(record.Identity.EnemyId, record.TargetConnectionId, decision.TargetConnectionId);
                 descriptor.DungeonLocalPosition = movementAvailable ? resolvedPosition : record.Descriptor.DungeonLocalPosition;
@@ -318,6 +323,28 @@ namespace DFMP.Runtime
             }
 
             return false;
+        }
+
+        Vector3 ResolveEnemyVerticalPosition(
+            DFMPWorldContextKey context,
+            Vector3 previousPosition,
+            Vector3 position,
+            int mobileType)
+        {
+            if (DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset(mobileType) > 0f)
+                return new Vector3(position.x, previousPosition.y, position.z);
+
+            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
+            if (geometryService == null)
+                return position;
+
+            Vector3 groundedPosition;
+            bool foundGround;
+            if (!geometryService.TryResolveGroundedDungeonLocalPosition(context, position, out groundedPosition, out foundGround) || !foundGround)
+                return position;
+
+            groundedPosition.y += DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset(mobileType);
+            return groundedPosition;
         }
 
         DFMPDynamicEnemySensoryTarget[] CreateSensoryTargets(DFMPWorldContextKey context, Vector3 enemyPosition)
@@ -453,7 +480,12 @@ namespace DFMP.Runtime
 
         public void HandleContextVacated(DFMPWorldContextKey context)
         {
-            if (IsDungeonBlock(context) && DFMPNetworkServer.GetConnectionsInWorldContext(context).Length == 0)
+            if (!IsDungeonBlock(context))
+                return;
+
+            int remainingOccupants = DFMPNetworkServer.GetConnectionsInWorldContext(context).Length;
+            Debug.Log($"[DFMP Enemy] Dungeon context vacated: context={context}, remainingOccupants={remainingOccupants}.");
+            if (remainingOccupants == 0)
             {
                 if (despawnDelaySeconds <= 0f)
                 {

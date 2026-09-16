@@ -87,7 +87,8 @@ namespace DFMP.Runtime
         InvalidKind,
         InvalidMapPixel,
         MissingLocation,
-        MissingBuildingKey
+        MissingBuildingKey,
+        PendingTransition
     }
 
     public static class DFMPPositionProtocol

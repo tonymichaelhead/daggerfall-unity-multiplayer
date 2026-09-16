@@ -110,6 +110,13 @@ namespace DFMP.Runtime
 
         public static bool TryApplyWorldContextReport(int connectionId, DFMPPlayerSessionState sessionState, DFMPWorldContextReport report, out DFMPWorldContextRejectionReason rejectionReason)
         {
+            DFMPTransitionAssignmentState assignmentState;
+            if (transitionAssignmentStates.TryGetValue(connectionId, out assignmentState) && assignmentState != null && assignmentState.HasPendingAssignment)
+            {
+                rejectionReason = DFMPWorldContextRejectionReason.PendingTransition;
+                return false;
+            }
+
             rejectionReason = DFMPWorldContextProtocol.GetRejectionReason(sessionState, report);
             if (rejectionReason != DFMPWorldContextRejectionReason.None)
                 return false;
@@ -497,8 +504,11 @@ namespace DFMP.Runtime
             {
                 worldX = savedJoinDecision.CharacterRecord.WorldX;
                 worldZ = savedJoinDecision.CharacterRecord.WorldZ;
-                initialContext = savedJoinDecision.CharacterRecord.Context != null
+                DFMPWorldContextKey savedContext = savedJoinDecision.CharacterRecord.Context != null
                     ? savedJoinDecision.CharacterRecord.Context.ToKey()
+                    : CreateExteriorWorldContext(worldX, worldZ, "Daggerfall");
+                initialContext = savedContext.Kind == DFMPWorldContextKind.Exterior
+                    ? savedContext
                     : CreateExteriorWorldContext(worldX, worldZ, "Daggerfall");
                 startMarkerName = string.Empty;
             }
