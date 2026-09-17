@@ -686,7 +686,7 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void DungeonGeometryService_GroundedMovement_DescendsFromLedgeWithoutAccumulatingHeight()
+        public void DungeonGeometryService_GroundedMovement_StopsAtLedgeInsteadOfDroppingToFloorBelow()
         {
             GameObject serviceGo = new GameObject("DFMP_DungeonGeometryLedgeDescentTest");
             GameObject sessionGo = new GameObject("DFMP_DungeonGeometryLedgeDescentSession");
@@ -708,7 +708,7 @@ namespace DFMP.Tests
                 lowerFloor.transform.localPosition = new Vector3(0f, -0.125f, 0f);
                 lowerFloor.transform.localScale = new Vector3(20f, 0.25f, 20f);
 
-                // Ledge top sits 3 units above the lower floor, a drop further than the allowed step up.
+                // Ledge top sits 3 units above the lower floor, a drop far steeper than a walkable ramp.
                 GameObject ledge = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 ledge.transform.SetParent(root.transform, false);
                 ledge.transform.localPosition = new Vector3(0f, 2.875f, -5.1f);
@@ -718,7 +718,8 @@ namespace DFMP.Tests
                 Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
 
                 Vector3 currentPosition = new Vector3(0f, 3f, -1f);
-                float highestHeight = currentPosition.y;
+                float lowestHeight = currentPosition.y;
+                bool blockedAtLedge = false;
                 for (int tick = 0; tick < 20; tick++)
                 {
                     Vector3 resolvedPosition;
@@ -732,12 +733,14 @@ namespace DFMP.Tests
                         out resolvedPosition,
                         out blocked));
                     currentPosition = resolvedPosition;
-                    highestHeight = Mathf.Max(highestHeight, currentPosition.y);
+                    lowestHeight = Mathf.Min(lowestHeight, currentPosition.y);
+                    blockedAtLedge |= blocked;
                 }
 
-                Assert.LessOrEqual(highestHeight, 3.05f, "Grounded movement drifted upward above the ledge it started on.");
-                Assert.AreEqual(0f, currentPosition.y, 0.05f, "Grounded movement did not descend to the lower floor.");
-                Assert.AreEqual(4f, currentPosition.z, 0.05f);
+                Assert.IsTrue(blockedAtLedge, "Grounded movement never reported the ledge as blocking.");
+                Assert.GreaterOrEqual(lowestHeight, 2.95f, "Grounded movement teleported off the ledge to the floor below.");
+                Assert.AreEqual(3f, currentPosition.y, 0.05f, "Enemy should remain standing on the ledge.");
+                Assert.LessOrEqual(currentPosition.z, 0f, "Enemy should stop at the ledge edge instead of walking past it.");
             }
             finally
             {

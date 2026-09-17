@@ -292,12 +292,33 @@ namespace DFMP.Runtime
             if (leashRange <= 0f)
                 return desiredPosition;
 
-            Vector3 offset = desiredPosition - input.HomePosition;
-            offset.y = 0f;
-            if (offset.sqrMagnitude <= leashRange * leashRange)
+            float leashRangeSquared = leashRange * leashRange;
+            Vector3 desiredOffset = desiredPosition - input.HomePosition;
+            desiredOffset.y = 0f;
+            if (desiredOffset.sqrMagnitude <= leashRangeSquared)
                 return desiredPosition;
 
-            Vector3 constrainedPosition = input.HomePosition + offset.normalized * leashRange;
+            // Snapping the desired position radially onto the leash circle turns forward pursuit into a sideways
+            // slide along the boundary, so stop the step where it crosses the boundary instead.
+            Vector3 currentOffset = input.EnemyPosition - input.HomePosition;
+            currentOffset.y = 0f;
+            float currentDistanceSquared = currentOffset.sqrMagnitude;
+            if (currentDistanceSquared >= leashRangeSquared)
+                return input.EnemyPosition;
+
+            Vector3 step = desiredOffset - currentOffset;
+            float stepLength = step.magnitude;
+            if (stepLength <= 0.0001f)
+                return input.EnemyPosition;
+
+            Vector3 direction = step / stepLength;
+            float projection = Vector3.Dot(currentOffset, direction);
+            float discriminant = projection * projection - (currentDistanceSquared - leashRangeSquared);
+            if (discriminant < 0f)
+                return input.EnemyPosition;
+
+            float allowedStep = Mathf.Clamp(-projection + Mathf.Sqrt(discriminant), 0f, stepLength);
+            Vector3 constrainedPosition = input.EnemyPosition + direction * allowedStep;
             constrainedPosition.y = desiredPosition.y;
             return constrainedPosition;
         }

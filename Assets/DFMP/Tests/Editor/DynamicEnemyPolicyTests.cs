@@ -719,6 +719,34 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyAi_PursuitLeashDoesNotSlideAlongBoundary()
+        {
+            Vector3 enemyPosition = new Vector3(3f, 0f, 0f);
+            for (int tick = 0; tick < 12; tick++)
+            {
+                DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+                {
+                    EnemyPosition = enemyPosition,
+                    HomePosition = Vector3.zero,
+                    PursuitLeashRange = 3f,
+                    Targets = new DFMPDynamicEnemySensoryTarget[]
+                    {
+                        new DFMPDynamicEnemySensoryTarget { ConnectionId = 46, DungeonLocalPosition = new Vector3(10f, 0f, 10f), SpawnConfirmed = true, HasLineOfSight = true }
+                    },
+                    AwarenessRange = 64f,
+                    AttackRange = 1f,
+                    MoveSpeed = 4f,
+                    DeltaTime = 0.1f,
+                    RequireLineOfSight = false
+                });
+
+                enemyPosition = decision.NextDungeonLocalPosition;
+            }
+
+            Assert.AreEqual(new Vector3(3f, 0f, 0f), enemyPosition, "Enemy slid tangentially around the leash boundary instead of holding position.");
+        }
+
+        [Test]
         public void DynamicEnemyAi_IgnoresTemporarilyBlockedTarget()
         {
             DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput

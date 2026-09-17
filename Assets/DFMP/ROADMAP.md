@@ -74,6 +74,8 @@ Explicitly deferred to Phase 2, even though it would be tempting to build early:
 ## Architectural Rules
 
 - Upstream DFU files remain free of multiplayer logic.
+- **Replicate native DFU behavior from the start.** When a system has a native DFU implementation, port or reproduce that behavior rather than inventing a simplified stand-in. Invented mechanics with no upstream analogue (leashes, tethers, curated rosters, arbitrary radii) are a last resort, not a default starting point.
+- **Placeholder implementations require explicit approval.** If native behavior genuinely cannot be reproduced in a slice, stop and get sign-off before landing a stand-in, then record it in the roadmap with the native behavior it defers and the milestone that replaces it. Do not let a scaffold quietly become the shipped behavior.
 - Additive hooks, when needed, live in `Assets/DFMP/Hooks/` and are documented in `HOOKS.md`.
 - Networking, authority, persistence, and server bootstrap live in `Assets/DFMP/Runtime/`.
 - Server-owned world and session state must never live on a player prefab.
@@ -363,7 +365,7 @@ Implementation sequence:
 2. Harden network-facing player-to-enemy damage validation. Dynamic enemy damage intents must only accept client `SourceKind.Player`, reject dead attackers, reject attackers in pending transitions, reject malformed mixed-target messages, and continue enforcing same dungeon context, dungeon-local range, request id, sequence, cooldown, and rate limits.
 3. Introduce a server-owned dungeon geometry host service. Generate native dungeon geometry for occupied shared dungeon scopes with `importEnemies: false`, isolate it under server-owned roots, strip server-irrelevant audio/UI/player-only components, add diagnostics, and tear it down after the empty-context grace period.
 4. Replace placeholder line-of-sight checks with geometry-service queries. Convert dungeon-local enemy/player positions into hosted dungeon scene space, ignore trigger and presentation colliders, and fail closed with a clear warning when strict line of sight is required but geometry is unavailable.
-5. Constrain enemy movement against dungeon geometry. Replace straight-line wall crossing with simple capsule/raycast movement, basic slide-or-stop behavior, stuck handling, vertical stability, and a pursuit leash.
+5. Constrain enemy movement against dungeon geometry. Replace straight-line wall crossing with simple capsule/raycast movement, basic slide-or-stop behavior, stuck handling, vertical stability, and a pursuit leash. **The pursuit leash is an approved temporary stand-in with no upstream analogue** — native DFU has no home position, tether, or maximum pursuit distance, and bounds pursuit only by detection state and a give-up timer. M9 replaces it; see *Native enemy AI parity*.
 6. Add enemy combat profiles for melee, ranged, and direct-damage magic. Resolve attack range, damage, cooldown, and line-of-sight requirements from native mobile type plus Phase 1 config defaults, and route all accepted damage through the existing M7 vitals/death/respawn path.
 7. Replicate attack presentation state. Extend enemy state with attack kind/sequence where needed so clients can show melee, ranged, and magic attacks without granting presentation authority.
 8. Tighten lifecycle cleanup. Dead enemies must stop moving, clear targets, stop attacking, and never reacquire. Despawned alive enemies should preserve health while the server runs, clear stale targets, reset attack cooldowns, and resume cleanly on re-entry.
@@ -384,10 +386,30 @@ The smallest amount of non-gameplay work required to actually put testers on the
 - Beta stability pass: run the server continuously for a multi-day soak, watch for leaks, unbounded growth in session or roster state, and reconnect edge cases.
 - Dungeon enemy navigation hardening: add a small server-side detour or wall-following strategy so blocked enemies can route around brazier sprites, doors, and other walkable obstacles instead of repeatedly stopping and reacquiring.
 - Dungeon enemy separation: add native-like enemy-to-enemy collision or local avoidance so pursuing enemies do not converge onto the same point and overlap.
+- Native enemy AI parity: see the dedicated subsection below.
 - Record the two-client exterior remote-presentation smoke: grounded named avatars, movement and facing, and presentation-scope culling.
 - A short tester-facing setup note and a bug reporting channel. This is not the Phase 2 documentation set.
 
 Out of scope: launcher, auto-update, server browser, mod provisioning, in-game admin commands, metrics dashboards.
+
+#### Native Enemy AI Parity
+
+M8 shipped a deliberately simplified server AI: beeline pursuit, a spawn-anchored pursuit leash, and attack-on-cooldown inside a flat range. None of that matches DFU. M9 replaces it so enemies read as native Daggerfall enemies to any player who has played single-player DFU.
+
+The authority boundary does not change: all of this runs server-side on dungeon-local coordinates against hosted geometry. Clients keep presentation only.
+
+1. **Replace the pursuit leash with the native give-up model.** Delete `PursuitLeashRange` and the home-position return. Port `EnemyMotor.GiveUpTimer` semantics: the timer refreshes while the target is detected, decays only while undetected, and on expiry the enemy stops where it stands rather than walking home. Note that native detection feeds on a player-relative `wouldBeSpawnedInClassic` envelope and a through-wall `StealthCheck`; both must be generalized to *any* occupant of the context rather than `GameManager.Instance.PlayerEntityBehaviour`.
+2. **Port native pursuit destination selection.** Reproduce `EnemyMotor.GetDestination`: move to the target when there is a clear path, otherwise path to `LastKnownTargetPos` and extrapolate along `LastPositionDiff` via the `searchMult` ramp so enemies search around corners instead of freezing on line-of-sight loss.
+3. **Port native combat movement patterns.** Reproduce DFU's per-enemy approach/retreat behavior rather than a constant-velocity approach: `stopDistance` derived from attack reach, the lunge-and-withdraw pattern (`backAway`, `retreat`, `strafe`, `pauseUntil`, `changeStateTimer`), ranged/caster standoff behavior, and the `EnhancedCombatAI` variations. The rat's observed lunge -> jump back -> pause -> lunge cycle is the acceptance example, but every mobile type must be checked against its native behavior, not just melee monsters.
+4. **Port native attack timing.** Replace the flat `AttackCooldownSeconds` with native attack cadence sourced from mobile data and classic update timing, including windup/recovery so the replicated attack state lines up with the native animation rather than a server-side interval.
+5. **Port native obstacle and ledge handling.** Reproduce `ObstacleCheck`, `FallCheck`, and `FindDetour` (the ±45° sweep) instead of the current stop-flush-on-contact behavior. This subsumes the navigation-hardening item above. Grounded enemies should avoid ledges while steering and fall under gravity when knocked back or paralyzed, never teleport between floors.
+6. **Preserve flying, levitating, and swimming movement distinctions** from `EnemyMotor` rather than the current single flying-height offset.
+
+Verification:
+
+- EditMode fixtures for give-up timer decay/refresh, last-known-position search extrapolation, approach/retreat state transitions, and detour selection.
+- Side-by-side comparison against single-player DFU for a melee monster (rat), a humanoid fighter, a ranged attacker, and a caster: pursuit distance, approach/retreat rhythm, attack cadence, and ledge behavior must be indistinguishable to a player.
+- Confirm no enemy exhibits behavior with no single-player analogue, and that no enemy stops pursuing for a reason that does not exist in native DFU.
 
 Verification:
 

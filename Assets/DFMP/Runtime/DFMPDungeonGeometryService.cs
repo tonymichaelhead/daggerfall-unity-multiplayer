@@ -219,7 +219,8 @@ namespace DFMP.Runtime
             resolvedDungeonLocalPosition = fromDungeonLocalPosition;
             blocked = false;
 
-            // Grounded enemies may only climb a short step, but they fall to whatever floor the downward probe finds.
+            // Grounded enemies may only climb a short step, and may only descend as steeply as a ramp; anything
+            // steeper is a ledge they refuse to walk off rather than teleporting to the floor far below.
             const float maximumGroundStepUp = 2f;
             Vector3 groundedFrom = fromDungeonLocalPosition;
             Vector3 queriedGroundedFrom;
@@ -234,7 +235,22 @@ namespace DFMP.Runtime
             if (!TryResolveGroundedDungeonLocalPosition(context, desiredDungeonLocalPosition, out groundedDestination, out foundDestinationGround) || !foundDestinationGround)
             {
                 LogUngroundedMovement("destination-ground-missing", fromDungeonLocalPosition, groundedFrom, foundFromGround, desiredDungeonLocalPosition, desiredDungeonLocalPosition, float.NaN);
-                return TryResolveMovement(context, fromDungeonLocalPosition, desiredDungeonLocalPosition, radius, height, out resolvedDungeonLocalPosition, out blocked);
+
+                // An enemy with no floor underfoot has no ledge to refuse, so fall back to the plain collision sweep.
+                if (!foundFromGround)
+                    return TryResolveMovement(context, fromDungeonLocalPosition, desiredDungeonLocalPosition, radius, height, out resolvedDungeonLocalPosition, out blocked);
+
+                resolvedDungeonLocalPosition = groundedFrom;
+                blocked = true;
+                return true;
+            }
+
+            if (foundFromGround && groundedDestination.y < groundedFrom.y - GetMaximumGroundDescent(groundedFrom, desiredDungeonLocalPosition))
+            {
+                LogUngroundedMovement("destination-ground-below-descent-limit", fromDungeonLocalPosition, groundedFrom, foundFromGround, desiredDungeonLocalPosition, groundedFrom, groundedDestination.y);
+                resolvedDungeonLocalPosition = groundedFrom;
+                blocked = true;
+                return true;
             }
 
             // Sweep at a walkable height so a ledge face cannot block the descent; the re-ground below applies the drop.
@@ -258,21 +274,55 @@ namespace DFMP.Runtime
 
             Vector3 regroundedPosition;
             bool foundResolvedGround;
+            float maximumDescent = GetMaximumGroundDescent(groundedFrom, resolvedDungeonLocalPosition);
+            bool descendedPastLedge = false;
             if (TryResolveGroundedDungeonLocalPosition(context, resolvedDungeonLocalPosition, out regroundedPosition, out foundResolvedGround) &&
                 foundResolvedGround &&
-                regroundedPosition.y <= groundedFrom.y + maximumGroundStepUp)
+                regroundedPosition.y <= groundedFrom.y + maximumGroundStepUp &&
+                (!foundFromGround || regroundedPosition.y >= groundedFrom.y - maximumDescent))
+            {
                 resolvedDungeonLocalPosition = regroundedPosition;
+            }
             else
+            {
+                string reason;
+                if (!foundResolvedGround)
+                    reason = "resolved-ground-missing";
+                else if (regroundedPosition.y > groundedFrom.y + maximumGroundStepUp)
+                    reason = "resolved-ground-above-step-limit";
+                else
+                {
+                    reason = "resolved-ground-below-descent-limit";
+                    descendedPastLedge = true;
+                }
+
                 LogUngroundedMovement(
-                    foundResolvedGround ? "resolved-ground-above-step-limit" : "resolved-ground-missing",
+                    reason,
                     fromDungeonLocalPosition,
                     groundedFrom,
                     foundFromGround,
                     desiredDungeonLocalPosition,
-                    resolvedDungeonLocalPosition,
+                    descendedPastLedge ? groundedFrom : resolvedDungeonLocalPosition,
                     foundResolvedGround ? regroundedPosition.y : float.NaN);
 
+                if (descendedPastLedge)
+                {
+                    resolvedDungeonLocalPosition = groundedFrom;
+                    blocked = true;
+                }
+            }
+
             return true;
+        }
+
+        // A step down is a walkable ramp only while it stays within this slope; beyond it the floor below is a ledge.
+        static float GetMaximumGroundDescent(Vector3 fromDungeonLocalPosition, Vector3 toDungeonLocalPosition)
+        {
+            const float stepLipTolerance = 0.5f;
+            const float descentSlope = 2f;
+            Vector3 travel = toDungeonLocalPosition - fromDungeonLocalPosition;
+            travel.y = 0f;
+            return stepLipTolerance + travel.magnitude * descentSlope;
         }
 
         void LogUngroundedMovement(string reason, Vector3 from, Vector3 groundedFrom, bool foundFromGround, Vector3 desired, Vector3 resolved, float regroundedY)
