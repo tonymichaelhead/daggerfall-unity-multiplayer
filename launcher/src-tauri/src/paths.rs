@@ -2,15 +2,30 @@ use crate::state::LauncherConfig;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// A valid Daggerfall install has an arena2 folder containing the core BSA archives.
-pub fn is_daggerfall_folder(path: &Path) -> bool {
-    let Some(arena2) = find_arena2(path) else {
-        return false;
-    };
+/// DFU's `MyDaggerfallPath` is the folder *containing* arena2, but players naturally pick arena2
+/// itself, so accept either and resolve to the parent DFU wants. Mirrors `DFValidator`'s required set.
+pub fn resolve_daggerfall_root(path: &Path) -> Option<PathBuf> {
+    if let Some(arena2) = find_arena2(path) {
+        if has_required_files(&arena2) {
+            return Some(path.to_path_buf());
+        }
+    }
 
-    ["ARCH3D.BSA", "BLOCKS.BSA", "MAPS.BSA"]
+    if has_required_files(path) {
+        return path.parent().map(|parent| parent.to_path_buf());
+    }
+
+    None
+}
+
+pub fn is_daggerfall_folder(path: &Path) -> bool {
+    find_arena2(path).map(|arena2| has_required_files(&arena2)).unwrap_or(false)
+}
+
+fn has_required_files(directory: &Path) -> bool {
+    ["ARCH3D.BSA", "BLOCKS.BSA", "MAPS.BSA", "WOODS.WLD", "DAGGER.SND"]
         .iter()
-        .all(|name| contains_file_ignoring_case(&arena2, name))
+        .all(|name| contains_file_ignoring_case(directory, name))
 }
 
 fn find_arena2(path: &Path) -> Option<PathBuf> {
@@ -154,7 +169,63 @@ fn write_private_file(path: &Path, contents: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::set_ini_value;
+    use super::{resolve_daggerfall_root, set_ini_value};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("dfmp-test-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn populate_arena2(directory: &Path) {
+        fs::create_dir_all(directory).unwrap();
+        for name in ["ARCH3D.BSA", "BLOCKS.BSA", "MAPS.BSA", "WOODS.WLD", "DAGGER.SND"] {
+            fs::write(directory.join(name), b"stub").unwrap();
+        }
+    }
+
+    #[test]
+    fn accepts_the_daggerfall_root() {
+        let root = temp_dir("root");
+        populate_arena2(&root.join("arena2"));
+
+        assert_eq!(resolve_daggerfall_root(&root), Some(root.clone()));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn accepts_the_arena2_folder_and_resolves_to_its_parent() {
+        let root = temp_dir("arena2-selected");
+        let arena2 = root.join("arena2");
+        populate_arena2(&arena2);
+
+        assert_eq!(resolve_daggerfall_root(&arena2), Some(root.clone()));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn accepts_an_uppercase_arena2_folder() {
+        let root = temp_dir("uppercase");
+        populate_arena2(&root.join("ARENA2"));
+
+        assert_eq!(resolve_daggerfall_root(&root), Some(root.clone()));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn rejects_an_incomplete_arena2_folder() {
+        let root = temp_dir("incomplete");
+        let arena2 = root.join("arena2");
+        fs::create_dir_all(&arena2).unwrap();
+        fs::write(arena2.join("ARCH3D.BSA"), b"stub").unwrap();
+
+        assert_eq!(resolve_daggerfall_root(&root), None);
+        assert_eq!(resolve_daggerfall_root(&arena2), None);
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn replaces_an_existing_key_in_place() {

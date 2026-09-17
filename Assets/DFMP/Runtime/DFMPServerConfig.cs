@@ -28,8 +28,12 @@ namespace DFMP.Runtime
     public class DFMPServerIdentityConfig
     {
         public string ServerWorldId = "default";
+        public string Mode = DFMPAuthModes.ServerLocal;
+        public bool AllowSelfRegistration = true;
         public bool WhitelistEnabled;
         public string[] AllowedAccountIds = new string[0];
+        public string[] ModeratorAccountIds = new string[0];
+        public string[] AdminAccountIds = new string[0];
     }
 
     [Serializable]
@@ -221,7 +225,10 @@ namespace DFMP.Runtime
                 Identity = new DFMPServerIdentityConfig();
 
             Identity.ServerWorldId = string.IsNullOrWhiteSpace(Identity.ServerWorldId) ? "default" : Identity.ServerWorldId.Trim();
+            Identity.Mode = DFMPAuthModes.Normalize(Identity.Mode);
             Identity.AllowedAccountIds = Identity.AllowedAccountIds ?? new string[0];
+            Identity.ModeratorAccountIds = Identity.ModeratorAccountIds ?? new string[0];
+            Identity.AdminAccountIds = Identity.AdminAccountIds ?? new string[0];
 
             if (Gameplay == null)
                 Gameplay = new DFMPServerGameplayConfig();

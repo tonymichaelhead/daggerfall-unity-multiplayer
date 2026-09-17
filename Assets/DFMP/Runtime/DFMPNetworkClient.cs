@@ -22,7 +22,7 @@ namespace DFMP.Runtime
             get { return NetworkClient.isConnected; }
         }
 
-        public static void Start(string address, ushort port, int tickRate, string accountId = null)
+        public static void Start(string address, ushort port, int tickRate, string accountId = null, string credential = null)
         {
             if (NetworkClient.active)
             {
@@ -38,7 +38,15 @@ namespace DFMP.Runtime
 
             Address = string.IsNullOrEmpty(address) ? "127.0.0.1" : address;
             Port = port;
+
+            DFMPClientSession.EnsureLoaded();
+            if (string.IsNullOrWhiteSpace(accountId))
+                accountId = DFMPClientSession.AccountId;
+
             AccountId = string.IsNullOrWhiteSpace(accountId) ? GetDefaultAccountId() : accountId;
+            DFMPNetworkAuthenticator.ClientAccountId = AccountId;
+            DFMPNetworkAuthenticator.ClientCredential = credential ?? DFMPClientSession.Credential;
+
             if (DFMPClientJoinFlowController.Instance != null)
                 DFMPClientJoinFlowController.Instance.MarkConnecting();
             if (DFMPChatController.Instance != null)
@@ -59,6 +67,7 @@ namespace DFMP.Runtime
             Transport.statisticsLog = false;
 
             Manager = networkGo.AddComponent<DFMPNetworkManager>();
+            Manager.authenticator = networkGo.AddComponent<DFMPNetworkAuthenticator>();
             Manager.dontDestroyOnLoad = true;
             Manager.runInBackground = true;
             Manager.headlessStartMode = HeadlessStartOptions.DoNothing;

@@ -77,7 +77,10 @@ async function signOut() {
 }
 
 async function browseDaggerfall() {
-  const selected = await open({ directory: true, title: "Select your Daggerfall folder (the one containing arena2)" });
+  const selected = await open({
+    directory: true,
+    title: "Select your Daggerfall folder, or the arena2 folder inside it"
+  });
   if (typeof selected !== "string") return;
 
   try {

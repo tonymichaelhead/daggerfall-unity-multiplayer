@@ -33,6 +33,7 @@ namespace DFMP.Runtime
         {
             base.OnServerConnect(conn);
             Debug.Log($"[DFMP Net] Client connected: connectionId={conn.connectionId}, address={conn.address}.");
+            DFMPNetworkServer.BeginJoin(conn);
         }
 
         public override void OnServerDisconnect(NetworkConnectionToClient conn)
@@ -92,10 +93,6 @@ namespace DFMP.Runtime
 
         public override void OnClientConnect()
         {
-            NetworkClient.Send(new DFMPAccountIdentityMessage
-            {
-                AccountId = DFMPNetworkClient.AccountId
-            });
             Debug.Log($"[DFMP Net] Connected to server: address={networkAddress}, port={DFMPNetworkClient.Port}.");
         }
 

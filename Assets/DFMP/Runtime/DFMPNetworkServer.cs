@@ -23,6 +23,7 @@ namespace DFMP.Runtime
         public static string Motd { get; set; } = "Welcome to Daggerfall Unity Multiplayer";
         public static DFMPServerConfig Config { get; private set; }
         public static IDFMPCharacterStore CharacterStore { get; private set; }
+        public static IDFMPLocalAccountStore LocalAccountStore { get; private set; }
         public static DFMPDungeonGeometryService DungeonGeometryService { get; private set; }
         public static DFMPDungeonEnemyRosterService DungeonEnemyRosterService { get; private set; }
 
@@ -301,6 +302,11 @@ namespace DFMP.Runtime
             Config = config ?? new DFMPServerConfig();
             Config.Normalize();
             CharacterStore = new DFMPFileCharacterStore(GetCharacterStoreDirectory());
+            LocalAccountStore = new DFMPFileLocalAccountStore(GetLocalAccountStoreDirectory());
+            DFMPAuthenticatedConnections.Clear();
+
+            if (DFMPAuthModes.Normalize(Config.Identity.Mode) == DFMPAuthModes.Open)
+                Debug.LogWarning("[DFMP Auth] Identity mode is 'open': connections are accepted without any credential. Use this on a loopback or trusted LAN address only.");
             if (!string.IsNullOrEmpty(serverName))
                 ServerName = serverName;
             if (motd != null)
@@ -328,6 +334,7 @@ namespace DFMP.Runtime
             DungeonEnemyRosterService.Initialize(Config.Enemies);
 
             Manager = networkGo.AddComponent<DFMPNetworkManager>();
+            Manager.authenticator = networkGo.AddComponent<DFMPNetworkAuthenticator>();
             Manager.dontDestroyOnLoad = true;
             Manager.runInBackground = true;
             Manager.headlessStartMode = HeadlessStartOptions.DoNothing;
@@ -366,7 +373,6 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPDeveloperAdvanceTimeRequest>(OnDeveloperAdvanceTimeRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperDamagePlayerRequest>(OnDeveloperDamagePlayerRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperDamageSelfRequest>(OnDeveloperDamageSelfRequest);
-            NetworkServer.RegisterHandler<DFMPAccountIdentityMessage>(OnAccountIdentityMessage);
             SpawnTimeState();
 
             if (enableDiscovery)
@@ -401,12 +407,29 @@ namespace DFMP.Runtime
             return Path.Combine(Application.persistentDataPath, "DFMP", "Characters");
         }
 
-        static void OnAccountIdentityMessage(NetworkConnectionToClient conn, DFMPAccountIdentityMessage message)
+        static string GetLocalAccountStoreDirectory()
+        {
+            return Path.Combine(Application.persistentDataPath, "DFMP", "Accounts");
+        }
+
+        /// <summary>
+        /// Runs the game-level join decision once the authenticator has established who the connection is.
+        /// The account id comes from the authenticator, never from a client-supplied message.
+        /// </summary>
+        public static void BeginJoin(NetworkConnectionToClient conn)
         {
             if (conn == null || Config == null || CharacterStore == null)
                 return;
 
-            DFMPJoinDecision decision = DFMPJoinPolicy.Resolve(message.AccountId, Config, CharacterStore);
+            string authenticatedAccountId;
+            if (!DFMPAuthenticatedConnections.TryGetAccountId(conn.connectionId, out authenticatedAccountId))
+            {
+                Debug.LogWarning($"[DFMP Join] Connection reached join without an authenticated account: connectionId={conn.connectionId}.");
+                conn.Disconnect();
+                return;
+            }
+
+            DFMPJoinDecision decision = DFMPJoinPolicy.Resolve(authenticatedAccountId, Config, CharacterStore);
 
             if (decision.Accepted && !activeAccounts.TryClaim(decision.AccountId, conn.connectionId))
             {
@@ -1081,7 +1104,7 @@ namespace DFMP.Runtime
 
         private static void OnDeveloperInfectSelfRequest(NetworkConnectionToClient conn, DFMPDeveloperInfectSelfRequest request)
         {
-            if (conn == null)
+            if (!IsDeveloperCommandAuthorized(conn, "infect self"))
                 return;
 
             DFMPPlayerSessionState sessionState;
@@ -1114,7 +1137,7 @@ namespace DFMP.Runtime
 
         private static void OnDeveloperGodModeRequest(NetworkConnectionToClient conn, DFMPDeveloperGodModeRequest request)
         {
-            if (conn == null)
+            if (!IsDeveloperCommandAuthorized(conn, "god mode"))
                 return;
 
             DFMPPlayerSessionState sessionState;
@@ -1144,7 +1167,7 @@ namespace DFMP.Runtime
 
         private static void OnDeveloperTeleportDungeonRequest(NetworkConnectionToClient conn, DFMPDeveloperTeleportDungeonRequest request)
         {
-            if (conn == null)
+            if (!IsDeveloperCommandAuthorized(conn, "teleport dungeon"))
                 return;
 
             DFMPPlayerSessionState sessionState;
@@ -1221,7 +1244,7 @@ namespace DFMP.Runtime
 
         private static void OnDeveloperAdvanceTimeRequest(NetworkConnectionToClient conn, DFMPDeveloperAdvanceTimeRequest request)
         {
-            if (conn == null)
+            if (!IsDeveloperCommandAuthorized(conn, "advance time"))
                 return;
 
             DFMPPlayerSessionState sessionState;
@@ -1680,7 +1703,7 @@ namespace DFMP.Runtime
 
         private static void OnDeveloperDamagePlayerRequest(NetworkConnectionToClient conn, DFMPDeveloperDamagePlayerRequest request)
         {
-            if (conn == null)
+            if (!IsDeveloperCommandAuthorized(conn, "damage player"))
                 return;
 
             DFMPPlayerSessionState sessionState;
@@ -1737,7 +1760,7 @@ namespace DFMP.Runtime
 
         private static void OnDeveloperDamageSelfRequest(NetworkConnectionToClient conn, DFMPDeveloperDamageSelfRequest request)
         {
-            if (conn == null)
+            if (!IsDeveloperCommandAuthorized(conn, "damage self"))
                 return;
 
             DFMPPlayerSessionState sessionState;
@@ -1996,7 +2019,7 @@ namespace DFMP.Runtime
         private static void OnAdminRosterRequest(NetworkConnectionToClient conn, DFMPAdminRosterRequest request)
         {
             DFMPPlayerSessionState requesterSession;
-            if (!TryValidateAdminRequester(conn, out requesterSession))
+            if (!TryValidateAdminRequester(conn, DFMPAccountRole.Moderator, out requesterSession))
                 return;
 
             conn.Send(CreateAdminRoster(conn.connectionId));
@@ -2005,7 +2028,7 @@ namespace DFMP.Runtime
         private static void OnAdminKickRequest(NetworkConnectionToClient conn, DFMPAdminKickRequest request)
         {
             DFMPPlayerSessionState requesterSession;
-            if (!TryValidateAdminRequester(conn, out requesterSession))
+            if (!TryValidateAdminRequester(conn, DFMPAccountRole.Admin, out requesterSession))
                 return;
 
             DFMPPlayerSessionState targetSession;
@@ -2064,12 +2087,18 @@ namespace DFMP.Runtime
                 currentConnection.Disconnect();
         }
 
-        private static bool TryValidateAdminRequester(NetworkConnectionToClient conn, out DFMPPlayerSessionState sessionState)
+        private static bool TryValidateAdminRequester(NetworkConnectionToClient conn, DFMPAccountRole requiredRole, out DFMPPlayerSessionState sessionState)
         {
             sessionState = null;
             if (conn == null || !IsJoinAccepted(conn) || !playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
             {
                 Debug.LogWarning($"[DFMP Admin] Rejected request without an accepted session: connectionId={(conn != null ? conn.connectionId : -1)}.");
+                return false;
+            }
+
+            if (!DFMPAuthenticatedConnections.HasRole(conn.connectionId, requiredRole))
+            {
+                Debug.LogWarning($"[DFMP Admin] Rejected request from insufficient role: connectionId={conn.connectionId}, role={DFMPAuthenticatedConnections.GetRole(conn.connectionId)}, required={requiredRole}.");
                 return false;
             }
 
@@ -2081,6 +2110,18 @@ namespace DFMP.Runtime
             }
 
             return true;
+        }
+
+        static bool IsDeveloperCommandAuthorized(NetworkConnectionToClient conn, string surface)
+        {
+            if (conn == null)
+                return false;
+
+            if (DFMPAuthenticatedConnections.HasRole(conn.connectionId, DFMPAccountRole.Admin))
+                return true;
+
+            Debug.LogWarning($"[DFMP Developer] Rejected '{surface}' from insufficient role: connectionId={conn.connectionId}, role={DFMPAuthenticatedConnections.GetRole(conn.connectionId)}.");
+            return false;
         }
 
         public static void DestroyPlayerSessionState(NetworkConnectionToClient conn)
@@ -2135,6 +2176,7 @@ namespace DFMP.Runtime
             pendingAdminKickConnections.Remove(conn.connectionId);
             DFMPChatProtocol.RateLimiter.Reset(conn.connectionId);
             activeAccounts.Release(conn.connectionId);
+            DFMPAuthenticatedConnections.Remove(conn.connectionId);
             if (sessionState != null)
                 NetworkServer.Destroy(sessionState.gameObject);
         }
@@ -2176,10 +2218,12 @@ namespace DFMP.Runtime
             pendingAdminKickConnections.Clear();
             chatLifecycleNotifier.Clear();
             activeAccounts.Clear();
+            DFMPAuthenticatedConnections.Clear();
             nextTransitionAssignmentId = 1;
             Port = 0;
             Config = null;
             CharacterStore = null;
+            LocalAccountStore = null;
         }
     }
 }

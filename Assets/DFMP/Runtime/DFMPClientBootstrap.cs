@@ -30,6 +30,12 @@ namespace DFMP.Runtime
             AutoConnect = config.HasExplicitAddress;
             DFMPLogRouter.Initialize(DFMPLogRole.Client);
 
+            if (DFMPClientSession.TryLoadFromFile(config.SessionFilePath) || DFMPClientSession.TryLoadDevelopmentSession())
+            {
+                AccountId = DFMPClientSession.AccountId;
+                Debug.Log($"[DFMP Client] Loaded session for account '{AccountId}'.");
+            }
+
             ApplyClientRuntimeSettings(ClientTickRate);
 
             GameObject bootstrapGo = new GameObject("DFMP_ClientBootstrap");

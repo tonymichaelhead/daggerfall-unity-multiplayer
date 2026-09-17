@@ -7,6 +7,19 @@
   "HeartbeatInterval": 5.0,
   "LanDiscoveryEnabled": true,
   "Motd": "Welcome, traveler! Global chat is now online.",
+  "Identity": {
+    "ServerWorldId": "default",
+    "Mode": "server_local",
+    "AllowSelfRegistration": true,
+    "WhitelistEnabled": true,
+    "AllowedAccountIds": [
+      "tony"
+    ],
+    "ModeratorAccountIds": [],
+    "AdminAccountIds": [
+      "tony"
+    ]
+  },
   "Gameplay": {
     "EnableBeginnerTutorial": false
   },

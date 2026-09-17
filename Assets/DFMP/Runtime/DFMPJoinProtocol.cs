@@ -3,11 +3,6 @@ using UnityEngine;
 
 namespace DFMP.Runtime
 {
-    public struct DFMPAccountIdentityMessage : NetworkMessage
-    {
-        public string AccountId;
-    }
-
     public struct DFMPJoinResultMessage : NetworkMessage
     {
         public DFMPJoinDecisionKind Decision;

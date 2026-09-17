@@ -198,6 +198,16 @@ namespace DFMP.Runtime
         {
             Flow.MarkDisconnected();
             pendingConnectionNotice = null;
+
+            // An authentication rejection disconnects before any join result arrives, so surface its
+            // reason through the same notice the kick flow uses.
+            if (string.IsNullOrEmpty(pendingKickNotice) &&
+                DFMPNetworkAuthenticator.LastClientResultCode != DFMPAuthResultCode.Accepted &&
+                !string.IsNullOrEmpty(DFMPNetworkAuthenticator.LastClientRejectionReason))
+            {
+                pendingKickNotice = DFMPNetworkAuthenticator.LastClientRejectionReason;
+            }
+
             shouldShowKickNotice = !string.IsNullOrEmpty(pendingKickNotice);
         }
 

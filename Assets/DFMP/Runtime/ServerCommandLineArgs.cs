@@ -22,6 +22,7 @@ namespace DFMP.Runtime
         public float HeartbeatInterval;
         public string ServerName;
         public string AccountId;
+        public string SessionFilePath;
         public bool RunDungeonGeometrySpike;
         public int DungeonGeometrySpikeCount;
 
@@ -38,6 +39,7 @@ namespace DFMP.Runtime
             HeartbeatInterval = 5.0f,
             ServerName = null,
             AccountId = null,
+            SessionFilePath = null,
             RunDungeonGeometrySpike = false,
             DungeonGeometrySpikeCount = 1
         };
@@ -112,6 +114,11 @@ namespace DFMP.Runtime
                 {
                     if (!string.IsNullOrEmpty(args[i + 1]))
                         result.AccountId = args[i + 1];
+                }
+                else if ((arg == "-dfmp-session" || arg == "--dfmp-session") && i + 1 < args.Length)
+                {
+                    if (!string.IsNullOrEmpty(args[i + 1]))
+                        result.SessionFilePath = args[i + 1];
                 }
                 else if (arg == "-dfmp-dungeon-spike" || arg == "--dfmp-dungeon-spike")
                 {

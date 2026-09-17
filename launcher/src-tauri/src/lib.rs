@@ -75,13 +75,14 @@ fn sign_out() -> Result<(), String> {
 
 #[tauri::command]
 fn set_daggerfall_path(path: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
-    if !paths::is_daggerfall_folder(&path) {
-        return Err("That folder does not contain an arena2 directory with Daggerfall data.".into());
-    }
+    let selected = PathBuf::from(path);
+    let resolved = paths::resolve_daggerfall_root(&selected).ok_or(
+        "That folder does not look like a Daggerfall install. Select either your Daggerfall folder \
+         or the arena2 folder inside it.",
+    )?;
 
     let mut config = LauncherConfig::load();
-    config.daggerfall_path = Some(path);
+    config.daggerfall_path = Some(resolved);
     config.save()?;
     paths::write_client_settings(&config)
 }
