@@ -13,10 +13,17 @@ namespace DFMP.Runtime
     public static class DFMPDynamicEnemyPresentation
     {
         public const float MaximumVisibleDistance = 150f;
+        public const float PositionSmoothingSpeed = 12f;
 
         public static Vector3 DungeonLocalToScenePosition(Vector3 dungeonRootPosition, Vector3 dungeonLocalPosition)
         {
             return dungeonRootPosition + dungeonLocalPosition;
+        }
+
+        public static Vector3 InterpolatePosition(Vector3 currentPosition, Vector3 targetPosition, float deltaTime)
+        {
+            float interpolationFactor = 1f - Mathf.Exp(-PositionSmoothingSpeed * Mathf.Max(0f, deltaTime));
+            return Vector3.Lerp(currentPosition, targetPosition, interpolationFactor);
         }
 
         public static Vector3 ResolveCorpseGroundPosition(Transform dungeonTransform, Vector3 scenePosition)
@@ -316,7 +323,11 @@ namespace DFMP.Runtime
                         playerEnterExit.Dungeon.transform.position,
                         state.DungeonLocalPosition);
 
-                    proxy.transform.position = targetPosition;
+                    if (!proxy.activeSelf)
+                        proxy.transform.position = targetPosition;
+                    else
+                        proxy.transform.position = DFMPDynamicEnemyPresentation.InterpolatePosition(proxy.transform.position, targetPosition, Time.unscaledDeltaTime);
+
                     proxy.transform.rotation = Quaternion.Euler(0f, state.FacingYaw, 0f);
 
                     if (state.MobileType != (int)MobileTypes.GiantBat && state.MobileType != (int)MobileTypes.Harpy)

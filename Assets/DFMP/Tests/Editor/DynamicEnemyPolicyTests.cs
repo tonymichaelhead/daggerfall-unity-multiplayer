@@ -379,6 +379,11 @@ namespace DFMP.Tests
             Assert.AreEqual(new Vector3(0f, 1.5f, 0f), DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(1.5f));
             Assert.AreEqual(new Vector3(10f, 4f, 30f), DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(null, new Vector3(10f, 4f, 30f)));
 
+            Vector3 interpolatedPosition = DFMPDynamicEnemyPresentation.InterpolatePosition(Vector3.zero, new Vector3(10f, 0f, 0f), 0.1f);
+            Assert.Greater(interpolatedPosition.x, 0f);
+            Assert.Less(interpolatedPosition.x, 10f);
+            Assert.AreEqual(Vector3.zero, DFMPDynamicEnemyPresentation.InterpolatePosition(Vector3.zero, Vector3.one, -1f));
+
             GameObject enemyObject = new GameObject("DFMP_PresentationEligibilityTest");
             try
             {
