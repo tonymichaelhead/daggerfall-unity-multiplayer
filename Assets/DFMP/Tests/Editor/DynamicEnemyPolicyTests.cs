@@ -678,6 +678,42 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyAi_PursuitLeashBoundaryDoesNotOscillateFacing()
+        {
+            // Pursuit clamps to the leash radius, so collision and grounding leave the enemy a hair outside it.
+            Vector3 enemyPosition = new Vector3(3.0001f, 0f, 0f);
+            float previousYaw = 0f;
+            for (int tick = 0; tick < 12; tick++)
+            {
+                DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+                {
+                    EnemyPosition = enemyPosition,
+                    FacingYaw = previousYaw,
+                    HomePosition = Vector3.zero,
+                    PursuitLeashRange = 3f,
+                    Targets = new DFMPDynamicEnemySensoryTarget[]
+                    {
+                        new DFMPDynamicEnemySensoryTarget { ConnectionId = 45, DungeonLocalPosition = new Vector3(10f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
+                    },
+                    AwarenessRange = 64f,
+                    AttackRange = 1f,
+                    MoveSpeed = 4f,
+                    DeltaTime = 0.1f,
+                    RequireLineOfSight = false
+                });
+
+                if (tick > 0)
+                    Assert.AreEqual(previousYaw, decision.FacingYaw, 1f, $"Facing flipped on tick {tick}; the enemy is chattering across the leash boundary.");
+
+                previousYaw = decision.FacingYaw;
+                enemyPosition = decision.NextDungeonLocalPosition;
+                Assert.LessOrEqual(enemyPosition.x, 3.01f);
+            }
+
+            Assert.AreEqual(3f, enemyPosition.x, 0.01f, "Enemy should settle on the leash radius facing the target.");
+        }
+
+        [Test]
         public void DynamicEnemyAi_IgnoresTemporarilyBlockedTarget()
         {
             DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput

@@ -228,6 +228,8 @@ namespace DFMP.Runtime
 
     public static class DFMPDynamicEnemyAiPolicy
     {
+        public const float LeashReturnHysteresis = 1f;
+
         public static DFMPDynamicEnemyAiDecision Evaluate(DFMPDynamicEnemyAiInput input)
         {
             var decision = new DFMPDynamicEnemyAiDecision
@@ -242,7 +244,9 @@ namespace DFMP.Runtime
                 return decision;
 
             float leashRange = Mathf.Max(0f, input.PursuitLeashRange);
-            if (leashRange > 0f && GetPlanarDistanceSquared(input.EnemyPosition, input.HomePosition) > leashRange * leashRange)
+            // Pursuit parks the enemy exactly on the leash radius, so returning home needs a margin or it chatters every tick.
+            float leashReturnRange = leashRange + LeashReturnHysteresis;
+            if (leashRange > 0f && GetPlanarDistanceSquared(input.EnemyPosition, input.HomePosition) > leashReturnRange * leashReturnRange)
             {
                 Vector3 returnOffset = input.HomePosition - input.EnemyPosition;
                 returnOffset.y = 0f;
