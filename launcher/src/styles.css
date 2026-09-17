@@ -1,0 +1,183 @@
+:root {
+  --bg: #1b1713;
+  --panel: #262019;
+  --ink: #e8dcc6;
+  --muted: #a3927a;
+  --accent: #c8a45d;
+  --error: #d9705a;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.shell {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 28px 24px 32px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+section {
+  background: var(--panel);
+  border: 1px solid #38301f;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.hint {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--muted);
+}
+
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  background: #17130f;
+  border: 1px solid #453a26;
+  border-radius: 4px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.checkbox input {
+  margin: 0;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #241c0c;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button.secondary {
+  width: auto;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid #55492f;
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 12px;
+}
+
+button.link {
+  margin-top: 10px;
+  background: none;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.signed-in {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #38301f;
+}
+
+.field-text {
+  min-width: 0;
+}
+
+.field-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.field-value {
+  display: block;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+#play {
+  margin-top: 16px;
+}
+
+.status {
+  margin: 16px 0 0;
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--muted);
+}
+
+.status[data-kind="error"] {
+  color: var(--error);
+}

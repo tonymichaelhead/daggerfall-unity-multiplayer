@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DFMP Launcher</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <h1>Daggerfall Unity Multiplayer</h1>
+        <p class="subtitle">Private beta launcher</p>
+      </header>
+
+      <section id="login-panel">
+        <h2>Sign in</h2>
+        <p class="hint">
+          Your username and password are used on every DFMP server. Your password is never sent to a
+          server; only a value derived from it leaves this machine.
+        </p>
+        <label for="account">Username</label>
+        <input id="account" type="text" autocomplete="username" spellcheck="false" />
+
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" />
+
+        <label class="checkbox">
+          <input id="remember" type="checkbox" checked />
+          Remember me on this computer
+        </label>
+
+        <button id="sign-in" type="button">Sign in</button>
+      </section>
+
+      <section id="main-panel" hidden>
+        <h2>Ready to play</h2>
+        <p class="signed-in">Signed in as <strong id="signed-in-account"></strong></p>
+
+        <div class="field-row">
+          <div class="field-text">
+            <span class="field-label">Daggerfall game files</span>
+            <span id="daggerfall-path" class="field-value">Not set</span>
+          </div>
+          <button id="browse-daggerfall" type="button" class="secondary">Change</button>
+        </div>
+
+        <div class="field-row">
+          <div class="field-text">
+            <span class="field-label">DFMP client</span>
+            <span id="client-path" class="field-value">Not set</span>
+          </div>
+          <button id="browse-client" type="button" class="secondary">Change</button>
+        </div>
+
+        <button id="play" type="button">Play</button>
+        <button id="sign-out" type="button" class="link">Sign out</button>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
