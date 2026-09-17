@@ -7,7 +7,6 @@ use std::path::PathBuf;
 pub struct LauncherConfig {
     pub account_id: String,
     pub daggerfall_path: Option<PathBuf>,
-    pub client_path: Option<PathBuf>,
 }
 
 impl LauncherConfig {

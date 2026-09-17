@@ -415,6 +415,7 @@ A Tauri application at `launcher/`, outside `Assets/` so Unity does not import i
 
 - Login and local profile management. Credentials are stored in the operating system credential store, not in a plaintext file.
 - Locates the player's existing Daggerfall game files and writes `MyDaggerfallPath` into the DFMP client settings, reusing the same path resolution the dedicated server bootstrap already relies on. This item is pulled forward from R4.
+- Resolves the bundled DFMP client from the install layout (`client/` beside the launcher, overridable via exe-adjacent `dfmp-launcher.json` or `DFMP_CLIENT_PATH`) rather than asking the player to pick an executable.
 - Launches the DFMP client and hands off the session. The session is passed through a restricted-permission temporary file rather than a command-line argument, because command lines are readable by any local process.
 
 The server list stays in the DFMP client rather than moving into the launcher, so the client's advanced options panel remains reachable. Relocating it later is a decision, not a requirement.
@@ -449,7 +450,7 @@ Verification:
 - Confirm a client built with a bumped protocol version is rejected with a readable reason rather than desyncing.
 - Confirm an account that is not in `AllowedAccountIds` is refused with a readable reason, and that repeated wrong passwords trigger the lockout.
 - Confirm a non-admin account cannot invoke the F12 roster, kick, or any developer command.
-- Launcher smoke test on Windows, macOS, and Linux: log in, locate game files, launch the client, reach the server list, and connect.
+- Launcher smoke test on Windows, macOS, and Linux: log in, locate game files, launch the bundled client, reach the server list, and connect.
 
 Migration note: account identities change shape in this milestone, and character records are keyed by account identity, so existing beta test characters are orphaned. This is accepted rather than migrated.
 
@@ -476,7 +477,7 @@ Status: Planned.
 
 The smallest amount of non-gameplay work required to actually put testers on the author's server. Everything here is intentionally minimal, because the polished versions are Phase 2.
 
-- Tester client build: a versioned, zipped portable client that testers download directly, paired with the M8.5 launcher. No auto-update and no server browser.
+- Tester client build: one versioned zip containing the M8.5 launcher and a `client/` portable DFMP build that the launcher resolves automatically. No auto-update and no server browser.
 - Whitelist administered by hand, out of band via Discord, using the M5 whitelist store and the M8.5 authentication modes.
 - Manual operations are acceptable: file-copy character backups, restart by hand, read logs on disk.
 - Beta stability pass: run the server continuously for a multi-day soak, watch for leaks, unbounded growth in session or roster state, and reconnect edge cases.

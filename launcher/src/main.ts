@@ -4,7 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 type LauncherState = {
   accountId: string;
   daggerfallPath: string | null;
-  clientPath: string | null;
+  clientReady: boolean;
   hasStoredPassword: boolean;
 };
 
@@ -22,12 +22,12 @@ const rememberInput = el<HTMLInputElement>("remember");
 const statusLine = el<HTMLParagraphElement>("status");
 const signedInAccount = el<HTMLElement>("signed-in-account");
 const daggerfallPathLabel = el<HTMLElement>("daggerfall-path");
-const clientPathLabel = el<HTMLElement>("client-path");
+const playButton = el<HTMLButtonElement>("play");
 
 let state: LauncherState = {
   accountId: "",
   daggerfallPath: null,
-  clientPath: null,
+  clientReady: false,
   hasStoredPassword: false
 };
 
@@ -42,7 +42,7 @@ function render() {
   mainPanel.hidden = !signedIn;
   signedInAccount.textContent = state.accountId;
   daggerfallPathLabel.textContent = state.daggerfallPath ?? "Not set";
-  clientPathLabel.textContent = state.clientPath ?? "Not set";
+  playButton.disabled = !state.clientReady;
 }
 
 async function refresh() {
@@ -92,19 +92,6 @@ async function browseDaggerfall() {
   }
 }
 
-async function browseClient() {
-  const selected = await open({ directory: false, title: "Select the DFMP client executable" });
-  if (typeof selected !== "string") return;
-
-  try {
-    await invoke("set_client_path", { path: selected });
-    await refresh();
-    setStatus("Client path saved.");
-  } catch (error) {
-    setStatus(String(error), "error");
-  }
-}
-
 async function play() {
   setStatus("Launching DFMP…");
   try {
@@ -118,14 +105,18 @@ async function play() {
 el<HTMLButtonElement>("sign-in").addEventListener("click", signIn);
 el<HTMLButtonElement>("sign-out").addEventListener("click", signOut);
 el<HTMLButtonElement>("browse-daggerfall").addEventListener("click", browseDaggerfall);
-el<HTMLButtonElement>("browse-client").addEventListener("click", browseClient);
-el<HTMLButtonElement>("play").addEventListener("click", play);
+playButton.addEventListener("click", play);
 passwordInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") signIn();
 });
 
 refresh().then(() => {
-  if (!state.daggerfallPath) {
+  if (!state.clientReady) {
+    setStatus(
+      "DFMP client files were not found next to the launcher. Reinstall DFMP, keeping the launcher and its `client` folder together.",
+      "error"
+    );
+  } else if (!state.daggerfallPath) {
     setStatus("Set your Daggerfall folder before playing.");
   }
 });

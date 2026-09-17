@@ -1,4 +1,3 @@
-use crate::state::LauncherConfig;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -68,11 +67,7 @@ fn portable_data_directory(client_path: &Path) -> Result<PathBuf, String> {
     Ok(data_directory)
 }
 
-pub fn write_client_settings(config: &LauncherConfig) -> Result<(), String> {
-    let (Some(client_path), Some(daggerfall_path)) = (&config.client_path, &config.daggerfall_path) else {
-        return Ok(());
-    };
-
+pub fn write_client_settings(client_path: &Path, daggerfall_path: &Path) -> Result<(), String> {
     let settings_path = portable_data_directory(client_path)?.join("settings.ini");
     let existing = fs::read_to_string(&settings_path).unwrap_or_default();
     let updated = set_ini_value(

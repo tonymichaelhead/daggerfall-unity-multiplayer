@@ -1,4 +1,5 @@
 mod credential;
+mod install;
 mod paths;
 mod state;
 
@@ -14,7 +15,7 @@ const KEYRING_SERVICE: &str = "dev.dfmp.launcher";
 pub struct LauncherState {
     account_id: String,
     daggerfall_path: Option<String>,
-    client_path: Option<String>,
+    client_ready: bool,
     has_stored_password: bool,
 }
 
@@ -36,7 +37,7 @@ fn load_state() -> Result<LauncherState, String> {
     Ok(LauncherState {
         account_id: config.account_id,
         daggerfall_path: config.daggerfall_path.map(|p| p.to_string_lossy().into_owned()),
-        client_path: config.client_path.map(|p| p.to_string_lossy().into_owned()),
+        client_ready: install::resolve_client_path().is_ok(),
         has_stored_password,
     })
 }
@@ -82,22 +83,14 @@ fn set_daggerfall_path(path: String) -> Result<(), String> {
     )?;
 
     let mut config = LauncherConfig::load();
-    config.daggerfall_path = Some(resolved);
+    config.daggerfall_path = Some(resolved.clone());
     config.save()?;
-    paths::write_client_settings(&config)
-}
 
-#[tauri::command]
-fn set_client_path(path: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
-    if !path.is_file() {
-        return Err("That is not a file.".into());
+    if let Ok(client_path) = install::resolve_client_path() {
+        paths::write_client_settings(&client_path, &resolved)?;
     }
 
-    let mut config = LauncherConfig::load();
-    config.client_path = Some(path);
-    config.save()?;
-    paths::write_client_settings(&config)
+    Ok(())
 }
 
 #[tauri::command]
@@ -116,23 +109,20 @@ fn launch_client() -> Result<(), String> {
         return Err("The saved Daggerfall folder is no longer valid.".into());
     }
 
-    let client_path = config.client_path.as_ref().ok_or("Set the DFMP client executable first.")?;
-    if !client_path.is_file() {
-        return Err("The saved DFMP client executable is missing.".into());
-    }
+    let client_path = install::resolve_client_path()?;
 
     let derived = keyring_entry(&config.account_id)?
         .get_password()
         .map_err(|_| "Stored credentials are missing. Sign in again.".to_string())?;
 
-    paths::write_client_settings(&config)?;
+    paths::write_client_settings(&client_path, daggerfall_path)?;
     let session_path = paths::write_session_file(&config.account_id, &derived)?;
 
     let working_directory = client_path
         .parent()
         .ok_or("Could not determine the client directory.")?;
 
-    Command::new(client_path)
+    Command::new(&client_path)
         .current_dir(working_directory)
         .arg("-client")
         .arg("-dfmp-session")
@@ -152,7 +142,6 @@ pub fn run() {
             sign_in,
             sign_out,
             set_daggerfall_path,
-            set_client_path,
             launch_client
         ])
         .run(tauri::generate_context!())

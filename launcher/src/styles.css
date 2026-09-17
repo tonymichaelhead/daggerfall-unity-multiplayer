@@ -136,7 +136,23 @@ body {
 /* --- panels --------------------------------------------------------- */
 
 .panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   padding: 0;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel-top {
+  flex: 1;
+}
+
+.panel-actions {
+  margin-top: auto;
+  padding-top: 28px;
 }
 
 h2 {
@@ -149,7 +165,7 @@ h2 {
 }
 
 .hint {
-  margin: 0 0 20px;
+  margin: 0 0 28px;
   font-size: 13.5px;
   line-height: 1.55;
   color: var(--muted);
@@ -389,13 +405,9 @@ button.link:hover {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 12px 0;
+  padding: 18px 0;
   border-top: 1px solid rgba(201, 162, 39, 0.22);
-}
-
-.field-row:last-of-type {
   border-bottom: 1px solid rgba(201, 162, 39, 0.22);
-  margin-bottom: 24px;
 }
 
 .field-text {
@@ -416,6 +428,18 @@ button.link:hover {
   font-size: 13px;
   color: var(--ink-dim);
   word-break: break-all;
+}
+
+button.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button.primary:disabled:hover {
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.12), rgba(201, 162, 39, 0.03));
+  border-color: var(--gold);
+  box-shadow: none;
 }
 
 /* --- footnote ------------------------------------------------------- */
