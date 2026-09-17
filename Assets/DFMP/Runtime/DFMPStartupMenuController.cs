@@ -23,12 +23,19 @@ namespace DFMP.Runtime
             DaggerfallHooks.ShouldForceStartupMenu = ShouldForceStartupMenu;
             DaggerfallHooks.ConfigureStartupLaunchButton = ConfigureStartupLaunchButton;
             DaggerfallHooks.TryHandleStartupLaunch = TryHandleStartupLaunch;
+            DaggerfallHooks.IsStartInDungeonEnabled = IsStartInDungeonEnabled;
         }
 
         static bool ShouldForceStartupMenu()
         {
             // Without this the launcher can skip straight into the single-player game scene.
             return true;
+        }
+
+        static bool IsStartInDungeonEnabled()
+        {
+            // Multiplayer spawn is server-assigned: persisted logout position, or StartingLocation for new characters.
+            return false;
         }
 
         static void ConfigureStartupLaunchButton(object launchButton)

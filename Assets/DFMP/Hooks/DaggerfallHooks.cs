@@ -27,6 +27,8 @@ namespace DFMP.Hooks
         public static Func<bool> ShouldForceStartupMenu;
         public static Action<object> ConfigureStartupLaunchButton;
         public static Func<bool> TryHandleStartupLaunch;
+        // When bound and false, DFU hides Start In Dungeon and never uses it for new-character startup.
+        public static Func<bool> IsStartInDungeonEnabled;
         public static Action<ulong, bool> OnActionDoorToggled;
     }
 }

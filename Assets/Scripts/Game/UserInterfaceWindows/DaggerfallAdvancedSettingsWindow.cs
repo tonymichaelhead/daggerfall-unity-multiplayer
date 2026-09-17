@@ -242,7 +242,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             // Game
             AddSectionTitle(leftPanel, "game");
-            startInDungeon = AddCheckbox(leftPanel, "startInDungeon", DaggerfallUnity.Settings.StartInDungeon);
+            bool showStartInDungeon = DFMP.Hooks.DaggerfallHooks.IsStartInDungeonEnabled == null || DFMP.Hooks.DaggerfallHooks.IsStartInDungeonEnabled();
+            if (showStartInDungeon)
+                startInDungeon = AddCheckbox(leftPanel, "startInDungeon", DaggerfallUnity.Settings.StartInDungeon);
             smallerDungeons = AddCheckbox(leftPanel, "smallerDungeons", DaggerfallUnity.Settings.SmallerDungeons);
             randomDungeonTextures = AddSlider(leftPanel, "randomDungeonTextures",
                 DaggerfallUnity.Settings.RandomDungeonTextures, TextManager.Instance.GetLocalizedTextList("dungeonTextureModes", TextCollections.TextSettings));
@@ -432,7 +434,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             /* GamePlay */
 
-            DaggerfallUnity.Settings.StartInDungeon = startInDungeon.IsChecked;
+            if (startInDungeon != null)
+                DaggerfallUnity.Settings.StartInDungeon = startInDungeon.IsChecked;
             DaggerfallUnity.Settings.SmallerDungeons = smallerDungeons.IsChecked;
             DaggerfallUnity.Settings.RandomDungeonTextures = randomDungeonTextures.ScrollIndex;
 

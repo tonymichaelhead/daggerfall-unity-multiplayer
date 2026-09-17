@@ -518,23 +518,14 @@ namespace DFMP.Runtime
             int worldZ;
             DFMPWorldContextKey initialContext;
             string startMarkerName;
-            GetInitialSpawn(out worldX, out worldZ, out initialContext, out startMarkerName);
-
             DFMPJoinDecision savedJoinDecision;
-            if (joinDecisions.TryGetValue(conn.connectionId, out savedJoinDecision) &&
-                savedJoinDecision.CharacterRecord != null &&
-                (savedJoinDecision.CharacterRecord.WorldX != 0 || savedJoinDecision.CharacterRecord.WorldZ != 0))
-            {
-                worldX = savedJoinDecision.CharacterRecord.WorldX;
-                worldZ = savedJoinDecision.CharacterRecord.WorldZ;
-                DFMPWorldContextKey savedContext = savedJoinDecision.CharacterRecord.Context != null
-                    ? savedJoinDecision.CharacterRecord.Context.ToKey()
-                    : CreateExteriorWorldContext(worldX, worldZ, "Daggerfall");
-                initialContext = savedContext.Kind == DFMPWorldContextKind.Exterior
-                    ? savedContext
-                    : CreateExteriorWorldContext(worldX, worldZ, "Daggerfall");
-                startMarkerName = string.Empty;
-            }
+            joinDecisions.TryGetValue(conn.connectionId, out savedJoinDecision);
+            GetInitialSpawn(
+                savedJoinDecision != null ? savedJoinDecision.CharacterRecord : null,
+                out worldX,
+                out worldZ,
+                out initialContext,
+                out startMarkerName);
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
             if (savedJoinDecision != null && savedJoinDecision.CharacterRecord != null)
@@ -778,7 +769,7 @@ namespace DFMP.Runtime
             }
         }
 
-        private static void GetInitialSpawn(out int worldX, out int worldZ, out DFMPWorldContextKey context, out string startMarkerName)
+        private static void GetInitialSpawn(DFMPCharacterRecord characterRecord, out int worldX, out int worldZ, out DFMPWorldContextKey context, out string startMarkerName)
         {
             worldX = 0;
             worldZ = 0;
@@ -786,14 +777,18 @@ namespace DFMP.Runtime
             startMarkerName = string.Empty;
 
             DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
             string reason;
-            if (DFMPSpawnProtocol.TryResolveStartingLocation(Config != null ? Config.StartingLocation : null, out resolution, out reason))
+            if (DFMPSpawnProtocol.TryResolveJoinSpawn(characterRecord, Config != null ? Config.StartingLocation : null, out resolution, out usedPersistedPosition, out reason))
             {
                 worldX = resolution.Position.WorldX;
                 worldZ = resolution.Position.WorldZ;
                 context = resolution.Context;
-                startMarkerName = resolution.StartMarkerName;
-                Debug.Log($"[DFMP Session] Resolved configured spawn: mode={(Config != null && Config.StartingLocation != null ? Config.StartingLocation.Mode : DFMPStartingLocationModes.LocationCenter)}, mapPixel={context.MapPixelX}/{context.MapPixelY}, world={worldX}/{worldZ}.");
+                startMarkerName = usedPersistedPosition ? string.Empty : resolution.StartMarkerName;
+                if (usedPersistedPosition)
+                    Debug.Log($"[DFMP Session] Resolved persisted spawn: mapPixel={context.MapPixelX}/{context.MapPixelY}, world={worldX}/{worldZ}.");
+                else
+                    Debug.Log($"[DFMP Session] Resolved configured spawn: mode={(Config != null && Config.StartingLocation != null ? Config.StartingLocation.Mode : DFMPStartingLocationModes.LocationCenter)}, mapPixel={context.MapPixelX}/{context.MapPixelY}, world={worldX}/{worldZ}.");
                 return;
             }
 

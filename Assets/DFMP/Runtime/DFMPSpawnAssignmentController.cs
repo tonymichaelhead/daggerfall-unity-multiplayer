@@ -402,7 +402,15 @@ namespace DFMP.Runtime
                 return;
 
             StreamingWorld streamingWorld = FindObjectOfType<StreamingWorld>();
-            if (streamingWorld == null || !streamingWorld.IsReady)
+            if (streamingWorld == null)
+                return;
+
+            // Start In Dungeon suppresses StreamingWorld.IsReady, which would otherwise leave
+            // the pending server spawn stuck while the client remains in Privateer's Hold.
+            if (!streamingWorld.IsReady && ShouldPrepareExteriorWorldForAssignment())
+                TryPrepareExteriorWorldForAssignment(streamingWorld);
+
+            if (!streamingWorld.IsReady)
                 return;
 
             if (assignmentState.HasPendingAssignment)
@@ -420,6 +428,7 @@ namespace DFMP.Runtime
             {
                 fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
                 sharedTestSpawnApplied = false;
+                TryPrepareExteriorWorldForAssignment(streamingWorld);
                 if (string.IsNullOrWhiteSpace(assignmentState.Assignment.StartMarkerName) &&
                     (assignmentState.Assignment.WorldX != 0 || assignmentState.Assignment.WorldZ != 0))
                 {
@@ -475,6 +484,32 @@ namespace DFMP.Runtime
             SuppressPositionReportsBriefly();
 
             Debug.Log($"[DFMP Session] Client acknowledged grounded spawn: world={streamingWorld.LocalPlayerGPS.WorldX}/0/{streamingWorld.LocalPlayerGPS.WorldZ}.");
+        }
+
+        bool ShouldPrepareExteriorWorldForAssignment()
+        {
+            return assignmentState.HasPendingAssignment ||
+                (transitionState.HasPendingAssignment && transitionState.Assignment.ContextKind == DFMPWorldContextKind.Exterior);
+        }
+
+        static void TryPrepareExteriorWorldForAssignment(StreamingWorld streamingWorld)
+        {
+            if (GameManager.HasInstance)
+            {
+                PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
+                if (playerEnterExit != null && playerEnterExit.IsPlayerInside)
+                {
+                    playerEnterExit.EnableExteriorParent(cleanup: true);
+                    Debug.Log("[DFMP Session] Released dungeon/interior parent before applying exterior spawn.");
+                    return;
+                }
+            }
+
+            if (streamingWorld != null && streamingWorld.suppressWorld)
+            {
+                streamingWorld.suppressWorld = false;
+                Debug.Log("[DFMP Session] Unsuppressed streaming world before applying exterior spawn.");
+            }
         }
 
         void UpdateTransitionAssignment(StreamingWorld streamingWorld)

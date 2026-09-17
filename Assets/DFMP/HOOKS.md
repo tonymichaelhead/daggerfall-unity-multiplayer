@@ -23,7 +23,7 @@ git diff --stat --ignore-cr-at-eol upstream/master..master -- Assets/Scripts
 git grep -nE "using Mirror|NetworkBehaviour|NetworkServer|NetworkClient" -- Assets/Scripts
 ```
 
-Current baseline as of 2026-09-12: **13 files, 62 insertions, 9 deletions, 0 networking references.**
+Current baseline as of 2026-09-17: **15 files, 69 insertions, 11 deletions, 0 networking references.**
 
 Growth not explained by a newly registered hook below means multiplayer logic has leaked
 into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
@@ -51,6 +51,8 @@ into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
 | DFMP-STARTUP-004 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `Setup()` startup-stage selection | When DFMP forces the startup menu and the game-data path is valid, open the options/Join Server page instead of the first-time game-folder page. | 2026-09-09 |
 | DFMP-STARTUP-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | End of `ShowOptionsPanel()` | Allow DFMP to relabel and resize the launcher's confirm button ("Play" -> "Join Server"). | 2026-09-09 |
 | DFMP-STARTUP-003 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallUnitySetupGameWizard.cs` | `ShowNextStage()`, `SetupStages.LaunchGame` case | Allow DFMP to consume the launch action and open the server list instead of loading the single-player game scene. | 2026-09-09 |
+| DFMP-STARTUP-005 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallAdvancedSettingsWindow.cs` | `Gameplay()` checkbox construction and `SaveSettings()` | Hide DFU's Start In Dungeon option so testers cannot force every join through Privateer's Hold. | 2026-09-17 |
+| DFMP-STARTUP-006 | `Assets/Scripts/Game/Utility/StartGameBehaviour.cs` | `StartNewCharacter()` start-parameter selection | Ignore Start In Dungeon during multiplayer new-character startup so the server-assigned persisted or configured spawn can apply. | 2026-09-17 |
 | M7-PVP-HIT-001 | `Assets/Scripts/Game/WeaponManager.cs` | `WeaponDamage()` before vanilla entity damage resolution | Allow DFMP to consume native player melee and bow hits against a remote-player collider and submit authoritative damage without changing vanilla single-player behavior. The hook receives native arrow flags so DFMP can distinguish ranged hit production in diagnostics; vanilla missile collision and ordinary enemy handling remain untouched. | 2026-09-12 |
 | M7-PVP-MISSILE-001 | `Assets/Scripts/Game/DaggerfallMissile.cs` | `AssignBowDamageToTarget()` before the vanilla `targetEntities` guard | Allow DFMP to consume a player-fired arrow that hit a rendering-only remote-player collider, which has no `DaggerfallEntityBehaviour` and therefore cannot enter the vanilla target list. Returning false preserves the existing `WeaponManager.WeaponDamage()` path for ordinary DFU entities. | 2026-09-12 |
 | M8-ACTION-DOOR-001 | `Assets/Scripts/Internal/DaggerfallActionDoor.cs` | `Open()` and `Close()` after tween setup when `activatedByPlayer == true` | Notify DFMP when a player toggles an action door so its state can be synchronized to co-located players in the same dungeon or building interior context without altering single-player door behavior. | 2026-09-13 |

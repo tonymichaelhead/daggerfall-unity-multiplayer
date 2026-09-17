@@ -412,6 +412,9 @@ namespace DFMP.Runtime
 
         void BeginMultiplayerStartup()
         {
+            // DFU's Start In Dungeon option would send every join through Privateer's Hold.
+            DaggerfallUnity.Settings.StartInDungeon = false;
+
             if (Flow.State == DFMPClientJoinState.ReturningPlayerRestore)
                 ConfigureReturningPlayerStartup();
             else if (Flow.State == DFMPClientJoinState.FirstJoinCharacterCreation)

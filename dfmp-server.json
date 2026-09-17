@@ -13,7 +13,8 @@
     "AllowSelfRegistration": true,
     "WhitelistEnabled": true,
     "AllowedAccountIds": [
-      "tony"
+      "tony",
+      "Charlie"
     ],
     "ModeratorAccountIds": [],
     "AdminAccountIds": [

@@ -429,6 +429,65 @@ namespace DFMP.Runtime
             return true;
         }
 
+        public static bool HasPersistedJoinPosition(DFMPCharacterRecord record)
+        {
+            return record != null && (record.WorldX != 0 || record.WorldZ != 0);
+        }
+
+        public static bool TryResolveJoinSpawn(
+            DFMPCharacterRecord characterRecord,
+            DFMPServerStartingLocationConfig startingLocation,
+            out DFMPStartingLocationResolution resolution,
+            out bool usedPersistedPosition,
+            out string reason)
+        {
+            usedPersistedPosition = false;
+            if (HasPersistedJoinPosition(characterRecord))
+            {
+                usedPersistedPosition = true;
+                resolution = ResolvePersistedJoinSpawn(characterRecord);
+                reason = string.Empty;
+                return true;
+            }
+
+            return TryResolveStartingLocation(startingLocation, out resolution, out reason);
+        }
+
+        public static DFMPStartingLocationResolution ResolvePersistedJoinSpawn(DFMPCharacterRecord record)
+        {
+            var position = new DFMPWorldPosition
+            {
+                WorldX = record.WorldX,
+                WorldY = record.WorldY,
+                WorldZ = record.WorldZ
+            };
+
+            DFMPWorldContextKey context = record.Context != null
+                ? record.Context.ToKey()
+                : default(DFMPWorldContextKey);
+
+            if (context.Kind != DFMPWorldContextKind.Exterior || !IsValidMapPixel(context.MapPixelX, context.MapPixelY))
+            {
+                DFPosition mapPixel = MapsFile.WorldCoordToMapPixel(record.WorldX, record.WorldZ);
+                context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.Exterior,
+                    MapPixelX = mapPixel.X,
+                    MapPixelY = mapPixel.Y,
+                    RegionIndex = context.RegionIndex,
+                    LocationIndex = context.LocationIndex,
+                    LocationId = context.LocationId ?? string.Empty
+                };
+            }
+
+            return new DFMPStartingLocationResolution
+            {
+                Position = position,
+                Context = context,
+                StartMarkerName = string.Empty
+            };
+        }
+
         public static bool TryResolveStartingLocation(DFMPServerStartingLocationConfig config, out DFMPStartingLocationResolution resolution, out string reason)
         {
             resolution = new DFMPStartingLocationResolution();

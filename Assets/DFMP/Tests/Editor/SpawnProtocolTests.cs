@@ -597,6 +597,113 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void JoinSpawn_UsesPersistedPositionInsteadOfStartingLocation()
+        {
+            var record = DFMPCharacterRecord.CreateNew("account-return", "world-a", "Returning");
+            record.WorldX = 6792821;
+            record.WorldY = 12.5f;
+            record.WorldZ = 9374554;
+            record.Context = new DFMPWorldContextRecord
+            {
+                Kind = "Exterior",
+                MapPixelX = 207,
+                MapPixelY = 213,
+                LocationId = "Daggerfall"
+            };
+
+            var startingLocation = new DFMPServerStartingLocationConfig
+            {
+                Mode = DFMPStartingLocationModes.ExplicitWorldCoordinates,
+                LocationName = "Wayrest",
+                WorldX = 1000000,
+                WorldZ = 2000000
+            };
+
+            DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveJoinSpawn(record, startingLocation, out resolution, out usedPersistedPosition, out reason), reason);
+            Assert.IsTrue(usedPersistedPosition);
+            Assert.AreEqual(6792821, resolution.Position.WorldX);
+            Assert.AreEqual(12.5f, resolution.Position.WorldY);
+            Assert.AreEqual(9374554, resolution.Position.WorldZ);
+            Assert.AreEqual(DFMPWorldContextKind.Exterior, resolution.Context.Kind);
+            Assert.AreEqual(207, resolution.Context.MapPixelX);
+            Assert.AreEqual(213, resolution.Context.MapPixelY);
+            Assert.AreEqual("Daggerfall", resolution.Context.LocationId);
+            Assert.AreEqual(string.Empty, resolution.StartMarkerName);
+        }
+
+        [Test]
+        public void JoinSpawn_UsesStartingLocationWhenCharacterHasNoPersistedPosition()
+        {
+            var record = DFMPCharacterRecord.CreateNew("account-new", "world-a", "New Hero");
+            var startingLocation = new DFMPServerStartingLocationConfig
+            {
+                Mode = DFMPStartingLocationModes.ExplicitWorldCoordinates,
+                LocationName = "Daggerfall",
+                WorldX = 6792821,
+                WorldY = 0f,
+                WorldZ = 9374554
+            };
+
+            DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveJoinSpawn(record, startingLocation, out resolution, out usedPersistedPosition, out reason), reason);
+            Assert.IsFalse(usedPersistedPosition);
+            Assert.AreEqual(6792821, resolution.Position.WorldX);
+            Assert.AreEqual(9374554, resolution.Position.WorldZ);
+            Assert.AreEqual("Daggerfall", resolution.Context.LocationId);
+        }
+
+        [Test]
+        public void JoinSpawn_UsesStartingLocationWhenCharacterRecordIsMissing()
+        {
+            var startingLocation = new DFMPServerStartingLocationConfig
+            {
+                Mode = DFMPStartingLocationModes.ExplicitWorldCoordinates,
+                LocationName = "Daggerfall",
+                WorldX = 6792821,
+                WorldZ = 9374554
+            };
+
+            DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveJoinSpawn(null, startingLocation, out resolution, out usedPersistedPosition, out reason), reason);
+            Assert.IsFalse(usedPersistedPosition);
+            Assert.AreEqual(6792821, resolution.Position.WorldX);
+            Assert.AreEqual(9374554, resolution.Position.WorldZ);
+        }
+
+        [Test]
+        public void JoinSpawn_FlattensDungeonLogoutToExteriorAtPersistedCoordinates()
+        {
+            var record = DFMPCharacterRecord.CreateNew("account-dungeon", "world-a", "Delver");
+            record.WorldX = 6792821;
+            record.WorldZ = 9374554;
+            record.Context = new DFMPWorldContextRecord
+            {
+                Kind = "Dungeon",
+                MapPixelX = 207,
+                MapPixelY = 213,
+                LocationId = "Privateer's Hold"
+            };
+
+            DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveJoinSpawn(record, null, out resolution, out usedPersistedPosition, out reason), reason);
+            Assert.IsTrue(usedPersistedPosition);
+            Assert.AreEqual(6792821, resolution.Position.WorldX);
+            Assert.AreEqual(9374554, resolution.Position.WorldZ);
+            Assert.AreEqual(DFMPWorldContextKind.Exterior, resolution.Context.Kind);
+            Assert.AreEqual("Privateer's Hold", resolution.Context.LocationId);
+            Assert.IsTrue(DFMPSpawnProtocol.IsValidMapPixel(resolution.Context.MapPixelX, resolution.Context.MapPixelY));
+        }
+
+        [Test]
         public void StartingLocation_ResolvesExplicitWorldCoordinates()
         {
             var config = new DFMPServerStartingLocationConfig

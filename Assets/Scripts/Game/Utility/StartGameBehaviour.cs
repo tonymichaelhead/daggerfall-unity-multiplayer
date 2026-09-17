@@ -371,6 +371,8 @@ namespace DaggerfallWorkshop.Game.Utility
             // Get start parameters
             DFPosition mapPixel = new DFPosition(DaggerfallUnity.Settings.StartCellX, DaggerfallUnity.Settings.StartCellY);
             bool startInDungeon = DaggerfallUnity.Settings.StartInDungeon;
+            if (DFMP.Hooks.DaggerfallHooks.IsStartInDungeonEnabled != null && !DFMP.Hooks.DaggerfallHooks.IsStartInDungeonEnabled())
+                startInDungeon = false;
 
             // Read location if any
             DFLocation location = new DFLocation();
