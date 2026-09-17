@@ -41,6 +41,39 @@ namespace DFMP.Tests
             Assert.AreEqual(2f, config.Enemies.StuckRecoverySeconds);
             Assert.AreEqual(6f, config.Enemies.PlayerMeleeDamageRange);
             Assert.AreEqual(25f, config.Enemies.PlayerRangedDamageRange);
+            Assert.NotNull(config.Identity);
+            Assert.IsTrue(config.Identity.CharacterSelectEnabled);
+            Assert.AreEqual(DFMPServerIdentityConfig.DefaultMaxCharactersPerAccount, config.Identity.MaxCharactersPerAccount);
+            Assert.IsTrue(config.Identity.AllowCharacterDelete);
+        }
+
+        [Test]
+        public void ServerConfig_NormalizesCharacterSelectSettings()
+        {
+            var config = new DFMPServerConfig
+            {
+                Identity = new DFMPServerIdentityConfig
+                {
+                    MaxCharactersPerAccount = 0
+                }
+            };
+
+            config.Normalize();
+            Assert.AreEqual(DFMPServerIdentityConfig.DefaultMaxCharactersPerAccount, config.Identity.MaxCharactersPerAccount);
+
+            config.Identity.MaxCharactersPerAccount = DFMPServerIdentityConfig.MaximumMaxCharactersPerAccount + 1;
+            config.Normalize();
+            Assert.AreEqual(DFMPServerIdentityConfig.DefaultMaxCharactersPerAccount, config.Identity.MaxCharactersPerAccount);
+
+            config.Identity.MaxCharactersPerAccount = 1;
+            config.Normalize();
+            Assert.AreEqual(1, config.Identity.MaxCharactersPerAccount);
+
+            config.Identity.CharacterSelectEnabled = false;
+            config.Identity.AllowCharacterDelete = false;
+            config.Normalize();
+            Assert.IsFalse(config.Identity.CharacterSelectEnabled);
+            Assert.IsFalse(config.Identity.AllowCharacterDelete);
         }
 
         [Test]

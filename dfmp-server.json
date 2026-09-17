@@ -11,7 +11,7 @@
     "ServerWorldId": "default",
     "Mode": "server_local",
     "AllowSelfRegistration": true,
-    "WhitelistEnabled": true,
+    "WhitelistEnabled": false,
     "AllowedAccountIds": [
       "tony",
       "Charlie"
@@ -19,7 +19,10 @@
     "ModeratorAccountIds": [],
     "AdminAccountIds": [
       "tony"
-    ]
+    ],
+    "CharacterSelectEnabled": true,
+    "MaxCharactersPerAccount": 4,
+    "AllowCharacterDelete": true
   },
   "Gameplay": {
     "EnableBeginnerTutorial": false

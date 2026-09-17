@@ -87,6 +87,7 @@ namespace DFMP.Runtime
     public enum DFMPJoinDecisionKind
     {
         Rejected,
+        AwaitingCharacterSelection,
         FirstJoin,
         ReturningPlayer
     }
@@ -102,6 +103,11 @@ namespace DFMP.Runtime
         public bool Accepted
         {
             get { return Kind != DFMPJoinDecisionKind.Rejected; }
+        }
+
+        public bool IsCharacterBound
+        {
+            get { return DFMPCharacterSelectPolicy.IsCharacterBound(Kind); }
         }
     }
 
@@ -124,14 +130,25 @@ namespace DFMP.Runtime
             if (characterStore == null)
                 return Reject("character store unavailable");
 
+            string serverWorldId = config.Identity.ServerWorldId;
+            if (config.Identity.CharacterSelectEnabled)
+            {
+                return new DFMPJoinDecision
+                {
+                    Kind = DFMPJoinDecisionKind.AwaitingCharacterSelection,
+                    AccountId = normalizedAccountId,
+                    ServerWorldId = serverWorldId
+                };
+            }
+
             DFMPCharacterRecord record;
-            if (characterStore.TryLoad(normalizedAccountId, config.Identity.ServerWorldId, out record))
+            if (characterStore.TryLoadMostRecentlyPlayed(normalizedAccountId, serverWorldId, out record))
             {
                 return new DFMPJoinDecision
                 {
                     Kind = DFMPJoinDecisionKind.ReturningPlayer,
                     AccountId = normalizedAccountId,
-                    ServerWorldId = config.Identity.ServerWorldId,
+                    ServerWorldId = serverWorldId,
                     CharacterRecord = record
                 };
             }
@@ -140,7 +157,7 @@ namespace DFMP.Runtime
             {
                 Kind = DFMPJoinDecisionKind.FirstJoin,
                 AccountId = normalizedAccountId,
-                ServerWorldId = config.Identity.ServerWorldId
+                ServerWorldId = serverWorldId
             };
         }
 

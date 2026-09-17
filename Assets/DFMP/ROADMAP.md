@@ -32,6 +32,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Done |
 | M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | In-Progress |
 | M8.5 | Account authentication, account roles, and the client launcher login flow. | In-Progress |
+| M8.6 | Post-auth character select, multi-character persistence, and owner-gated create/delete. | In-Progress |
 | M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
 | — | **Phase 1 exit: private beta server live for Discord testers.** | Planned |
 
@@ -204,24 +205,25 @@ Players create a character on first join and return to it on later sessions.
 
 #### Join Flow
 
-The server resolves every connection down the same path, branching only on whether a character record already exists:
+The server resolves every connection down the same path, then branches on stored characters and the owner-gated select step:
 
 1. Client connects and presents its account identity.
 2. Server checks the whitelist and connection limits, rejecting with a readable reason when refused.
-3. Server looks up a stored character for that identity.
-4. **No record (first join):** the client runs DFU's normal character creation UI. The resulting character is submitted to the server, which validates it against the server's creation rules, persists it, and assigns the configured starting location. Daggerfall city is the beta default; the starting location is server-configurable and later scriptable.
-5. **Record exists (returning player):** the server sends the stored record, and the client restores it rather than showing creation or the DFU load-game UI.
-6. In both cases the server assigns the spawn context, the client relocates through DFU's normal grounding path, and the client acknowledges its final coordinate. This reuses the M2 spawn-assignment and acknowledgement flow rather than adding a second one.
-7. The character record is written back on a periodic autosave, on clean disconnect, and on server shutdown.
+3. Server looks up stored characters for that identity.
+4. **No record (first join), or the player chose New Character:** the client runs DFU's normal character creation UI. The resulting character is submitted to the server, which validates it against the server's creation rules, persists it, and assigns the configured starting location. Daggerfall city is the beta default; the starting location is server-configurable and later scriptable. The server does not persist a placeholder record before creation finishes.
+5. **Record exists (returning player), or the player selected an existing character:** the server sends the stored record, and the client restores it rather than showing creation or the DFU load-game UI.
+6. When character select UI is enabled, that choice happens after auth and before Ready/spawn. When it is disabled, zero characters auto-start creation and one or more characters auto-load the most recently played record.
+7. In both bound cases the server assigns the spawn context, the client relocates through DFU's normal grounding path, and the client acknowledges its final coordinate. This reuses the M2 spawn-assignment and acknowledgement flow rather than adding a second one.
+8. The character record is written back on a periodic autosave, on clean disconnect, and on server shutdown.
 
-The client never chooses its own character or spawn point, and DFU's single-player title, save, and load menus are suppressed in multiplayer sessions.
+The client never chooses its spawn point. Which stored character to play is a server-gated select step: owners can show a character management UI, or skip it and auto-create or auto-load the most recently played character. DFU's single-player title, save, and load menus are suppressed in multiplayer sessions.
 
 #### Storage
 
 - Persistence sits behind a narrow character-store interface so the backing store is a deployment choice, not an architectural one.
 - Beta ships a file-backed store: one structured JSON record per character, written atomically. At beta player counts this is sufficient, trivially inspectable, and hand-editable while debugging.
 - A SQL-backed store (SQLite for single-server, PostgreSQL for larger or multi-server deployments) is a later addition behind the same interface, motivated by concurrent access, query needs, and administrative tooling rather than by beta scale.
-- Records are keyed by account identity and server world identity, so one player can hold separate characters on separate servers.
+- Records are keyed by account identity, server world identity, and character id, so one player can hold separate characters on the same server and on separate servers. When character select UI is disabled, join auto-loads the most recently played character for that account and world.
 
 Trust model for beta: the server stores the character and the client simulates it, so a modified client can still misreport its own stats. This is an accepted beta limitation on a whitelisted server. Strict per-field validation is a later hardening pass, which the structured schema and the single store interface are designed to enable without a rewrite.
 
@@ -450,6 +452,23 @@ Verification:
 - Launcher smoke test on Windows, macOS, and Linux: log in, locate game files, launch the client, reach the server list, and connect.
 
 Migration note: account identities change shape in this milestone, and character records are keyed by account identity, so existing beta test characters are orphaned. This is accepted rather than migrated.
+
+### M8.6: Character Select
+
+Status: In-Progress.
+
+Players can keep more than one character per account on a given server. After authentication and before Ready/spawn, the client shows a DFU-native character management window unless the owner has turned that UI off.
+
+- `dfmp-server.json` Identity knobs: `CharacterSelectEnabled` (default true), `MaxCharactersPerAccount` (default 4, clamp 1–16), `AllowCharacterDelete` (default true). Setting `CharacterSelectEnabled` to false restores auto-join: no characters starts creation, one or more loads the most recently played character.
+- Character records are keyed by account, world, and character id. Existing one-file-per-account records migrate on first list/load.
+- First-join creation no longer writes a placeholder record. A mid-wizard disconnect consumes no slot.
+- The select window lists characters, supports Enter World, New Character (native DFU wizard), Delete with confirm when allowed, and Back to the server list. Globally disabled actions are hidden; situationally unavailable actions are dimmed.
+- The client never chooses its spawn point. In-game character swapping is out of scope.
+
+Verification:
+
+- EditMode tests for config clamp, multi-character store list/save/delete, legacy-file migration, join-policy auto-join vs select, create-at-cap, delete-disabled, and select-unknown-id rejection.
+- Smoke test: empty account sees New Character and reaches the wizard; a second character can be created up to the cap; delete confirms and respects the owner toggle; UI-off auto-joins an existing character and auto-creates when none exist; a pre-M8.6 single-file character still loads after migration.
 
 ### M9: Beta Server Launch Readiness
 

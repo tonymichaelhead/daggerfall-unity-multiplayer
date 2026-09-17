@@ -45,9 +45,9 @@ namespace DFMP.Runtime
 
         public override void OnServerReady(NetworkConnectionToClient conn)
         {
-            if (!DFMPNetworkServer.IsJoinAccepted(conn))
+            if (!DFMPNetworkServer.IsJoinAccepted(conn) || !DFMPNetworkServer.IsCharacterBound(conn))
             {
-                Debug.LogWarning($"[DFMP Join] Client became ready before identity acceptance: connectionId={conn.connectionId}.");
+                Debug.LogWarning($"[DFMP Join] Client became ready before character binding: connectionId={conn.connectionId}.");
                 conn.Disconnect();
                 return;
             }

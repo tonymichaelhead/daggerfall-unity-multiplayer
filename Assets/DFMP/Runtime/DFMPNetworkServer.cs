@@ -194,6 +194,7 @@ namespace DFMP.Runtime
                 DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState, context);
             else
                 DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
+            joinDecision.CharacterRecord.MarkPlayed();
             CharacterStore.Save(joinDecision.CharacterRecord);
             Debug.Log($"[DFMP Character] Saved character record: connectionId={connectionId}, account='{joinDecision.AccountId}', world={sessionState.WorldX}/{sessionState.WorldY:F2}/{sessionState.WorldZ}.");
         }
@@ -303,6 +304,7 @@ namespace DFMP.Runtime
             Config.Normalize();
             CharacterStore = new DFMPFileCharacterStore(GetCharacterStoreDirectory());
             LocalAccountStore = new DFMPFileLocalAccountStore(GetLocalAccountStoreDirectory());
+            Debug.Log($"[DFMP Character] Store path '{GetCharacterStoreDirectory()}'.");
             DFMPAuthenticatedConnections.Clear();
 
             if (DFMPAuthModes.Normalize(Config.Identity.Mode) == DFMPAuthModes.Open)
@@ -373,6 +375,9 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPDeveloperAdvanceTimeRequest>(OnDeveloperAdvanceTimeRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperDamagePlayerRequest>(OnDeveloperDamagePlayerRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperDamageSelfRequest>(OnDeveloperDamageSelfRequest);
+            NetworkServer.RegisterHandler<DFMPSelectCharacterMessage>(OnSelectCharacter);
+            NetworkServer.RegisterHandler<DFMPCreateCharacterMessage>(OnCreateCharacter);
+            NetworkServer.RegisterHandler<DFMPDeleteCharacterMessage>(OnDeleteCharacter);
             SpawnTimeState();
 
             if (enableDiscovery)
@@ -400,6 +405,14 @@ namespace DFMP.Runtime
         public static bool IsJoinAccepted(NetworkConnectionToClient conn)
         {
             return conn != null && joinDecisions.ContainsKey(conn.connectionId) && joinDecisions[conn.connectionId].Accepted;
+        }
+
+        public static bool IsCharacterBound(NetworkConnectionToClient conn)
+        {
+            DFMPJoinDecision decision;
+            return conn != null &&
+                joinDecisions.TryGetValue(conn.connectionId, out decision) &&
+                decision.IsCharacterBound;
         }
 
         static string GetCharacterStoreDirectory()
@@ -442,34 +455,19 @@ namespace DFMP.Runtime
                 };
             }
 
-            if (decision.Accepted && decision.Kind == DFMPJoinDecisionKind.FirstJoin)
-            {
-                decision.CharacterRecord = DFMPCharacterRecord.CreateNew(
-                    decision.AccountId,
-                    decision.ServerWorldId,
-                    "Player");
-                CharacterStore.Save(decision.CharacterRecord);
-            }
-
             Debug.Log($"[DFMP Join] Resolved account identity: connectionId={conn.connectionId}, account='{decision.AccountId}', decision={decision.Kind}, hasCharacterRecord={decision.CharacterRecord != null}, reason='{decision.Reason ?? string.Empty}'.");
 
             joinDecisions[conn.connectionId] = decision;
-            conn.Send(new DFMPJoinResultMessage
-            {
-                Decision = decision.Kind,
-                AccountId = decision.AccountId,
-                ServerWorldId = decision.ServerWorldId,
-                ServerName = ServerName,
-                Motd = Motd,
-                Reason = decision.Reason,
-                EnableBeginnerTutorial = Config.Gameplay.EnableBeginnerTutorial
-            });
+            SendJoinResult(conn, decision);
 
             if (decision.Accepted && decision.Kind == DFMPJoinDecisionKind.ReturningPlayer && decision.CharacterRecord != null)
+                SendReturningCharacterState(conn, decision.CharacterRecord);
+
+            if (decision.Kind == DFMPJoinDecisionKind.AwaitingCharacterSelection)
             {
-                conn.Send(DFMPCharacterSnapshotProtocol.FromRecord(decision.CharacterRecord));
-                SendVitalSnapshot(conn, CreateVitalState(decision.CharacterRecord), false);
-                initializedIdentityReportConnections.Add(conn.connectionId);
+                DFMPCharacterRosterMessage roster = CreateRosterMessage(decision.AccountId, decision.ServerWorldId);
+                Debug.Log($"[DFMP Join] Character roster: account='{decision.AccountId}', count={GetRosterCount(roster)}, names='{FormatRosterNames(roster)}'.");
+                conn.Send(roster);
             }
 
             if (!decision.Accepted)
@@ -480,6 +478,177 @@ namespace DFMP.Runtime
             }
 
             Debug.Log($"[DFMP Join] Accepted account identity: connectionId={conn.connectionId}, account='{decision.AccountId}', decision={decision.Kind}, world='{decision.ServerWorldId}'.");
+        }
+
+        static void SendJoinResult(NetworkConnectionToClient conn, DFMPJoinDecision decision)
+        {
+            conn.Send(new DFMPJoinResultMessage
+            {
+                Decision = decision.Kind,
+                AccountId = decision.AccountId,
+                ServerWorldId = decision.ServerWorldId,
+                ServerName = ServerName,
+                Motd = Motd,
+                Reason = decision.Reason ?? string.Empty,
+                EnableBeginnerTutorial = Config != null && Config.Gameplay != null && Config.Gameplay.EnableBeginnerTutorial
+            });
+        }
+
+        static void SendReturningCharacterState(NetworkConnectionToClient conn, DFMPCharacterRecord record)
+        {
+            conn.Send(DFMPCharacterSnapshotProtocol.FromRecord(record));
+            SendVitalSnapshot(conn, CreateVitalState(record), false);
+            initializedIdentityReportConnections.Add(conn.connectionId);
+        }
+
+        static DFMPCharacterRosterMessage CreateRosterMessage(string accountId, string serverWorldId)
+        {
+            return DFMPCharacterSelectPolicy.CreateRoster(CharacterStore, accountId, serverWorldId, Config);
+        }
+
+        static int GetRosterCount(DFMPCharacterRosterMessage roster)
+        {
+            return roster.Characters != null ? roster.Characters.Length : 0;
+        }
+
+        static string FormatRosterNames(DFMPCharacterRosterMessage roster)
+        {
+            if (roster.Characters == null || roster.Characters.Length == 0)
+                return string.Empty;
+
+            var names = new string[roster.Characters.Length];
+            for (int i = 0; i < roster.Characters.Length; i++)
+                names[i] = roster.Characters[i].CharacterName ?? string.Empty;
+
+            return string.Join(", ", names);
+        }
+
+        static void SendCharacterActionResult(
+            NetworkConnectionToClient conn,
+            DFMPCharacterActionKind action,
+            bool accepted,
+            string reason,
+            string characterId)
+        {
+            conn.Send(new DFMPCharacterActionResultMessage
+            {
+                Action = action,
+                Accepted = accepted,
+                Reason = reason ?? string.Empty,
+                CharacterId = characterId ?? string.Empty
+            });
+        }
+
+        static void OnSelectCharacter(NetworkConnectionToClient conn, DFMPSelectCharacterMessage message)
+        {
+            DFMPJoinDecision decision;
+            if (!TryGetJoinDecision(conn, out decision))
+                return;
+
+            DFMPCharacterSummary[] characters = CharacterStore != null
+                ? CharacterStore.List(decision.AccountId, decision.ServerWorldId)
+                : new DFMPCharacterSummary[0];
+            string rejection = DFMPCharacterSelectPolicy.GetSelectRejectionReason(
+                decision.Kind,
+                message.CharacterId,
+                characters);
+            if (rejection != null)
+            {
+                Debug.LogWarning($"[DFMP Join] Rejected character select: connectionId={conn.connectionId}, reason={rejection}.");
+                SendCharacterActionResult(conn, DFMPCharacterActionKind.Select, false, rejection, message.CharacterId);
+                return;
+            }
+
+            DFMPCharacterRecord record;
+            if (!CharacterStore.TryLoad(decision.AccountId, decision.ServerWorldId, message.CharacterId, out record) || record == null)
+            {
+                SendCharacterActionResult(conn, DFMPCharacterActionKind.Select, false, DFMPCharacterSelectPolicy.CharacterNotFoundReason, message.CharacterId);
+                return;
+            }
+
+            record.MarkPlayed();
+            CharacterStore.Save(record);
+
+            decision.Kind = DFMPJoinDecisionKind.ReturningPlayer;
+            decision.CharacterRecord = record;
+            joinDecisions[conn.connectionId] = decision;
+
+            SendCharacterActionResult(conn, DFMPCharacterActionKind.Select, true, string.Empty, record.CharacterId);
+            SendJoinResult(conn, decision);
+            SendReturningCharacterState(conn, record);
+            Debug.Log($"[DFMP Join] Bound returning character: connectionId={conn.connectionId}, account='{decision.AccountId}', character='{record.CharacterName}'.");
+        }
+
+        static void OnCreateCharacter(NetworkConnectionToClient conn, DFMPCreateCharacterMessage message)
+        {
+            DFMPJoinDecision decision;
+            if (!TryGetJoinDecision(conn, out decision))
+                return;
+
+            DFMPCharacterSummary[] characters = CharacterStore != null
+                ? CharacterStore.List(decision.AccountId, decision.ServerWorldId)
+                : new DFMPCharacterSummary[0];
+            int maxCharacters = Config != null ? Config.Identity.MaxCharactersPerAccount : DFMPServerIdentityConfig.DefaultMaxCharactersPerAccount;
+            string rejection = DFMPCharacterSelectPolicy.GetCreateRejectionReason(
+                decision.Kind,
+                characters.Length,
+                maxCharacters);
+            if (rejection != null)
+            {
+                Debug.LogWarning($"[DFMP Join] Rejected character create: connectionId={conn.connectionId}, reason={rejection}.");
+                SendCharacterActionResult(conn, DFMPCharacterActionKind.Create, false, rejection, string.Empty);
+                return;
+            }
+
+            decision.Kind = DFMPJoinDecisionKind.FirstJoin;
+            decision.CharacterRecord = null;
+            joinDecisions[conn.connectionId] = decision;
+
+            SendCharacterActionResult(conn, DFMPCharacterActionKind.Create, true, string.Empty, string.Empty);
+            SendJoinResult(conn, decision);
+            Debug.Log($"[DFMP Join] Bound first-join character creation: connectionId={conn.connectionId}, account='{decision.AccountId}'.");
+        }
+
+        static void OnDeleteCharacter(NetworkConnectionToClient conn, DFMPDeleteCharacterMessage message)
+        {
+            DFMPJoinDecision decision;
+            if (!TryGetJoinDecision(conn, out decision))
+                return;
+
+            DFMPCharacterSummary[] characters = CharacterStore != null
+                ? CharacterStore.List(decision.AccountId, decision.ServerWorldId)
+                : new DFMPCharacterSummary[0];
+            bool allowDelete = Config != null && Config.Identity.AllowCharacterDelete;
+            string rejection = DFMPCharacterSelectPolicy.GetDeleteRejectionReason(
+                decision.Kind,
+                allowDelete,
+                message.CharacterId,
+                characters);
+            if (rejection != null)
+            {
+                Debug.LogWarning($"[DFMP Join] Rejected character delete: connectionId={conn.connectionId}, reason={rejection}.");
+                SendCharacterActionResult(conn, DFMPCharacterActionKind.Delete, false, rejection, message.CharacterId);
+                return;
+            }
+
+            if (!CharacterStore.Delete(decision.AccountId, decision.ServerWorldId, message.CharacterId))
+            {
+                SendCharacterActionResult(conn, DFMPCharacterActionKind.Delete, false, DFMPCharacterSelectPolicy.CharacterNotFoundReason, message.CharacterId);
+                return;
+            }
+
+            SendCharacterActionResult(conn, DFMPCharacterActionKind.Delete, true, string.Empty, message.CharacterId);
+            conn.Send(CreateRosterMessage(decision.AccountId, decision.ServerWorldId));
+            Debug.Log($"[DFMP Join] Deleted character: connectionId={conn.connectionId}, account='{decision.AccountId}', characterId='{message.CharacterId}'.");
+        }
+
+        static bool TryGetJoinDecision(NetworkConnectionToClient conn, out DFMPJoinDecision decision)
+        {
+            decision = null;
+            if (conn == null || !joinDecisions.TryGetValue(conn.connectionId, out decision) || decision == null)
+                return false;
+
+            return true;
         }
 
         private static void SpawnTimeState()
@@ -1825,21 +1994,33 @@ namespace DFMP.Runtime
 
             DFMPJoinDecision joinDecision;
             if (joinDecisions.TryGetValue(conn.connectionId, out joinDecision) &&
-                joinDecision.Kind != DFMPJoinDecisionKind.Rejected && joinDecision.CharacterRecord != null)
+                joinDecision.Kind != DFMPJoinDecisionKind.Rejected)
             {
-                bool acceptReportedVitals = joinDecision.Kind == DFMPJoinDecisionKind.FirstJoin &&
-                    initializedIdentityReportConnections.Add(conn.connectionId);
-                DFMPCharacterPersistence.ApplyIdentityReport(joinDecision.CharacterRecord, report, acceptReportedVitals);
-                if (acceptReportedVitals)
-                    vitalStates[conn.connectionId] = CreateVitalState(joinDecision.CharacterRecord);
-                DFMPWorldContextKey context;
-                if (worldOccupancy.TryGetContext(conn.connectionId, out context))
-                    DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState, context);
-                else
-                    DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
-                CharacterStore.Save(joinDecision.CharacterRecord);
-                if (acceptReportedVitals)
-                    SendVitalSnapshot(conn, vitalStates[conn.connectionId], sessionState.IsDead);
+                if (joinDecision.Kind == DFMPJoinDecisionKind.FirstJoin && joinDecision.CharacterRecord == null)
+                {
+                    joinDecision.CharacterRecord = DFMPCharacterRecord.CreateNew(
+                        joinDecision.AccountId,
+                        joinDecision.ServerWorldId,
+                        "Player");
+                }
+
+                if (joinDecision.CharacterRecord != null)
+                {
+                    bool acceptReportedVitals = joinDecision.Kind == DFMPJoinDecisionKind.FirstJoin &&
+                        initializedIdentityReportConnections.Add(conn.connectionId);
+                    DFMPCharacterPersistence.ApplyIdentityReport(joinDecision.CharacterRecord, report, acceptReportedVitals);
+                    if (acceptReportedVitals)
+                        vitalStates[conn.connectionId] = CreateVitalState(joinDecision.CharacterRecord);
+                    DFMPWorldContextKey context;
+                    if (worldOccupancy.TryGetContext(conn.connectionId, out context))
+                        DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState, context);
+                    else
+                        DFMPCharacterPersistence.ApplySessionState(joinDecision.CharacterRecord, sessionState);
+                    joinDecision.CharacterRecord.MarkPlayed();
+                    CharacterStore.Save(joinDecision.CharacterRecord);
+                    if (acceptReportedVitals)
+                        SendVitalSnapshot(conn, vitalStates[conn.connectionId], sessionState.IsDead);
+                }
             }
         }
 

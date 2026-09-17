@@ -16,6 +16,8 @@ namespace DFMP.Runtime
         public static string AccountId { get; private set; }
 
         public static event Action<DFMPAdminRosterResponse> AdminRosterReceived;
+        public static event Action<DFMPCharacterRosterMessage> CharacterRosterReceived;
+        public static event Action<DFMPCharacterActionResultMessage> CharacterActionResultReceived;
 
         public static bool IsConnected
         {
@@ -85,6 +87,8 @@ namespace DFMP.Runtime
             NetworkClient.RegisterHandler<DFMPAdminRosterResponse>(OnAdminRosterReceived);
             NetworkClient.RegisterHandler<DFMPAdminKickNotice>(OnAdminKickNoticeReceived);
             NetworkClient.RegisterHandler<DFMPJoinResultMessage>(OnJoinResultReceived);
+            NetworkClient.RegisterHandler<DFMPCharacterRosterMessage>(OnCharacterRosterReceived);
+            NetworkClient.RegisterHandler<DFMPCharacterActionResultMessage>(OnCharacterActionResultReceived);
             NetworkClient.RegisterHandler<DFMPCharacterSnapshotMessage>(OnCharacterSnapshotReceived);
             NetworkClient.RegisterHandler<DFMPVitalSnapshot>(OnVitalSnapshotReceived);
             NetworkClient.RegisterHandler<DFMPRestResponse>(OnRestResponseReceived);
@@ -184,6 +188,24 @@ namespace DFMP.Runtime
                 Debug.LogWarning($"[DFMP Rest] Server rejected rest request: reason={message.RejectionReason}.");
         }
 
+        public static void RequestSelectCharacter(string characterId)
+        {
+            if (NetworkClient.isConnected)
+                NetworkClient.Send(new DFMPSelectCharacterMessage { CharacterId = characterId ?? string.Empty });
+        }
+
+        public static void RequestCreateCharacter()
+        {
+            if (NetworkClient.isConnected)
+                NetworkClient.Send(new DFMPCreateCharacterMessage());
+        }
+
+        public static void RequestDeleteCharacter(string characterId)
+        {
+            if (NetworkClient.isConnected)
+                NetworkClient.Send(new DFMPDeleteCharacterMessage { CharacterId = characterId ?? string.Empty });
+        }
+
         static void OnJoinResultReceived(DFMPJoinResultMessage message)
         {
             if (DFMPClientJoinFlowController.Instance != null)
@@ -192,13 +214,34 @@ namespace DFMP.Runtime
             if (message.Decision == DFMPJoinDecisionKind.Rejected)
             {
                 Debug.LogWarning($"[DFMP Join] Server rejected account '{message.AccountId}': {message.Reason}.");
+                return;
             }
-            else
-            {
-                Debug.Log($"[DFMP Join] Accepted account '{message.AccountId}': decision={message.Decision}, world='{message.ServerWorldId}'.");
-                if (NetworkClient.isConnected && !NetworkClient.ready)
-                    NetworkClient.Ready();
-            }
+
+            Debug.Log($"[DFMP Join] Accepted account '{message.AccountId}': decision={message.Decision}, world='{message.ServerWorldId}'.");
+            if (message.Decision == DFMPJoinDecisionKind.AwaitingCharacterSelection)
+                return;
+
+            if (NetworkClient.isConnected && !NetworkClient.ready)
+                NetworkClient.Ready();
+        }
+
+        static void OnCharacterRosterReceived(DFMPCharacterRosterMessage message)
+        {
+            if (message.Characters == null)
+                message.Characters = new DFMPCharacterSummary[0];
+
+            Debug.Log($"[DFMP Join] Received character roster: count={message.Characters.Length}.");
+
+            CharacterRosterReceived?.Invoke(message);
+            if (DFMPClientJoinFlowController.Instance != null)
+                DFMPClientJoinFlowController.Instance.ApplyCharacterRoster(message);
+        }
+
+        static void OnCharacterActionResultReceived(DFMPCharacterActionResultMessage message)
+        {
+            CharacterActionResultReceived?.Invoke(message);
+            if (!message.Accepted)
+                Debug.LogWarning($"[DFMP Join] Character action rejected: action={message.Action}, reason={message.Reason}.");
         }
 
         static void OnCharacterSnapshotReceived(DFMPCharacterSnapshotMessage message)

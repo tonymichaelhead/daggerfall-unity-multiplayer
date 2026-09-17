@@ -47,6 +47,8 @@ namespace DFMP.Tests
             Assert.AreEqual("account-a", restored.AccountId);
             Assert.AreEqual("world-a", restored.ServerWorldId);
             Assert.AreEqual("Alyx", restored.CharacterName);
+            Assert.IsFalse(string.IsNullOrEmpty(restored.CharacterId));
+            Assert.AreEqual(restored.CharacterId, original.CharacterId);
             Assert.NotNull(restored.Context);
             Assert.AreEqual("Exterior", restored.Context.Kind);
             Assert.AreEqual(10, restored.Health);
@@ -370,12 +372,14 @@ namespace DFMP.Tests
             store.Save(character);
 
             DFMPCharacterRecord loaded;
-            Assert.IsTrue(store.TryLoad("account-c", "world-a", out loaded));
+            Assert.IsTrue(store.TryLoadMostRecentlyPlayed("account-c", "world-a", out loaded));
             Assert.AreEqual("Traveler", loaded.CharacterName);
             Assert.AreEqual(123, loaded.WorldX);
             Assert.AreEqual(456, loaded.WorldZ);
-            Assert.IsFalse(store.TryLoad("account-c", "world-b", out loaded));
-            Assert.IsFalse(File.Exists(store.GetRecordPath("account-c", "world-a") + ".tmp"));
+            Assert.IsFalse(string.IsNullOrEmpty(loaded.CharacterId));
+            Assert.IsTrue(store.TryLoad("account-c", "world-a", loaded.CharacterId, out loaded));
+            Assert.IsFalse(store.TryLoadMostRecentlyPlayed("account-c", "world-b", out loaded));
+            Assert.IsFalse(File.Exists(store.GetRecordPath("account-c", "world-a", character.CharacterId) + ".tmp"));
         }
 
         [Test]
@@ -402,6 +406,7 @@ namespace DFMP.Tests
             var store = new DFMPFileCharacterStore(temporaryDirectory);
             var config = new DFMPServerConfig();
             config.Identity.ServerWorldId = "world-m5";
+            config.Identity.CharacterSelectEnabled = false;
 
             DFMPJoinDecision firstJoin = DFMPJoinPolicy.Resolve(" Steam:New ", config, store);
             Assert.AreEqual(DFMPJoinDecisionKind.FirstJoin, firstJoin.Kind);
@@ -421,6 +426,7 @@ namespace DFMP.Tests
             var store = new DFMPFileCharacterStore(temporaryDirectory);
             var config = new DFMPServerConfig();
             config.Identity.ServerWorldId = "world-m5";
+            config.Identity.CharacterSelectEnabled = false;
             var stored = DFMPCharacterRecord.CreateNew("steam:existing", "world-m5", "Preserved Character");
             stored.Level = 12;
             stored.Inventory = new[]
@@ -511,6 +517,10 @@ namespace DFMP.Tests
             flow.MarkConnecting();
             Assert.AreEqual(DFMPClientJoinState.AwaitingIdentityResult, flow.State);
 
+            flow.ApplyJoinResult(new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.AwaitingCharacterSelection });
+            Assert.AreEqual(DFMPClientJoinState.AwaitingCharacterSelection, flow.State);
+            Assert.IsFalse(flow.ShouldReportLocalIdentity());
+
             flow.ApplyJoinResult(new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.FirstJoin });
             Assert.AreEqual(DFMPClientJoinState.FirstJoinCharacterCreation, flow.State);
             Assert.IsTrue(flow.ShouldReportLocalIdentity());
@@ -536,6 +546,8 @@ namespace DFMP.Tests
                 new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.ReturningPlayer }, 0));
             Assert.IsFalse(DFMPClientJoinFlow.ShouldLoadGameScene(
                 new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.Rejected }, 0));
+            Assert.IsFalse(DFMPClientJoinFlow.ShouldLoadGameScene(
+                new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.AwaitingCharacterSelection }, 0));
             Assert.IsFalse(DFMPClientJoinFlow.ShouldLoadGameScene(
                 new DFMPJoinResultMessage { Decision = DFMPJoinDecisionKind.ReturningPlayer }, 1));
         }

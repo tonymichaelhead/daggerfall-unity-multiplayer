@@ -27,6 +27,10 @@ namespace DFMP.Runtime
     [Serializable]
     public class DFMPServerIdentityConfig
     {
+        public const int DefaultMaxCharactersPerAccount = 4;
+        public const int MinimumMaxCharactersPerAccount = 1;
+        public const int MaximumMaxCharactersPerAccount = 16;
+
         public string ServerWorldId = "default";
         public string Mode = DFMPAuthModes.ServerLocal;
         public bool AllowSelfRegistration = true;
@@ -34,6 +38,22 @@ namespace DFMP.Runtime
         public string[] AllowedAccountIds = new string[0];
         public string[] ModeratorAccountIds = new string[0];
         public string[] AdminAccountIds = new string[0];
+        public bool CharacterSelectEnabled = true;
+        public int MaxCharactersPerAccount = DefaultMaxCharactersPerAccount;
+        public bool AllowCharacterDelete = true;
+
+        public void Normalize()
+        {
+            ServerWorldId = string.IsNullOrWhiteSpace(ServerWorldId) ? "default" : ServerWorldId.Trim();
+            Mode = DFMPAuthModes.Normalize(Mode);
+            AllowedAccountIds = AllowedAccountIds ?? new string[0];
+            ModeratorAccountIds = ModeratorAccountIds ?? new string[0];
+            AdminAccountIds = AdminAccountIds ?? new string[0];
+            MaxCharactersPerAccount = MaxCharactersPerAccount >= MinimumMaxCharactersPerAccount &&
+                MaxCharactersPerAccount <= MaximumMaxCharactersPerAccount
+                ? MaxCharactersPerAccount
+                : DefaultMaxCharactersPerAccount;
+        }
     }
 
     [Serializable]
@@ -224,11 +244,7 @@ namespace DFMP.Runtime
             if (Identity == null)
                 Identity = new DFMPServerIdentityConfig();
 
-            Identity.ServerWorldId = string.IsNullOrWhiteSpace(Identity.ServerWorldId) ? "default" : Identity.ServerWorldId.Trim();
-            Identity.Mode = DFMPAuthModes.Normalize(Identity.Mode);
-            Identity.AllowedAccountIds = Identity.AllowedAccountIds ?? new string[0];
-            Identity.ModeratorAccountIds = Identity.ModeratorAccountIds ?? new string[0];
-            Identity.AdminAccountIds = Identity.AdminAccountIds ?? new string[0];
+            Identity.Normalize();
 
             if (Gameplay == null)
                 Gameplay = new DFMPServerGameplayConfig();

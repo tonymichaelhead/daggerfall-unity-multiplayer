@@ -15,6 +15,7 @@ namespace DFMP.Runtime
         Disconnected,
         Connecting,
         AwaitingIdentityResult,
+        AwaitingCharacterSelection,
         FirstJoinCharacterCreation,
         ReturningPlayerRestore,
         InGame,
@@ -44,9 +45,11 @@ namespace DFMP.Runtime
             EnableBeginnerTutorial = result.EnableBeginnerTutorial;
             State = result.Decision == DFMPJoinDecisionKind.Rejected
                 ? DFMPClientJoinState.Rejected
-                : result.Decision == DFMPJoinDecisionKind.FirstJoin
-                    ? DFMPClientJoinState.FirstJoinCharacterCreation
-                    : DFMPClientJoinState.ReturningPlayerRestore;
+                : result.Decision == DFMPJoinDecisionKind.AwaitingCharacterSelection
+                    ? DFMPClientJoinState.AwaitingCharacterSelection
+                    : result.Decision == DFMPJoinDecisionKind.FirstJoin
+                        ? DFMPClientJoinState.FirstJoinCharacterCreation
+                        : DFMPClientJoinState.ReturningPlayerRestore;
         }
 
         public void MarkInGame()
@@ -73,7 +76,8 @@ namespace DFMP.Runtime
 
         public static bool ShouldLoadGameScene(DFMPJoinResultMessage result, int activeSceneIndex)
         {
-            return result.Decision != DFMPJoinDecisionKind.Rejected &&
+            return (result.Decision == DFMPJoinDecisionKind.FirstJoin ||
+                    result.Decision == DFMPJoinDecisionKind.ReturningPlayer) &&
                 activeSceneIndex == SceneControl.StartupSceneIndex;
         }
     }
@@ -92,6 +96,10 @@ namespace DFMP.Runtime
         string pendingConnectionNotice;
         string pendingKickNotice;
         bool shouldShowKickNotice;
+        bool joinChatPublished;
+        DFMPCharacterSelectWindow characterSelectWindow;
+        DFMPCharacterRosterMessage pendingRoster;
+        bool hasPendingRoster;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Initialize()
@@ -186,6 +194,9 @@ namespace DFMP.Runtime
             pendingConnectionNotice = null;
             pendingKickNotice = null;
             shouldShowKickNotice = false;
+            joinChatPublished = false;
+            hasPendingRoster = false;
+            CloseCharacterSelectWindow(true);
             Flow.MarkConnecting();
         }
 
@@ -198,6 +209,9 @@ namespace DFMP.Runtime
         {
             Flow.MarkDisconnected();
             pendingConnectionNotice = null;
+            joinChatPublished = false;
+            hasPendingRoster = false;
+            CloseCharacterSelectWindow(true);
 
             // An authentication rejection disconnects before any join result arrives, so surface its
             // reason through the same notice the kick flow uses.
@@ -209,6 +223,30 @@ namespace DFMP.Runtime
             }
 
             shouldShowKickNotice = !string.IsNullOrEmpty(pendingKickNotice);
+        }
+
+        void ShowCharacterSelectWindow(DFMPCharacterRosterMessage roster)
+        {
+            var uiManager = DaggerfallUI.UIManager;
+            if (uiManager == null)
+                return;
+
+            if (characterSelectWindow == null)
+            {
+                characterSelectWindow = new DFMPCharacterSelectWindow(uiManager, uiManager.TopWindow, roster);
+                uiManager.PushWindow(characterSelectWindow);
+            }
+
+            characterSelectWindow.ApplyRoster(roster);
+        }
+
+        void CloseCharacterSelectWindow(bool keepConnection)
+        {
+            if (characterSelectWindow == null)
+                return;
+
+            characterSelectWindow.CloseForGameplay(keepConnection);
+            characterSelectWindow = null;
         }
 
         void ReturnToStartupScreen()
@@ -225,12 +263,34 @@ namespace DFMP.Runtime
 
             if (result.Decision == DFMPJoinDecisionKind.Rejected)
             {
+                CloseCharacterSelectWindow(true);
                 ShowJoinRejectedMessage(result.Reason);
                 return;
             }
 
-            pendingConnectionNotice = BuildConnectionNotice(result.ServerName);
-            PublishJoinChatMessages(result);
+            if (result.Decision == DFMPJoinDecisionKind.AwaitingCharacterSelection)
+            {
+                if (!joinChatPublished)
+                {
+                    pendingConnectionNotice = BuildConnectionNotice(result.ServerName);
+                    PublishJoinChatMessages(result);
+                    joinChatPublished = true;
+                }
+
+                if (hasPendingRoster)
+                    ShowCharacterSelectWindow(pendingRoster);
+
+                return;
+            }
+
+            CloseCharacterSelectWindow(true);
+
+            if (!joinChatPublished)
+            {
+                pendingConnectionNotice = BuildConnectionNotice(result.ServerName);
+                PublishJoinChatMessages(result);
+                joinChatPublished = true;
+            }
 
             if (DFMPClientJoinFlow.ShouldLoadGameScene(result, SceneManager.GetActiveScene().buildIndex))
             {
@@ -241,6 +301,17 @@ namespace DFMP.Runtime
 
             // Joining from the server list means the game scene is already loaded and OnSceneLoaded will never fire.
             BeginMultiplayerStartup();
+        }
+
+        public void ApplyCharacterRoster(DFMPCharacterRosterMessage roster)
+        {
+            pendingRoster = roster;
+            hasPendingRoster = true;
+
+            if (Flow == null || Flow.State != DFMPClientJoinState.AwaitingCharacterSelection)
+                return;
+
+            ShowCharacterSelectWindow(roster);
         }
 
         public static string BuildConnectionNotice(string serverName)

@@ -13,8 +13,10 @@
     "windows": [
       {
         "title": "DFMP Launcher",
-        "width": 520,
-        "height": 640,
+        "width": 620,
+        "height": 680,
+        "minWidth": 480,
+        "minHeight": 620,
         "resizable": true,
         "center": true
       }

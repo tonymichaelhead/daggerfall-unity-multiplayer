@@ -6,12 +6,14 @@ namespace DFMP.Runtime
     [Serializable]
     public class DFMPCharacterRecord
     {
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public string AccountId = string.Empty;
         public string ServerWorldId = string.Empty;
+        public string CharacterId = string.Empty;
         public string CharacterName = "Player";
+        public string LastPlayedUtc = string.Empty;
 
         public int WorldX;
         public float WorldY;
@@ -50,6 +52,8 @@ namespace DFMP.Runtime
             SchemaVersion = CurrentSchemaVersion;
             AccountId = accountId ?? string.Empty;
             ServerWorldId = serverWorldId ?? string.Empty;
+            CharacterId = CharacterId ?? string.Empty;
+            LastPlayedUtc = LastPlayedUtc ?? string.Empty;
             CharacterName = string.IsNullOrWhiteSpace(CharacterName) ? "Player" : CharacterName.Trim();
             WorldContext = string.IsNullOrWhiteSpace(WorldContext) ? "Exterior" : WorldContext.Trim();
             if (Context == null || Context.IsDefaultExterior() && (MapPixelX != 0 || MapPixelY != 0 || !string.Equals(WorldContext, "Exterior", StringComparison.OrdinalIgnoreCase)))
@@ -97,8 +101,35 @@ namespace DFMP.Runtime
                 ServerWorldId = serverWorldId,
                 CharacterName = characterName
             };
+            record.EnsureCharacterId();
             record.Normalize(accountId, serverWorldId);
             return record;
+        }
+
+        public void EnsureCharacterId()
+        {
+            Guid parsed;
+            if (!string.IsNullOrWhiteSpace(CharacterId) && Guid.TryParse(CharacterId.Trim(), out parsed))
+            {
+                CharacterId = parsed.ToString("N");
+                return;
+            }
+
+            CharacterId = Guid.NewGuid().ToString("N");
+        }
+
+        public void MarkPlayed()
+        {
+            LastPlayedUtc = DateTime.UtcNow.ToString("o");
+        }
+
+        public DateTime GetLastPlayedTimeUtc()
+        {
+            DateTime parsed;
+            if (DateTime.TryParse(LastPlayedUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out parsed))
+                return parsed.ToUniversalTime();
+
+            return DateTime.MinValue;
         }
 
         public static DFMPCharacterRecord FromJson(string json, string accountId, string serverWorldId)
