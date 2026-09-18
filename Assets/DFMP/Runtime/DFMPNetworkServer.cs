@@ -473,7 +473,11 @@ namespace DFMP.Runtime
             if (!decision.Accepted)
             {
                 Debug.LogWarning($"[DFMP Join] Rejected account identity: connectionId={conn.connectionId}, reason={decision.Reason}.");
-                conn.Disconnect();
+                // Delay so the join-result message can flush before the transport drops.
+                if (Manager != null)
+                    Manager.DisconnectAfterJoinRejection(conn);
+                else
+                    conn.Disconnect();
                 return;
             }
 
@@ -648,7 +652,9 @@ namespace DFMP.Runtime
             if (conn == null || !joinDecisions.TryGetValue(conn.connectionId, out decision) || decision == null)
                 return false;
 
-            return true;
+            // Rejected connections remain briefly while the join-result message flushes; do not
+            // expose them to character-select or other gameplay handlers during that window.
+            return decision.Accepted;
         }
 
         private static void SpawnTimeState()
@@ -1472,11 +1478,7 @@ namespace DFMP.Runtime
         {
             DFMPPlayerSessionState sessionState;
             if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
-            {
-                joinDecisions.Remove(conn.connectionId);
-                activeAccounts.Release(conn.connectionId);
                 return;
-            }
 
             float lastReportTime;
             float elapsedSeconds = lastPositionReportTimes.TryGetValue(conn.connectionId, out lastReportTime)
@@ -2305,56 +2307,63 @@ namespace DFMP.Runtime
             if (conn == null)
                 return;
 
+            int connectionId = conn.connectionId;
             DFMPPlayerSessionState sessionState;
-            if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState))
-                return;
-
-            TryFinalizePendingDeathRespawnOnDisconnect(conn.connectionId, sessionState);
-            SaveCharacterRecord(conn.connectionId, sessionState);
-
-            DFMPEventBus.Instance.PublishPlayerDisconnected(new DFMPPlayerDisconnectedEvent
+            if (playerSessionStates.TryGetValue(connectionId, out sessionState))
             {
-                ConnectionId = conn.connectionId,
-                Address = conn.address,
-                SessionState = sessionState,
-                Reason = "disconnect"
-            });
+                TryFinalizePendingDeathRespawnOnDisconnect(connectionId, sessionState);
+                SaveCharacterRecord(connectionId, sessionState);
 
-            if (chatLifecycleNotifier.TryAnnounceDisconnect(conn.connectionId))
-            {
-                BroadcastSystemMessage(
-                    DFMPChatMessageKind.PlayerLeft,
-                    string.Format("{0} left.", sessionState.DisplayName),
-                    conn.connectionId);
+                DFMPEventBus.Instance.PublishPlayerDisconnected(new DFMPPlayerDisconnectedEvent
+                {
+                    ConnectionId = connectionId,
+                    Address = conn.address,
+                    SessionState = sessionState,
+                    Reason = "disconnect"
+                });
+
+                if (chatLifecycleNotifier.TryAnnounceDisconnect(connectionId))
+                {
+                    BroadcastSystemMessage(
+                        DFMPChatMessageKind.PlayerLeft,
+                        string.Format("{0} left.", sessionState.DisplayName),
+                        connectionId);
+                }
+
+                playerSessionStates.Remove(connectionId);
+
+                DFMPWorldContextKey previousContext;
+                bool hadPreviousContext = worldOccupancy.TryGetContext(connectionId, out previousContext);
+                worldOccupancy.Remove(connectionId);
+                if (hadPreviousContext && DungeonEnemyRosterService != null)
+                    DungeonEnemyRosterService.HandleContextVacated(previousContext);
+
+                if (sessionState != null)
+                    NetworkServer.Destroy(sessionState.gameObject);
             }
 
-            playerSessionStates.Remove(conn.connectionId);
-            joinDecisions.Remove(conn.connectionId);
-            godModeConnections.Remove(conn.connectionId);
-            DFMPWorldContextKey previousContext;
-            bool hadPreviousContext = worldOccupancy.TryGetContext(conn.connectionId, out previousContext);
-            worldOccupancy.Remove(conn.connectionId);
-            if (hadPreviousContext && DungeonEnemyRosterService != null)
-                DungeonEnemyRosterService.HandleContextVacated(previousContext);
-            startMarkerAssignments.Remove(conn.connectionId);
-            transitionAssignmentStates.Remove(conn.connectionId);
-            vitalStates.Remove(conn.connectionId);
-            initializedIdentityReportConnections.Remove(conn.connectionId);
-            lastDamageSequences.Remove(conn.connectionId);
-            lastDamageRequestIds.Remove(conn.connectionId);
-            lastDamageTimes.Remove(conn.connectionId);
-            damageWindowStartTimes.Remove(conn.connectionId);
-            damageWindowCounts.Remove(conn.connectionId);
-            lastPositionReportTimes.Remove(conn.connectionId);
-            lastActionReportTimes.Remove(conn.connectionId);
-            activePositionReportConnections.Remove(conn.connectionId);
-            rejectedPositionReportConnections.Remove(conn.connectionId);
-            pendingAdminKickConnections.Remove(conn.connectionId);
-            DFMPChatProtocol.RateLimiter.Reset(conn.connectionId);
-            activeAccounts.Release(conn.connectionId);
-            DFMPAuthenticatedConnections.Remove(conn.connectionId);
-            if (sessionState != null)
-                NetworkServer.Destroy(sessionState.gameObject);
+            // Connection-scoped state is claimed at auth/join, before a player session exists.
+            // Always release it so disconnects during character select cannot leak the account claim.
+            joinDecisions.Remove(connectionId);
+            godModeConnections.Remove(connectionId);
+            startMarkerAssignments.Remove(connectionId);
+            transitionAssignmentStates.Remove(connectionId);
+            vitalStates.Remove(connectionId);
+            initializedIdentityReportConnections.Remove(connectionId);
+            lastDamageSequences.Remove(connectionId);
+            lastDamageRequestIds.Remove(connectionId);
+            lastDamageTimes.Remove(connectionId);
+            damageWindowStartTimes.Remove(connectionId);
+            damageWindowCounts.Remove(connectionId);
+            lastPositionReportTimes.Remove(connectionId);
+            lastActionReportTimes.Remove(connectionId);
+            activePositionReportConnections.Remove(connectionId);
+            rejectedPositionReportConnections.Remove(connectionId);
+            pendingAdminKickConnections.Remove(connectionId);
+            chatLifecycleNotifier.TryAnnounceDisconnect(connectionId);
+            DFMPChatProtocol.RateLimiter.Reset(connectionId);
+            activeAccounts.Release(connectionId);
+            DFMPAuthenticatedConnections.Remove(connectionId);
         }
 
         public static void Stop()

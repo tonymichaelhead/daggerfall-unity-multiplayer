@@ -37,6 +37,14 @@ namespace DFMP.Runtime
             pendingNonces.Clear();
         }
 
+        /// <summary>
+        /// Clears challenge state for a connection that left before finishing authentication.
+        /// </summary>
+        public void HandleServerDisconnect(int connectionId)
+        {
+            pendingNonces.Remove(connectionId);
+        }
+
         public override void OnServerAuthenticate(NetworkConnectionToClient conn)
         {
             string nonce = CreateNonce();

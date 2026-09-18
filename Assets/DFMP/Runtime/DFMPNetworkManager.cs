@@ -1,3 +1,4 @@
+using System.Collections;
 using Mirror;
 using UnityEngine;
 
@@ -39,8 +40,29 @@ namespace DFMP.Runtime
         public override void OnServerDisconnect(NetworkConnectionToClient conn)
         {
             DFMPNetworkServer.DestroyPlayerSessionState(conn);
+
+            var auth = authenticator as DFMPNetworkAuthenticator;
+            if (auth != null)
+                auth.HandleServerDisconnect(conn.connectionId);
+
             Debug.Log($"[DFMP Net] Client disconnected: connectionId={conn.connectionId}, address={conn.address}.");
             base.OnServerDisconnect(conn);
+        }
+
+        /// <summary>
+        /// Lets the join-result rejection message flush before dropping the transport connection.
+        /// Matches the authenticator's delayed-reject pattern.
+        /// </summary>
+        public void DisconnectAfterJoinRejection(NetworkConnectionToClient conn)
+        {
+            StartCoroutine(DisconnectAfterJoinRejectionCoroutine(conn));
+        }
+
+        IEnumerator DisconnectAfterJoinRejectionCoroutine(NetworkConnectionToClient conn)
+        {
+            yield return new WaitForSeconds(1f);
+            if (conn != null)
+                conn.Disconnect();
         }
 
         public override void OnServerReady(NetworkConnectionToClient conn)
