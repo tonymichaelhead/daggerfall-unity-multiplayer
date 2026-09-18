@@ -2,6 +2,7 @@ using DaggerfallConnect;
 using DaggerfallConnect.Arena2;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Utility;
 using kcp2k;
 using Mirror;
@@ -48,6 +49,7 @@ namespace DFMP.Runtime
         static readonly Dictionary<int, float> damageWindowStartTimes = new Dictionary<int, float>();
         static readonly Dictionary<int, int> damageWindowCounts = new Dictionary<int, int>();
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
+        static readonly Dictionary<int, bool> movingLessThanHalfSpeedByConnectionId = new Dictionary<int, bool>();
         static readonly Dictionary<int, float> lastActionReportTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
@@ -102,6 +104,34 @@ namespace DFMP.Runtime
 
             level = Mathf.Max(1, joinDecision.CharacterRecord.Level);
             return true;
+        }
+
+        public static bool TryGetPlayerStealthSkill(int connectionId, out int stealthSkill)
+        {
+            stealthSkill = 0;
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(connectionId, out joinDecision) || joinDecision.CharacterRecord == null)
+                return false;
+
+            int[] skills = joinDecision.CharacterRecord.Skills;
+            int stealthIndex = (int)DFCareer.Skills.Stealth;
+            if (skills == null || stealthIndex < 0 || stealthIndex >= skills.Length)
+                return false;
+
+            stealthSkill = Mathf.Max(0, skills[stealthIndex]);
+            return true;
+        }
+
+        public static bool TryGetPlayerMovingLessThanHalfSpeed(int connectionId, out bool movingLessThanHalfSpeed)
+        {
+            return movingLessThanHalfSpeedByConnectionId.TryGetValue(connectionId, out movingLessThanHalfSpeed);
+        }
+
+        public static float GetWalkSpeedFromSpeedAttribute(int speedAttribute)
+        {
+            int speed = Mathf.Max(0, speedAttribute);
+            float drag = 0.5f * (100 - (speed >= 30 ? speed : 30));
+            return (speed + PlayerSpeedChanger.dfWalkBase - drag) / PlayerSpeedChanger.classicToUnitySpeedUnitRatio;
         }
 
         public static bool TryGetStartMarkerAssignment(int connectionId, out string markerName)
@@ -1454,6 +1484,7 @@ namespace DFMP.Runtime
         static void ConfirmSessionArrival(int connectionId, DFMPPlayerSessionState sessionState)
         {
             lastPositionReportTimes.Remove(connectionId);
+            movingLessThanHalfSpeedByConnectionId.Remove(connectionId);
             rejectedPositionReportConnections.Remove(connectionId);
             DFMPEventBus.Instance.PublishPlayerSpawned(new DFMPPlayerSpawnedEvent
             {
@@ -1503,6 +1534,7 @@ namespace DFMP.Runtime
             bool isMoving = context.Kind == DFMPWorldContextKind.Dungeon
                 ? DFMPMovementProtocol.IsMoving(sessionState.DungeonLocalPosition.x, sessionState.DungeonLocalPosition.z, report.DungeonLocalX, report.DungeonLocalZ)
                 : DFMPMovementProtocol.IsMoving(sessionState.WorldX, sessionState.WorldZ, report.WorldX, report.WorldZ);
+            UpdateMovingLessThanHalfSpeed(conn.connectionId, sessionState, report, context, elapsedSeconds);
             sessionState.SetPosition(report.WorldX, report.WorldY, report.WorldZ);
             sessionState.SetMovement(isMoving);
             sessionState.SetFacingYaw(DFMPPositionProtocol.NormalizeFacingYaw(report.FacingYaw));
@@ -1510,6 +1542,47 @@ namespace DFMP.Runtime
             sessionState.SetDungeonLocalPosition(report.HasDungeonLocalPosition, DFMPPositionProtocol.GetDungeonLocalPosition(report));
             if (activePositionReportConnections.Add(conn.connectionId))
                 Debug.Log($"[DFMP Session] Server accepted player position reports: connectionId={conn.connectionId}.");
+        }
+
+        static void UpdateMovingLessThanHalfSpeed(
+            int connectionId,
+            DFMPPlayerSessionState sessionState,
+            DFMPPlayerPositionReport report,
+            DFMPWorldContextKey context,
+            float elapsedSeconds)
+        {
+            if (sessionState == null || elapsedSeconds <= 0f)
+            {
+                movingLessThanHalfSpeedByConnectionId[connectionId] = true;
+                return;
+            }
+
+            float deltaX;
+            float deltaZ;
+            if (context.Kind == DFMPWorldContextKind.Dungeon && report.HasDungeonLocalPosition && sessionState.HasDungeonLocalPosition)
+            {
+                deltaX = report.DungeonLocalX - sessionState.DungeonLocalPosition.x;
+                deltaZ = report.DungeonLocalZ - sessionState.DungeonLocalPosition.z;
+            }
+            else
+            {
+                deltaX = report.WorldX - sessionState.WorldX;
+                deltaZ = report.WorldZ - sessionState.WorldZ;
+            }
+
+            float planarSpeed = Mathf.Sqrt(deltaX * deltaX + deltaZ * deltaZ) / elapsedSeconds;
+            int speedAttribute = 50;
+            DFMPJoinDecision joinDecision;
+            if (joinDecisions.TryGetValue(connectionId, out joinDecision) &&
+                joinDecision.CharacterRecord != null &&
+                joinDecision.CharacterRecord.Attributes != null &&
+                joinDecision.CharacterRecord.Attributes.Length > (int)DFCareer.Stats.Speed)
+            {
+                speedAttribute = joinDecision.CharacterRecord.Attributes[(int)DFCareer.Stats.Speed];
+            }
+
+            float halfWalkSpeed = GetWalkSpeedFromSpeedAttribute(speedAttribute) * 0.5f;
+            movingLessThanHalfSpeedByConnectionId[connectionId] = planarSpeed <= halfWalkSpeed;
         }
 
         private static void OnDamageIntent(NetworkConnectionToClient conn, DFMPDamageIntent intent)
@@ -2356,6 +2429,7 @@ namespace DFMP.Runtime
             damageWindowStartTimes.Remove(connectionId);
             damageWindowCounts.Remove(connectionId);
             lastPositionReportTimes.Remove(connectionId);
+            movingLessThanHalfSpeedByConnectionId.Remove(connectionId);
             lastActionReportTimes.Remove(connectionId);
             activePositionReportConnections.Remove(connectionId);
             rejectedPositionReportConnections.Remove(connectionId);
@@ -2397,6 +2471,7 @@ namespace DFMP.Runtime
             damageWindowStartTimes.Clear();
             damageWindowCounts.Clear();
             lastPositionReportTimes.Clear();
+            movingLessThanHalfSpeedByConnectionId.Clear();
             lastActionReportTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();

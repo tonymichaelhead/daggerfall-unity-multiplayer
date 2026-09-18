@@ -538,23 +538,19 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void DynamicEnemyAi_SelectsNearestVisibleLiveTargetAndMovesTowardAttackRange()
+        public void DynamicEnemyAi_MovesTowardDestinationUntilAttackRange()
         {
             DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
             {
                 EnemyPosition = Vector3.zero,
                 FacingYaw = 270f,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 11, DungeonLocalPosition = new Vector3(12f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 12, DungeonLocalPosition = new Vector3(4f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 13, DungeonLocalPosition = new Vector3(2f, 0f, 0f), SpawnConfirmed = true, IsDead = true, HasLineOfSight = true }
-                },
-                AwarenessRange = 16f,
+                HasTarget = true,
+                TargetConnectionId = 12,
+                DestinationPosition = new Vector3(4f, 0f, 0f),
+                CanAct = true,
                 AttackRange = 2f,
                 MoveSpeed = 3f,
-                DeltaTime = 0.5f,
-                RequireLineOfSight = true
+                DeltaTime = 0.5f
             });
 
             Assert.IsTrue(decision.HasTarget);
@@ -566,40 +562,19 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void DynamicEnemyAi_RequiresLineOfSightAndStopsAtAttackRange()
+        public void DynamicEnemyAi_StopsAtAttackRangeAndWhenCannotAct()
         {
-            DFMPDynamicEnemyAiDecision blocked = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
-            {
-                EnemyPosition = Vector3.zero,
-                FacingYaw = 45f,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 21, DungeonLocalPosition = new Vector3(1f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = false }
-                },
-                AwarenessRange = 8f,
-                AttackRange = 2f,
-                MoveSpeed = 3f,
-                DeltaTime = 1f,
-                RequireLineOfSight = true
-            });
-
-            Assert.IsFalse(blocked.HasTarget);
-            Assert.AreEqual(Vector3.zero, blocked.NextDungeonLocalPosition);
-            Assert.AreEqual(45f, blocked.FacingYaw);
-
             DFMPDynamicEnemyAiDecision inRange = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
             {
                 EnemyPosition = Vector3.zero,
                 FacingYaw = 0f,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 22, DungeonLocalPosition = new Vector3(1f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = false }
-                },
-                AwarenessRange = 8f,
+                HasTarget = true,
+                TargetConnectionId = 22,
+                DestinationPosition = new Vector3(1f, 0f, 0f),
+                CanAct = true,
                 AttackRange = 2f,
                 MoveSpeed = 3f,
-                DeltaTime = 1f,
-                RequireLineOfSight = false
+                DeltaTime = 1f
             });
 
             Assert.IsTrue(inRange.HasTarget);
@@ -607,215 +582,331 @@ namespace DFMP.Tests
             Assert.IsTrue(inRange.InAttackRange);
             Assert.IsFalse(inRange.IsMoving);
             Assert.AreEqual(Vector3.zero, inRange.NextDungeonLocalPosition);
-        }
 
-        [Test]
-        public void DynamicEnemyAi_RetainsCurrentTargetWhenStillValid()
-        {
-            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            DFMPDynamicEnemyAiDecision cannotAct = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
             {
                 EnemyPosition = Vector3.zero,
-                FacingYaw = 0f,
-                CurrentTargetConnectionId = 31,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 30, DungeonLocalPosition = new Vector3(2f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 31, DungeonLocalPosition = new Vector3(6f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
-                },
-                AwarenessRange = 8f,
+                FacingYaw = 45f,
+                HasTarget = true,
+                TargetConnectionId = 21,
+                DestinationPosition = new Vector3(5f, 0f, 0f),
+                CanAct = false,
                 AttackRange = 2f,
-                MoveSpeed = 10f,
-                DeltaTime = 0.1f,
-                RequireLineOfSight = true
+                MoveSpeed = 3f,
+                DeltaTime = 1f
             });
 
-            Assert.IsTrue(decision.HasTarget);
-            Assert.AreEqual(31, decision.TargetConnectionId);
-            Assert.AreEqual(new Vector3(1f, 0f, 0f), decision.NextDungeonLocalPosition);
+            Assert.IsTrue(cannotAct.HasTarget);
+            Assert.AreEqual(21, cannotAct.TargetConnectionId);
+            Assert.IsFalse(cannotAct.InAttackRange);
+            Assert.IsFalse(cannotAct.IsMoving);
+            Assert.AreEqual(Vector3.zero, cannotAct.NextDungeonLocalPosition);
+            Assert.AreEqual(45f, cannotAct.FacingYaw);
         }
 
         [Test]
-        public void DynamicEnemyAi_PursuitLeashReturnsEnemyHomeBeforeTargeting()
+        public void GiveUpTimer_RefreshesWhileDetectedAndDecaysAtClassicInterval()
         {
-            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
-            {
-                EnemyPosition = new Vector3(5f, 0f, 0f),
-                HomePosition = Vector3.zero,
-                PursuitLeashRange = 3f,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 41, DungeonLocalPosition = new Vector3(6f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
-                },
-                AwarenessRange = 64f,
-                AttackRange = 1f,
-                MoveSpeed = 4f,
-                DeltaTime = 0.5f,
-                RequireLineOfSight = false
-            });
+            int timer = 0;
+            DFMPGiveUpTimerPolicy.Advance(ref timer, 1, true);
+            Assert.AreEqual(DFMPGiveUpTimerPolicy.FullTimer, timer);
 
-            Assert.IsFalse(decision.HasTarget);
-            Assert.IsTrue(decision.IsMoving);
-            Assert.AreEqual(new Vector3(3f, 0f, 0f), decision.NextDungeonLocalPosition);
-            Assert.AreEqual(270f, decision.FacingYaw);
+            DFMPGiveUpTimerPolicy.Advance(ref timer, 1, false);
+            Assert.AreEqual(DFMPGiveUpTimerPolicy.FullTimer - 1, timer);
+
+            DFMPGiveUpTimerPolicy.Advance(ref timer, 4, false);
+            Assert.AreEqual(DFMPGiveUpTimerPolicy.FullTimer - 5, timer);
         }
 
         [Test]
-        public void DynamicEnemyAi_PursuitLeashClampsOutboundMovement()
+        public void GiveUpTimer_ExpiresAfterTwelvePointFiveSecondsUndetected()
         {
-            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            var state = new DFMPDynamicEnemySensesState();
+            var visibleTarget = CreateSensesTarget(10, new Vector3(2f, 0f, 0f), true);
+
+            DFMPDynamicEnemySensesDecision detected = DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 90f, visibleTarget, DFMPGiveUpTimerPolicy.ClassicUpdateInterval, stealthRoll: 0),
+                state);
+            Assert.IsTrue(detected.DetectedTarget);
+            Assert.IsTrue(detected.CanAct);
+            Assert.AreEqual(DFMPGiveUpTimerPolicy.FullTimer, detected.GiveUpTimer);
+
+            var hiddenTarget = CreateHiddenSensesTarget(10, new Vector3(2f, 0f, 0f));
+            hiddenTarget.MovingLessThanHalfSpeed = true;
+            float elapsed = 0f;
+            DFMPDynamicEnemySensesDecision last = detected;
+            // Advance classic game minutes each tick so stealth re-rolls and fails against high skill.
+            uint minute = 2;
+            while (elapsed < 12.5f && last.GiveUpTimer > 0)
             {
-                EnemyPosition = new Vector3(2f, 0f, 0f),
-                HomePosition = Vector3.zero,
-                PursuitLeashRange = 3f,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 42, DungeonLocalPosition = new Vector3(10f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
-                },
-                AwarenessRange = 64f,
-                AttackRange = 1f,
-                MoveSpeed = 4f,
-                DeltaTime = 1f,
-                RequireLineOfSight = false
-            });
-
-            Assert.IsTrue(decision.HasTarget);
-            Assert.AreEqual(new Vector3(3f, 0f, 0f), decision.NextDungeonLocalPosition);
-        }
-
-        [Test]
-        public void DynamicEnemyAi_PursuitLeashBoundaryDoesNotOscillateFacing()
-        {
-            // Pursuit clamps to the leash radius, so collision and grounding leave the enemy a hair outside it.
-            Vector3 enemyPosition = new Vector3(3.0001f, 0f, 0f);
-            float previousYaw = 0f;
-            for (int tick = 0; tick < 12; tick++)
-            {
-                DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
-                {
-                    EnemyPosition = enemyPosition,
-                    FacingYaw = previousYaw,
-                    HomePosition = Vector3.zero,
-                    PursuitLeashRange = 3f,
-                    Targets = new DFMPDynamicEnemySensoryTarget[]
-                    {
-                        new DFMPDynamicEnemySensoryTarget { ConnectionId = 45, DungeonLocalPosition = new Vector3(10f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
-                    },
-                    AwarenessRange = 64f,
-                    AttackRange = 1f,
-                    MoveSpeed = 4f,
-                    DeltaTime = 0.1f,
-                    RequireLineOfSight = false
-                });
-
-                if (tick > 0)
-                    Assert.AreEqual(previousYaw, decision.FacingYaw, 1f, $"Facing flipped on tick {tick}; the enemy is chattering across the leash boundary.");
-
-                previousYaw = decision.FacingYaw;
-                enemyPosition = decision.NextDungeonLocalPosition;
-                Assert.LessOrEqual(enemyPosition.x, 3.01f);
+                var input = CreateSensesInput(Vector3.zero, 90f, hiddenTarget, DFMPGiveUpTimerPolicy.ClassicUpdateInterval, stealthRoll: 0, currentTargetId: 10);
+                input.ClassicGameMinutes = minute++;
+                last = DFMPDynamicEnemySensesPolicy.Evaluate(input, state);
+                elapsed += DFMPGiveUpTimerPolicy.ClassicUpdateInterval;
             }
 
-            Assert.AreEqual(3f, enemyPosition.x, 0.01f, "Enemy should settle on the leash radius facing the target.");
+            Assert.AreEqual(0, last.GiveUpTimer);
+            Assert.IsFalse(last.CanAct);
+            Assert.IsTrue(last.HasTarget);
+            Assert.AreEqual(10, last.TargetConnectionId);
+            Assert.AreEqual(12.5f, elapsed, 0.001f);
         }
 
         [Test]
-        public void DynamicEnemyAi_PursuitLeashDoesNotSlideAlongBoundary()
+        public void DynamicEnemySenses_BlindPursuitUsesLastKnownPositionThenStops()
         {
-            Vector3 enemyPosition = new Vector3(3f, 0f, 0f);
-            for (int tick = 0; tick < 12; tick++)
-            {
-                DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
-                {
-                    EnemyPosition = enemyPosition,
-                    HomePosition = Vector3.zero,
-                    PursuitLeashRange = 3f,
-                    Targets = new DFMPDynamicEnemySensoryTarget[]
-                    {
-                        new DFMPDynamicEnemySensoryTarget { ConnectionId = 46, DungeonLocalPosition = new Vector3(10f, 0f, 10f), SpawnConfirmed = true, HasLineOfSight = true }
-                    },
-                    AwarenessRange = 64f,
-                    AttackRange = 1f,
-                    MoveSpeed = 4f,
-                    DeltaTime = 0.1f,
-                    RequireLineOfSight = false
-                });
+            var state = new DFMPDynamicEnemySensesState();
+            Vector3 lastSeen = new Vector3(4f, 0f, 0f);
+            DFMPDynamicEnemySensesDecision detected = DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 90f, CreateSensesTarget(11, lastSeen, true), 0.1f, stealthRoll: 0),
+                state);
+            Assert.IsTrue(detected.CanAct);
+            Assert.AreEqual(lastSeen, detected.LastKnownTargetPosition);
 
-                enemyPosition = decision.NextDungeonLocalPosition;
-            }
+            var fled = CreateHiddenSensesTarget(11, new Vector3(40f, 0f, 0f));
+            DFMPDynamicEnemySensesDecision blind = DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 90f, fled, 0.1f, stealthRoll: 0, currentTargetId: 11),
+                state);
+            Assert.IsTrue(blind.HasTarget);
+            Assert.IsTrue(blind.CanAct);
+            Assert.AreEqual(lastSeen, blind.LastKnownTargetPosition);
 
-            Assert.AreEqual(new Vector3(3f, 0f, 0f), enemyPosition, "Enemy slid tangentially around the leash boundary instead of holding position.");
-        }
-
-        [Test]
-        public void DynamicEnemyAi_IgnoresTemporarilyBlockedTarget()
-        {
-            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
+            DFMPDynamicEnemyAiDecision motor = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
             {
                 EnemyPosition = Vector3.zero,
-                IgnoredTargetConnectionId = 43,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 43, DungeonLocalPosition = new Vector3(4f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 44, DungeonLocalPosition = new Vector3(6f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
-                },
-                AwarenessRange = 64f,
+                HasTarget = blind.HasTarget,
+                TargetConnectionId = blind.TargetConnectionId,
+                DestinationPosition = blind.LastKnownTargetPosition,
+                CanAct = blind.CanAct,
                 AttackRange = 1f,
                 MoveSpeed = 4f,
-                DeltaTime = 0.1f,
-                RequireLineOfSight = false
+                DeltaTime = 0.5f
             });
+            Assert.IsTrue(motor.IsMoving);
+            Assert.AreEqual(new Vector3(2f, 0f, 0f), motor.NextDungeonLocalPosition);
+        }
 
+        [Test]
+        public void DynamicEnemySenses_ResumesPursuitOnRedetectionAfterGiveUp()
+        {
+            var state = new DFMPDynamicEnemySensesState();
+            DFMPDynamicEnemySensesDecision detected = DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 90f, CreateSensesTarget(12, new Vector3(3f, 0f, 0f), true), 0.1f, stealthRoll: 0),
+                state);
+            Assert.IsTrue(detected.CanAct);
+
+            var sneaking = CreateHiddenSensesTarget(12, new Vector3(3f, 0f, 0f));
+            sneaking.MovingLessThanHalfSpeed = true;
+            uint minute = 2;
+            DFMPDynamicEnemySensesDecision last = detected;
+            for (int i = 0; i < DFMPGiveUpTimerPolicy.FullTimer && last.GiveUpTimer > 0; i++)
+            {
+                var input = CreateSensesInput(Vector3.zero, 90f, sneaking, DFMPGiveUpTimerPolicy.ClassicUpdateInterval, stealthRoll: 0, currentTargetId: 12);
+                input.ClassicGameMinutes = minute++;
+                last = DFMPDynamicEnemySensesPolicy.Evaluate(input, state);
+            }
+
+            Assert.IsTrue(last.HasTarget);
+            Assert.IsFalse(last.CanAct);
+
+            DFMPDynamicEnemySensesDecision resumed = DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 90f, CreateSensesTarget(12, new Vector3(3f, 0f, 0f), true), 0.1f, stealthRoll: 0, currentTargetId: 12),
+                state);
+            Assert.IsTrue(resumed.DetectedTarget);
+            Assert.IsTrue(resumed.CanAct);
+            Assert.AreEqual(DFMPGiveUpTimerPolicy.FullTimer, resumed.GiveUpTimer);
+        }
+
+        [Test]
+        public void ClassicSpawnEnvelope_UsesSpawnThenDespawnHysteresis()
+        {
+            DFMPClassicSensesRanges ranges = DFMPClassicSensesRanges.FromSpawnDistanceType(0);
+            Assert.AreEqual(25.6f, ranges.SpawnXZ, 0.001f);
+            Assert.AreEqual(25.6f, ranges.DespawnXZ, 0.001f);
+
+            Vector3 enemy = Vector3.zero;
+            Vector3 justInsideSpawn = new Vector3(ranges.SpawnXZ - 0.1f, 0f, 0f);
+            Assert.IsTrue(DFMPClassicSpawnEnvelope.Evaluate(false, enemy, justInsideSpawn, ranges));
+
+            // Type 0 has equal spawn/despawn XZ, so use type 1 where despawn is larger.
+            ranges = DFMPClassicSensesRanges.FromSpawnDistanceType(1);
+            Assert.AreEqual(9.6f, ranges.SpawnXZ, 0.001f);
+            Assert.AreEqual(25.6f, ranges.DespawnXZ, 0.001f);
+
+            Vector3 insideSpawn = new Vector3(9f, 0f, 0f);
+            Assert.IsTrue(DFMPClassicSpawnEnvelope.Evaluate(false, enemy, insideSpawn, ranges));
+            Vector3 outsideSpawnInsideDespawn = new Vector3(15f, 0f, 0f);
+            Assert.IsFalse(DFMPClassicSpawnEnvelope.Evaluate(false, enemy, outsideSpawnInsideDespawn, ranges));
+            Assert.IsTrue(DFMPClassicSpawnEnvelope.Evaluate(true, enemy, outsideSpawnInsideDespawn, ranges));
+            Vector3 outsideDespawn = new Vector3(26f, 0f, 0f);
+            Assert.IsFalse(DFMPClassicSpawnEnvelope.Evaluate(true, enemy, outsideDespawn, ranges));
+        }
+
+        [Test]
+        public void DynamicEnemySenses_RejectsTargetBehindEnemyFieldOfViewWithoutStealth()
+        {
+            var state = new DFMPDynamicEnemySensesState();
+            // Facing +Z; target is behind at -Z. Sight clearance true but FOV rejects.
+            // Stealth roll forced to fail with high skill so only FOV matters for detection;
+            // envelope still allows targeting for type 0 at 2 units.
+            var behind = CreateSensesTarget(13, new Vector3(0f, 0f, -2f), true);
+            behind.StealthSkill = 100;
+
+            DFMPDynamicEnemySensesDecision decision = DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 0f, behind, 0.1f, stealthRoll: 0),
+                state);
+
+            Assert.IsTrue(decision.HasTarget);
+            Assert.IsFalse(decision.TargetInSight);
+            Assert.IsFalse(decision.DetectedTarget);
+            Assert.IsFalse(decision.CanAct);
+        }
+
+        [Test]
+        public void StealthCheck_RunsAtMostOncePerClassicGameMinute()
+        {
+            // A fresh enemy has never rolled, so the first check must fall through to the roll.
+            uint lastMinute = 0;
+            bool first = DFMPStealthCheckPolicy.Evaluate(
+                true,
+                5f,
+                0,
+                100,
+                false,
+                false,
+                false,
+                ref lastMinute,
+                50);
+            Assert.IsTrue(first);
+            Assert.AreEqual(100u, lastMinute);
+
+            bool sameMinute = DFMPStealthCheckPolicy.Evaluate(
+                true,
+                5f,
+                0,
+                100,
+                false,
+                false,
+                true,
+                ref lastMinute,
+                0);
+            Assert.IsTrue(sameMinute);
+            Assert.AreEqual(100u, lastMinute);
+
+            bool nextMinute = DFMPStealthCheckPolicy.Evaluate(
+                true,
+                5f,
+                50,
+                101,
+                false,
+                false,
+                false,
+                ref lastMinute,
+                0);
+            Assert.AreEqual(101u, lastMinute);
+            // Chance at 5 units with skill 50: 2 * ((200) * 50 >> 10) = 2 * (10000 >> 10) = 2 * 9 = 18.
+            // Roll 0 >= 18 is false.
+            Assert.IsFalse(nextMinute);
+        }
+
+        [Test]
+        public void DynamicEnemySenses_IgnoresTemporarilyBlockedTarget()
+        {
+            var state = new DFMPDynamicEnemySensesState();
+            var ignored = CreateSensesTarget(43, new Vector3(4f, 0f, 0f), true);
+            var other = CreateSensesTarget(44, new Vector3(6f, 0f, 0f), true);
+            var input = CreateSensesInput(Vector3.zero, 90f, ignored, 0.1f, stealthRoll: 0);
+            input.Targets = new[] { ignored, other };
+            input.IgnoredTargetConnectionId = 43;
+
+            DFMPDynamicEnemySensesDecision decision = DFMPDynamicEnemySensesPolicy.Evaluate(input, state);
             Assert.IsTrue(decision.HasTarget);
             Assert.AreEqual(44, decision.TargetConnectionId);
         }
 
         [Test]
-        public void DynamicEnemyAi_PassiveEnemyDoesNotAcquireTarget()
+        public void DynamicEnemySenses_PassiveEnemyDoesNotAcquireTarget()
         {
-            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
-            {
-                EnemyPosition = Vector3.zero,
-                IsPassive = true,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 45, DungeonLocalPosition = new Vector3(1f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
-                },
-                AwarenessRange = 64f,
-                AttackRange = 2f,
-                MoveSpeed = 4f,
-                DeltaTime = 1f,
-                RequireLineOfSight = false
-            });
+            var state = new DFMPDynamicEnemySensesState();
+            var input = CreateSensesInput(Vector3.zero, 90f, CreateSensesTarget(45, new Vector3(1f, 0f, 0f), true), 0.1f, stealthRoll: 0);
+            input.IsPassive = true;
 
+            DFMPDynamicEnemySensesDecision decision = DFMPDynamicEnemySensesPolicy.Evaluate(input, state);
             Assert.IsFalse(decision.HasTarget);
             Assert.AreEqual(-1, decision.TargetConnectionId);
-            Assert.IsFalse(decision.InAttackRange);
-            Assert.IsFalse(decision.IsMoving);
+            Assert.IsFalse(decision.CanAct);
         }
 
         [Test]
-        public void DynamicEnemyAi_ProvokedPassiveEnemyRetainsOnlyCurrentTarget()
+        public void DynamicEnemySenses_ProvokedPassiveEnemyRetainsOnlyCurrentTarget()
         {
-            DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
-            {
-                EnemyPosition = Vector3.zero,
-                CurrentTargetConnectionId = 46,
-                IsPassive = true,
-                Targets = new DFMPDynamicEnemySensoryTarget[]
-                {
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 46, DungeonLocalPosition = new Vector3(1f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true },
-                    new DFMPDynamicEnemySensoryTarget { ConnectionId = 47, DungeonLocalPosition = new Vector3(2f, 0f, 0f), SpawnConfirmed = true, HasLineOfSight = true }
-                },
-                AwarenessRange = 64f,
-                AttackRange = 2f,
-                MoveSpeed = 4f,
-                DeltaTime = 0.1f,
-                RequireLineOfSight = false
-            });
+            var state = new DFMPDynamicEnemySensesState();
+            var current = CreateSensesTarget(46, new Vector3(1f, 0f, 0f), true);
+            var other = CreateSensesTarget(47, new Vector3(2f, 0f, 0f), true);
+            var input = CreateSensesInput(Vector3.zero, 90f, current, 0.1f, stealthRoll: 0, currentTargetId: 46);
+            input.Targets = new[] { current, other };
+            input.IsPassive = true;
 
+            DFMPDynamicEnemySensesDecision decision = DFMPDynamicEnemySensesPolicy.Evaluate(input, state);
             Assert.IsTrue(decision.HasTarget);
             Assert.AreEqual(46, decision.TargetConnectionId);
-            Assert.IsTrue(decision.InAttackRange);
+            Assert.IsTrue(decision.CanAct);
+        }
+
+        [Test]
+        public void ClassicSensesRanges_MatchDfuSpawnDistanceTable()
+        {
+            Assert.AreEqual(25.6f, DFMPClassicSensesRanges.FromSpawnDistanceType(0).SpawnXZ, 0.001f);
+            Assert.AreEqual(9.6f, DFMPClassicSensesRanges.FromSpawnDistanceType(1).SpawnXZ, 0.001f);
+            Assert.AreEqual(19.2f, DFMPClassicSensesRanges.FromSpawnDistanceType(3).SpawnXZ, 0.001f);
+            Assert.AreEqual(19.2f, DFMPClassicSensesRanges.FromSpawnDistanceType(99).SpawnXZ, 0.001f);
+        }
+
+        static DFMPDynamicEnemySensesTarget CreateSensesTarget(int connectionId, Vector3 position, bool hasSightClearance)
+        {
+            return new DFMPDynamicEnemySensesTarget
+            {
+                ConnectionId = connectionId,
+                DungeonLocalPosition = position,
+                SpawnConfirmed = true,
+                IsDead = false,
+                HasSightClearance = hasSightClearance,
+                HasHearingClearance = hasSightClearance,
+                StealthSkill = 0,
+                MovingLessThanHalfSpeed = false
+            };
+        }
+
+        static DFMPDynamicEnemySensesTarget CreateHiddenSensesTarget(int connectionId, Vector3 position)
+        {
+            DFMPDynamicEnemySensesTarget target = CreateSensesTarget(connectionId, position, false);
+            target.StealthSkill = 100;
+            return target;
+        }
+
+        static DFMPDynamicEnemySensesInput CreateSensesInput(
+            Vector3 enemyPosition,
+            float facingYaw,
+            DFMPDynamicEnemySensesTarget target,
+            float deltaTime,
+            int stealthRoll,
+            int currentTargetId = -1)
+        {
+            return new DFMPDynamicEnemySensesInput
+            {
+                EnemyPosition = enemyPosition,
+                FacingYaw = facingYaw,
+                ClassicSpawnDistanceType = 0,
+                SightModifier = 0f,
+                HearingModifier = 0f,
+                CurrentTargetConnectionId = currentTargetId,
+                Targets = new[] { target },
+                DeltaTime = deltaTime,
+                ClassicGameMinutes = 1,
+                IsPassive = false,
+                IgnoredTargetConnectionId = -1,
+                StealthRoll = stealthRoll
+            };
         }
 
         [Test]
@@ -879,15 +970,6 @@ namespace DFMP.Tests
             Assert.IsFalse(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Slaughterfish, 10000, 0));
             Assert.IsFalse(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Dreugh, 100, 50));
             Assert.IsTrue(DFMPDungeonRosterPolicy.ShouldSpawnNativeEnemy(MobileTypes.Dreugh, 100, 110));
-        }
-
-        [Test]
-        public void DungeonRoster_NativeAwarenessRangeMatchesDfuSpawnDistanceTable()
-        {
-            Assert.AreEqual(25.6f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(0));
-            Assert.AreEqual(9.6f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(1));
-            Assert.AreEqual(19.2f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(3));
-            Assert.AreEqual(19.2f, DFMPDungeonRosterPolicy.GetNativeAwarenessRange(99));
         }
 
         [Test]
@@ -1344,7 +1426,7 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void DungeonRosterService_AiTick_WithStrictLineOfSightDoesNotAcquireWithoutGeometry()
+        public void DungeonRosterService_AiTick_WithStrictLineOfSightDoesNotAcquireWithoutGeometryOutsideEnvelope()
         {
             GameObject serviceObject = new GameObject("DFMP_RosterServiceAiStrictLosTest");
             GameObject sessionObject = new GameObject("DFMP_RosterServiceAiStrictLosSession");
@@ -1372,7 +1454,8 @@ namespace DFMP.Tests
                 Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("ai-strict-los-seed"), dungeon, 1, out roster));
                 string enemyId = roster[0].Identity.EnemyId;
                 Vector3 initialPosition = roster[0].Descriptor.DungeonLocalPosition;
-                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(10f, 0f, 0f));
+                // Beyond classic spawn XZ for type 0 (25.6) and stealth max (25.6); sight clearance fails without geometry.
+                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(40f, 0f, 0f));
 
                 service.ProcessAiTick(10f, 0.5f);
                 DFMPDynamicEnemyRecord updatedRecord = GetRecord(service, enemyId);

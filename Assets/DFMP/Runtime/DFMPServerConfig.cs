@@ -105,7 +105,6 @@ namespace DFMP.Runtime
         public float AiTickIntervalSeconds = 0.1f;
         public float AttackCooldownSeconds = 1.8f;
         public int AttackDamage = 4;
-        public float PursuitLeashRange = 24f;
         public int StuckMovementTickLimit = 3;
         public float StuckRecoverySeconds = 2f;
         public float PlayerMeleeDamageRange = 6f;
@@ -131,7 +130,6 @@ namespace DFMP.Runtime
             AiTickIntervalSeconds = AiTickIntervalSeconds > 0f && AiTickIntervalSeconds <= 5f ? AiTickIntervalSeconds : 0.1f;
             AttackCooldownSeconds = AttackCooldownSeconds > 0f && AttackCooldownSeconds <= 60f ? AttackCooldownSeconds : 1.8f;
             AttackDamage = AttackDamage > 0 && AttackDamage <= 1000 ? AttackDamage : 4;
-            PursuitLeashRange = PursuitLeashRange >= 0f && PursuitLeashRange <= 256f ? PursuitLeashRange : 24f;
             StuckMovementTickLimit = StuckMovementTickLimit > 0 && StuckMovementTickLimit <= 60 ? StuckMovementTickLimit : 3;
             StuckRecoverySeconds = StuckRecoverySeconds > 0f && StuckRecoverySeconds <= 60f ? StuckRecoverySeconds : 2f;
             PlayerMeleeDamageRange = PlayerMeleeDamageRange > 0f && PlayerMeleeDamageRange <= 32f ? PlayerMeleeDamageRange : 6f;

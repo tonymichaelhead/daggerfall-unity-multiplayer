@@ -146,30 +146,17 @@ namespace DFMP.Runtime
         public bool IsMoving;
     }
 
-    public struct DFMPDynamicEnemySensoryTarget
-    {
-        public int ConnectionId;
-        public Vector3 DungeonLocalPosition;
-        public bool SpawnConfirmed;
-        public bool IsDead;
-        public bool HasLineOfSight;
-    }
-
     public struct DFMPDynamicEnemyAiInput
     {
         public Vector3 EnemyPosition;
         public float FacingYaw;
-        public int CurrentTargetConnectionId;
-        public DFMPDynamicEnemySensoryTarget[] Targets;
-        public float AwarenessRange;
+        public bool HasTarget;
+        public int TargetConnectionId;
+        public Vector3 DestinationPosition;
+        public bool CanAct;
         public float AttackRange;
         public float MoveSpeed;
         public float DeltaTime;
-        public bool RequireLineOfSight;
-        public Vector3 HomePosition;
-        public float PursuitLeashRange;
-        public int IgnoredTargetConnectionId;
-        public bool IsPassive;
     }
 
     public struct DFMPDynamicEnemyAiDecision
@@ -228,8 +215,6 @@ namespace DFMP.Runtime
 
     public static class DFMPDynamicEnemyAiPolicy
     {
-        public const float LeashReturnHysteresis = 1f;
-
         public static DFMPDynamicEnemyAiDecision Evaluate(DFMPDynamicEnemyAiInput input)
         {
             var decision = new DFMPDynamicEnemyAiDecision
@@ -239,39 +224,23 @@ namespace DFMP.Runtime
                 FacingYaw = NormalizeYaw(input.FacingYaw)
             };
 
-            int targetIndex;
-            if (input.IsPassive && input.CurrentTargetConnectionId <= 0)
-                return decision;
-
-            float leashRange = Mathf.Max(0f, input.PursuitLeashRange);
-            // Pursuit parks the enemy exactly on the leash radius, so returning home needs a margin or it chatters every tick.
-            float leashReturnRange = leashRange + LeashReturnHysteresis;
-            if (leashRange > 0f && GetPlanarDistanceSquared(input.EnemyPosition, input.HomePosition) > leashReturnRange * leashReturnRange)
+            if (!input.HasTarget || !input.CanAct)
             {
-                Vector3 returnOffset = input.HomePosition - input.EnemyPosition;
-                returnOffset.y = 0f;
-                float returnDistance = returnOffset.magnitude;
-                decision.FacingYaw = returnDistance > 0.0001f ? YawFromDirection(returnOffset) : decision.FacingYaw;
-                if (returnDistance > 0.0001f && input.MoveSpeed > 0f && input.DeltaTime > 0f)
+                if (input.HasTarget)
                 {
-                    float returnStep = Mathf.Min(input.MoveSpeed * input.DeltaTime, returnDistance);
-                    decision.NextDungeonLocalPosition = input.EnemyPosition + returnOffset / returnDistance * returnStep;
-                    decision.IsMoving = returnStep > 0.0001f;
+                    decision.HasTarget = true;
+                    decision.TargetConnectionId = input.TargetConnectionId;
                 }
 
                 return decision;
             }
 
-            if (!TrySelectTarget(input, out targetIndex))
-                return decision;
-
-            Vector3 targetPosition = input.Targets[targetIndex].DungeonLocalPosition;
-            Vector3 offset = targetPosition - input.EnemyPosition;
+            Vector3 offset = input.DestinationPosition - input.EnemyPosition;
             offset.y = 0f;
             float distance = offset.magnitude;
 
             decision.HasTarget = true;
-            decision.TargetConnectionId = input.Targets[targetIndex].ConnectionId;
+            decision.TargetConnectionId = input.TargetConnectionId;
             decision.FacingYaw = distance > 0.0001f ? YawFromDirection(offset) : decision.FacingYaw;
             decision.InAttackRange = distance <= Mathf.Max(0f, input.AttackRange);
 
@@ -279,118 +248,10 @@ namespace DFMP.Runtime
             {
                 float step = Mathf.Min(input.MoveSpeed * input.DeltaTime, Mathf.Max(0f, distance - Mathf.Max(0f, input.AttackRange)));
                 decision.NextDungeonLocalPosition = input.EnemyPosition + offset / distance * step;
-                decision.NextDungeonLocalPosition = ConstrainToPursuitLeash(input, decision.NextDungeonLocalPosition);
                 decision.IsMoving = step > 0.0001f;
             }
 
             return decision;
-        }
-
-        static Vector3 ConstrainToPursuitLeash(DFMPDynamicEnemyAiInput input, Vector3 desiredPosition)
-        {
-            float leashRange = Mathf.Max(0f, input.PursuitLeashRange);
-            if (leashRange <= 0f)
-                return desiredPosition;
-
-            float leashRangeSquared = leashRange * leashRange;
-            Vector3 desiredOffset = desiredPosition - input.HomePosition;
-            desiredOffset.y = 0f;
-            if (desiredOffset.sqrMagnitude <= leashRangeSquared)
-                return desiredPosition;
-
-            // Snapping the desired position radially onto the leash circle turns forward pursuit into a sideways
-            // slide along the boundary, so stop the step where it crosses the boundary instead.
-            Vector3 currentOffset = input.EnemyPosition - input.HomePosition;
-            currentOffset.y = 0f;
-            float currentDistanceSquared = currentOffset.sqrMagnitude;
-            if (currentDistanceSquared >= leashRangeSquared)
-                return input.EnemyPosition;
-
-            Vector3 step = desiredOffset - currentOffset;
-            float stepLength = step.magnitude;
-            if (stepLength <= 0.0001f)
-                return input.EnemyPosition;
-
-            Vector3 direction = step / stepLength;
-            float projection = Vector3.Dot(currentOffset, direction);
-            float discriminant = projection * projection - (currentDistanceSquared - leashRangeSquared);
-            if (discriminant < 0f)
-                return input.EnemyPosition;
-
-            float allowedStep = Mathf.Clamp(-projection + Mathf.Sqrt(discriminant), 0f, stepLength);
-            Vector3 constrainedPosition = input.EnemyPosition + direction * allowedStep;
-            constrainedPosition.y = desiredPosition.y;
-            return constrainedPosition;
-        }
-
-        static bool TrySelectTarget(DFMPDynamicEnemyAiInput input, out int targetIndex)
-        {
-            targetIndex = -1;
-            if (input.Targets == null || input.Targets.Length == 0 || input.AwarenessRange <= 0f)
-                return false;
-
-            float maximumDistanceSquared = input.AwarenessRange * input.AwarenessRange;
-            if (input.IsPassive)
-            {
-                for (int index = 0; index < input.Targets.Length; index++)
-                {
-                    if (input.Targets[index].ConnectionId == input.CurrentTargetConnectionId && IsValidTarget(input, index, maximumDistanceSquared))
-                    {
-                        targetIndex = index;
-                        return true;
-                    }
-                }
-
-                return false;
-            }
-
-            for (int index = 0; index < input.Targets.Length; index++)
-            {
-                if (input.Targets[index].ConnectionId == input.CurrentTargetConnectionId && !IsIgnoredTarget(input, index) && IsValidTarget(input, index, maximumDistanceSquared))
-                {
-                    targetIndex = index;
-                    return true;
-                }
-            }
-
-            float bestDistanceSquared = float.MaxValue;
-            for (int index = 0; index < input.Targets.Length; index++)
-            {
-                if (IsIgnoredTarget(input, index) || !IsValidTarget(input, index, maximumDistanceSquared))
-                    continue;
-
-                float distanceSquared = GetPlanarDistanceSquared(input.EnemyPosition, input.Targets[index].DungeonLocalPosition);
-                if (distanceSquared > maximumDistanceSquared || distanceSquared >= bestDistanceSquared)
-                    continue;
-
-                bestDistanceSquared = distanceSquared;
-                targetIndex = index;
-            }
-
-            return targetIndex >= 0;
-        }
-
-        static bool IsIgnoredTarget(DFMPDynamicEnemyAiInput input, int targetIndex)
-        {
-            return input.Targets[targetIndex].ConnectionId == input.IgnoredTargetConnectionId;
-        }
-
-        static bool IsValidTarget(DFMPDynamicEnemyAiInput input, int targetIndex, float maximumDistanceSquared)
-        {
-            DFMPDynamicEnemySensoryTarget target = input.Targets[targetIndex];
-            if (target.ConnectionId <= 0 || !target.SpawnConfirmed || target.IsDead)
-                return false;
-            if (input.RequireLineOfSight && !target.HasLineOfSight)
-                return false;
-
-            return GetPlanarDistanceSquared(input.EnemyPosition, target.DungeonLocalPosition) <= maximumDistanceSquared;
-        }
-
-        static float GetPlanarDistanceSquared(Vector3 first, Vector3 second)
-        {
-            Vector3 offset = second - first;
-            offset.y = 0f;
-            return offset.sqrMagnitude;
         }
 
         static float YawFromDirection(Vector3 direction)
@@ -670,13 +531,6 @@ namespace DFMP.Runtime
                 return 0.72f;
 
             return 0f;
-        }
-
-        public static float GetNativeAwarenessRange(int classicSpawnDistanceType)
-        {
-            short[] classicSpawnDistanceArray = { 1024, 384, 640, 768, 768, 768, 768 };
-            int index = Mathf.Clamp(classicSpawnDistanceType, 0, classicSpawnDistanceArray.Length - 1);
-            return classicSpawnDistanceArray[index] * MeshReader.GlobalScale;
         }
 
         static int GetNativeGender(NativeDungeonMarker marker, int mobileType)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using DaggerfallConnect;
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Utility;
 using Mirror;
 using UnityEngine;
 
@@ -12,7 +13,7 @@ namespace DFMP.Runtime
         readonly DFMPDynamicEnemyRegistry registry = new DFMPDynamicEnemyRegistry();
         readonly Dictionary<DFMPWorldContextKey, string[]> enemyIdsByContext = new Dictionary<DFMPWorldContextKey, string[]>();
         readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
-        readonly Dictionary<string, Vector3> homePositionsByEnemyId = new Dictionary<string, Vector3>();
+        readonly Dictionary<string, DFMPDynamicEnemySensesState> sensesByEnemyId = new Dictionary<string, DFMPDynamicEnemySensesState>();
         readonly Dictionary<string, int> blockedMovementTicksByEnemyId = new Dictionary<string, int>();
         readonly Dictionary<string, float> stuckRecoveryTimesByEnemyId = new Dictionary<string, float>();
         readonly Dictionary<string, int> stuckTargetConnectionIdsByEnemyId = new Dictionary<string, int>();
@@ -33,7 +34,6 @@ namespace DFMP.Runtime
         float attackCooldownSeconds;
         int attackDamage;
         bool requireLineOfSight;
-        float pursuitLeashRange;
         int stuckMovementTickLimit;
         float stuckRecoverySeconds;
         string enemyRosterMode;
@@ -70,7 +70,6 @@ namespace DFMP.Runtime
             attackCooldownSeconds = config.AttackCooldownSeconds;
             attackDamage = config.AttackDamage;
             requireLineOfSight = config.RequireLineOfSight;
-            pursuitLeashRange = config.PursuitLeashRange;
             stuckMovementTickLimit = config.StuckMovementTickLimit;
             stuckRecoverySeconds = config.StuckRecoverySeconds;
             Subscribe();
@@ -176,7 +175,7 @@ namespace DFMP.Runtime
         {
             pendingDespawnTimes.Clear();
             lastAttackTimesByEnemyId.Clear();
-            homePositionsByEnemyId.Clear();
+            sensesByEnemyId.Clear();
             blockedMovementTicksByEnemyId.Clear();
             stuckRecoveryTimesByEnemyId.Clear();
             stuckTargetConnectionIdsByEnemyId.Clear();
@@ -196,6 +195,14 @@ namespace DFMP.Runtime
 
         void ProcessContextAi(DFMPWorldContextKey context, string[] enemyIds, float currentTime, float deltaTime)
         {
+            uint classicGameMinutes = 0;
+            if (DaggerfallUnity.Instance != null &&
+                DaggerfallUnity.Instance.WorldTime != null &&
+                DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime != null)
+            {
+                classicGameMinutes = DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.ToClassicDaggerfallTime();
+            }
+
             for (int index = 0; index < enemyIds.Length; index++)
             {
                 DFMPDynamicEnemyRecord record;
@@ -203,24 +210,44 @@ namespace DFMP.Runtime
                     continue;
 
                 DFMPDynamicEnemyAttackProfile attackProfile = DFMPDynamicEnemyAttackPolicy.GetProfile(record.Descriptor.MobileType, attackRange, rangedAttackRange, magicAttackRange);
+                DFMPDynamicEnemySensesState sensesState = GetOrCreateSensesState(record.Identity.EnemyId);
+                float sightModifier;
+                float hearingModifier;
+                GetMobileSenseModifiers(record.Descriptor.MobileType, out sightModifier, out hearingModifier);
+
+                DFMPDynamicEnemySensesDecision senses = DFMPDynamicEnemySensesPolicy.Evaluate(
+                    new DFMPDynamicEnemySensesInput
+                    {
+                        EnemyPosition = record.Descriptor.DungeonLocalPosition,
+                        FacingYaw = record.Descriptor.FacingYaw,
+                        ClassicSpawnDistanceType = record.Descriptor.ClassicSpawnDistanceType,
+                        SightModifier = sightModifier,
+                        HearingModifier = hearingModifier,
+                        CurrentTargetConnectionId = record.TargetConnectionId,
+                        Targets = CreateSensesTargets(context, record.Descriptor.DungeonLocalPosition),
+                        DeltaTime = deltaTime,
+                        ClassicGameMinutes = classicGameMinutes,
+                        IsPassive = record.Descriptor.Reaction == (int)DFBlock.EnemyReactionTypes.Passive,
+                        IgnoredTargetConnectionId = GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime),
+                        StealthRoll = UnityEngine.Random.Range(0, 100)
+                    },
+                    sensesState);
+
+                Vector3 destination = senses.HasLastKnownTargetPosition
+                    ? senses.LastKnownTargetPosition
+                    : record.Descriptor.DungeonLocalPosition;
 
                 DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
                 {
                     EnemyPosition = record.Descriptor.DungeonLocalPosition,
                     FacingYaw = record.Descriptor.FacingYaw,
-                    CurrentTargetConnectionId = record.TargetConnectionId,
-                    Targets = CreateSensoryTargets(context, record.Descriptor.DungeonLocalPosition),
-                    AwarenessRange = string.Equals(enemyRosterMode, DFMPEnemyRosterModes.NativeParity, StringComparison.Ordinal)
-                        ? DFMPDungeonRosterPolicy.GetNativeAwarenessRange(record.Descriptor.ClassicSpawnDistanceType)
-                        : awarenessRange,
+                    HasTarget = senses.HasTarget,
+                    TargetConnectionId = senses.TargetConnectionId,
+                    DestinationPosition = destination,
+                    CanAct = senses.CanAct,
                     AttackRange = attackProfile.Range,
                     MoveSpeed = moveSpeed,
-                    DeltaTime = deltaTime,
-                    RequireLineOfSight = requireLineOfSight,
-                    HomePosition = GetHomePosition(record),
-                    PursuitLeashRange = pursuitLeashRange,
-                    IgnoredTargetConnectionId = GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime),
-                    IsPassive = record.Descriptor.Reaction == (int)DFBlock.EnemyReactionTypes.Passive
+                    DeltaTime = deltaTime
                 });
 
                 DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
@@ -250,8 +277,32 @@ namespace DFMP.Runtime
                 if (registry.TryUpdateAiState(true, record.Identity.EnemyId, descriptor, decision.TargetConnectionId, isMoving, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
                     UpdateStateProjection(updatedRecord);
 
-                if (decision.HasTarget && decision.InAttackRange && GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime) < 0)
+                if (decision.HasTarget && decision.InAttackRange && senses.CanAct && GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime) < 0)
                     TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, attackProfile.Kind, currentTime);
+            }
+        }
+
+        DFMPDynamicEnemySensesState GetOrCreateSensesState(string enemyId)
+        {
+            DFMPDynamicEnemySensesState state;
+            if (!sensesByEnemyId.TryGetValue(enemyId, out state) || state == null)
+            {
+                state = new DFMPDynamicEnemySensesState();
+                sensesByEnemyId[enemyId] = state;
+            }
+
+            return state;
+        }
+
+        static void GetMobileSenseModifiers(int mobileType, out float sightModifier, out float hearingModifier)
+        {
+            sightModifier = 0f;
+            hearingModifier = 0f;
+            MobileEnemy enemy;
+            if (EnemyBasics.GetEnemy((MobileTypes)mobileType, out enemy))
+            {
+                sightModifier = enemy.SightModifier;
+                hearingModifier = enemy.HearingModifier;
             }
         }
 
@@ -366,23 +417,38 @@ namespace DFMP.Runtime
             return position;
         }
 
-        DFMPDynamicEnemySensoryTarget[] CreateSensoryTargets(DFMPWorldContextKey context, Vector3 enemyPosition)
+        DFMPDynamicEnemySensesTarget[] CreateSensesTargets(DFMPWorldContextKey context, Vector3 enemyPosition)
         {
             int[] connectionIds = DFMPNetworkServer.GetConnectionsInWorldContext(context);
-            var targets = new List<DFMPDynamicEnemySensoryTarget>(connectionIds.Length);
+            var targets = new List<DFMPDynamicEnemySensesTarget>(connectionIds.Length);
             for (int index = 0; index < connectionIds.Length; index++)
             {
                 DFMPPlayerSessionState sessionState;
                 if (!DFMPNetworkServer.TryGetPlayerSessionState(connectionIds[index], out sessionState) || sessionState == null || !sessionState.HasDungeonLocalPosition)
                     continue;
 
-                targets.Add(new DFMPDynamicEnemySensoryTarget
+                bool hasSightClearance = !requireLineOfSight || HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition);
+                // Native hearing ignores action doors; hosted-geometry LOS does not. Door nuance is owned by M9 item 5.
+                bool hasHearingClearance = HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition);
+
+                int stealthSkill;
+                if (!DFMPNetworkServer.TryGetPlayerStealthSkill(connectionIds[index], out stealthSkill))
+                    stealthSkill = 0;
+
+                bool movingLessThanHalfSpeed;
+                if (!DFMPNetworkServer.TryGetPlayerMovingLessThanHalfSpeed(connectionIds[index], out movingLessThanHalfSpeed))
+                    movingLessThanHalfSpeed = !sessionState.IsMoving;
+
+                targets.Add(new DFMPDynamicEnemySensesTarget
                 {
                     ConnectionId = connectionIds[index],
                     DungeonLocalPosition = sessionState.DungeonLocalPosition,
                     SpawnConfirmed = sessionState.SpawnConfirmed,
                     IsDead = sessionState.IsDead,
-                    HasLineOfSight = !requireLineOfSight || HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition)
+                    HasSightClearance = hasSightClearance,
+                    HasHearingClearance = hasHearingClearance,
+                    StealthSkill = stealthSkill,
+                    MovingLessThanHalfSpeed = movingLessThanHalfSpeed
                 });
             }
 
@@ -568,10 +634,7 @@ namespace DFMP.Runtime
 
                 enemyIds = new string[roster.Length];
                 for (int index = 0; index < roster.Length; index++)
-                {
                     enemyIds[index] = roster[index].Identity.EnemyId;
-                    homePositionsByEnemyId[enemyIds[index]] = roster[index].Descriptor.DungeonLocalPosition;
-                }
 
                 enemyIdsByContext.Add(context, enemyIds);
                 Debug.Log($"[DFMP Enemy] Activated dungeon roster: context={context}, count={enemyIds.Length}.");
@@ -593,16 +656,6 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Enemy] Reactivated dungeon roster: context={context}, count={reactivatedCount}.");
 
             ProjectActiveRecords(context, enemyIds);
-        }
-
-        Vector3 GetHomePosition(DFMPDynamicEnemyRecord record)
-        {
-            Vector3 homePosition;
-            if (homePositionsByEnemyId.TryGetValue(record.Identity.EnemyId, out homePosition))
-                return homePosition;
-
-            homePositionsByEnemyId[record.Identity.EnemyId] = record.Descriptor.DungeonLocalPosition;
-            return record.Descriptor.DungeonLocalPosition;
         }
 
         float ResolveNativeMonsterPower(DFMPWorldContextKey context)
@@ -711,6 +764,10 @@ namespace DFMP.Runtime
             stuckRecoveryTimesByEnemyId.Remove(enemyId);
             stuckTargetConnectionIdsByEnemyId.Remove(enemyId);
             lastLoggedTargetConnectionIdsByEnemyId.Remove(enemyId);
+            DFMPDynamicEnemySensesState sensesState;
+            if (sensesByEnemyId.TryGetValue(enemyId, out sensesState) && sensesState != null)
+                sensesState.Reset();
+            sensesByEnemyId.Remove(enemyId);
         }
 
         static bool IsDungeonBlock(DFMPWorldContextKey context)
