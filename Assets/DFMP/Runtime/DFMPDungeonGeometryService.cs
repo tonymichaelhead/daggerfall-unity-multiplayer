@@ -216,7 +216,6 @@ namespace DFMP.Runtime
             float radius,
             float height,
             bool isFlying,
-            float maxDistance,
             out bool hasClearPath)
         {
             hasClearPath = false;
@@ -258,8 +257,7 @@ namespace DFMP.Runtime
             Transform root = hostedGeometry.Root.transform;
             Vector3 centerWorld = DungeonLocalToCapsuleCenterWorldPosition(root, fromDungeonLocalPosition, height);
             Vector3 dirWorld = root.TransformDirection(direction);
-            float castDistance = maxDistance > 0f ? maxDistance : distance;
-            RaycastHit[] hits = Physics.SphereCastAll(centerWorld, Mathf.Max(0.01f, radius / 2f), dirWorld, castDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            RaycastHit[] hits = Physics.SphereCastAll(centerWorld, Mathf.Max(0.01f, radius / 2f), dirWorld, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             for (int index = 0; index < hits.Length; index++)
             {
                 Collider hitCollider = hits[index].collider;
@@ -430,6 +428,18 @@ namespace DFMP.Runtime
             }
 
             Vector3 rayOrigin = centerWorld + dirWorld.normalized;
+
+            // Native drops this ray a full unit ahead while ObstacleCheck only reaches about a quarter unit, so a
+            // wall between the enemy and the ray origin leaves the ray falling outside the dungeon shell and
+            // reporting a ledge that is not there. The detour sweep then rejects good headings, which reads as an
+            // enemy stuck at a 90 degree corner. A point we cannot reach says nothing about a drop, so require the
+            // span to be clear before trusting the verdict; genuine ledges still have open air across that span.
+            if (HasHostedGeometryBlocker(root, centerWorld, rayOrigin, false))
+            {
+                result.FallDetected = false;
+                return;
+            }
+
             RaycastHit[] hits = Physics.RaycastAll(rayOrigin, Vector3.down, (height * 0.5f) + 1.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             RaycastHit hit;
             result.FallDetected = !TryGetNearestHostedHit(root, hits, out hit, false);

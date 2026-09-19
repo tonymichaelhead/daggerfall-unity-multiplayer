@@ -241,8 +241,7 @@ namespace DFMP.Runtime
                     context,
                     record.Descriptor.DungeonLocalPosition,
                     predictedTarget,
-                    isFlying,
-                    motorState.CurrentDestination);
+                    isFlying);
 
                 Vector3 destination = DFMPDynamicEnemyPursuitPolicy.SelectDestination(
                     new DFMPDynamicEnemyPursuitInput
@@ -313,7 +312,32 @@ namespace DFMP.Runtime
                                     isFlying,
                                     currentTime,
                                     hazards);
+
+                                // Native re-runs this obstacle test inside AttemptMove every rendered frame, so the
+                                // frame it spends choosing a detour costs a few milliseconds of travel and nobody
+                                // sees it. Our AI tick is 100ms, so skipping the step here means a blocked enemy
+                                // near a corner can burn most of its ticks deciding and never actually move, which
+                                // is the stall we keep reproducing. The sweep already probed the heading it picked,
+                                // so spend this tick's step on it rather than standing still.
                                 skipMoveThisTick = true;
+                                if (!motorState.LastDetourFailed)
+                                {
+                                    Vector3 detourOffset = motorState.DetourDestination - record.Descriptor.DungeonLocalPosition;
+                                    if (!isFlying)
+                                        detourOffset.y = 0f;
+                                    float detourDistance = detourOffset.magnitude;
+                                    if (detourDistance > 0.0001f)
+                                    {
+                                        moveDir = detourOffset / detourDistance;
+                                        float detourStep = Mathf.Min(moveSpeed * deltaTime, detourDistance);
+                                        if (detourStep > 0.0001f)
+                                        {
+                                            decision.NextDungeonLocalPosition = record.Descriptor.DungeonLocalPosition + moveDir * detourStep;
+                                            decision.IsMoving = true;
+                                            skipMoveThisTick = false;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -476,18 +500,19 @@ namespace DFMP.Runtime
             DFMPWorldContextKey context,
             Vector3 fromPosition,
             Vector3 predictedTarget,
-            bool isFlying,
-            Vector3 previousDestination)
+            bool isFlying)
         {
             DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
             if (geometryService == null)
                 return !requireLineOfSight;
 
-            float pathDistance = (previousDestination - fromPosition).magnitude;
-            if (pathDistance <= 0.0001f)
-                pathDistance = (predictedTarget - fromPosition).magnitude;
-
             bool hasClearPath;
+
+            // Native sizes this cast from its previous destination, which normally equals the target position and so
+            // spans the real gap. Reusing our previous destination is not equivalent: right after a detour it is the
+            // two-unit detour waypoint, so the cast stops short of the wall, reports a false clear path, and resets
+            // the searchMult ramp that is the only thing driving a blocked enemy around a corner. Span the actual
+            // distance to the position under test, which is what ClearPathToPosition means.
             if (geometryService.TryHasClearPathToPosition(
                 context,
                 fromPosition,
@@ -495,7 +520,6 @@ namespace DFMP.Runtime
                 EnemyMovementRadius,
                 EnemyMovementHeight,
                 isFlying,
-                pathDistance,
                 out hasClearPath))
                 return hasClearPath;
 

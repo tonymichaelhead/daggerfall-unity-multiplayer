@@ -744,6 +744,115 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_MovementProbe_IgnoresLedgeBehindAWallButKeepsRealLedge()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryPhantomLedgeTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryPhantomLedgeSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "phantom-ledge");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(122, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                // Floor stops at z = 10.6, so the fall ray one unit ahead of the enemy has nothing underneath it.
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = new Vector3(10f, -0.1f, 7.8f);
+                floor.transform.localScale = new Vector3(20f, 0.2f, 5.6f);
+
+                // Wall sits at z = 10.6, past the ~0.42 obstacle reach but inside the 1.0 fall-ray offset.
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = new Vector3(10f, 1f, 10.7f);
+                wall.transform.localScale = new Vector3(4f, 2f, 0.2f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 enemyPosition = new Vector3(10f, 0f, 10f);
+                DFMPObstacleProbeResult behindWall;
+                Assert.IsTrue(service.TryProbeMovementHazards(dungeon, enemyPosition, Vector3.forward, 0.35f, 1.8f, false, out behindWall));
+                Assert.IsFalse(behindWall.ObstacleDetected, "Wall is beyond the native obstacle reach in this setup.");
+                Assert.IsFalse(behindWall.FallDetected, "Missing floor on the far side of a wall is not a reachable ledge.");
+
+                UnityEngine.Object.DestroyImmediate(wall);
+                Physics.SyncTransforms();
+
+                DFMPObstacleProbeResult openLedge;
+                Assert.IsTrue(service.TryProbeMovementHazards(dungeon, enemyPosition, Vector3.forward, 0.35f, 1.8f, false, out openLedge));
+                Assert.IsFalse(openLedge.ObstacleDetected);
+                Assert.IsTrue(openLedge.FallDetected, "With the wall gone the same drop must still read as a ledge.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_ClearPath_SpansTheWholeGapRatherThanAShortPrefix()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryClearPathSpanTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryClearPathSpanSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000162.RDB", "clear-path-span");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(123, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = new Vector3(10f, -0.1f, 14f);
+                floor.transform.localScale = new Vector3(20f, 0.2f, 20f);
+
+                // Far enough ahead that the short obstacle probe cannot see it, so the verdict comes from the
+                // sphere cast alone. A cast sized from a stale two-unit detour waypoint would stop short of this
+                // wall and wrongly report a clear path to the target behind it.
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = new Vector3(10f, 1f, 13f);
+                wall.transform.localScale = new Vector3(8f, 2f, 0.2f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 enemyPosition = new Vector3(10f, 0f, 10f);
+                bool blockedByWall;
+                Assert.IsTrue(service.TryHasClearPathToPosition(
+                    dungeon, enemyPosition, new Vector3(10f, 0f, 16f), 0.35f, 1.8f, false, out blockedByWall));
+                Assert.IsFalse(blockedByWall, "A wall three units out must block the path to a target six units out.");
+
+                UnityEngine.Object.DestroyImmediate(wall);
+                Physics.SyncTransforms();
+
+                bool openCorridor;
+                Assert.IsTrue(service.TryHasClearPathToPosition(
+                    dungeon, enemyPosition, new Vector3(10f, 0f, 16f), 0.35f, 1.8f, false, out openCorridor));
+                Assert.IsTrue(openCorridor, "With the wall gone the same span must read as clear.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonGeometryService_Movement_FailsClosedWhenUnavailable()
         {
             GameObject serviceGo = new GameObject("DFMP_DungeonGeometryUnavailableMovementTest");

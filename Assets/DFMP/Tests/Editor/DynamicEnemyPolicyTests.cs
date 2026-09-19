@@ -1630,6 +1630,82 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRosterService_AiTick_BlockedPursuerKeepsMovingOnEveryTick()
+        {
+            GameObject geometryObject = new GameObject("DFMP_RosterServiceDetourProgressTest");
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceDetourProgressRoster");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceDetourProgressSession");
+            try
+            {
+                var geometry = geometryObject.AddComponent<DFMPDungeonGeometryService>();
+                geometry.Initialize();
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                service.SetDungeonGeometryServiceForTesting(geometry);
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "detour-progress-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 4f,
+                    RequireLineOfSight = false
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(117, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000163.RDB", "detour-progress");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(117, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("detour-progress-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 initialPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, initialPosition + new Vector3(10f, 0f, 0f));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(geometry.TryGetRoot(scope, out root));
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = initialPosition + new Vector3(0f, -0.1f, 0f);
+                floor.transform.localScale = new Vector3(40f, 0.2f, 40f);
+
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = initialPosition + new Vector3(1f, 1f, 0f);
+                wall.transform.localScale = new Vector3(0.25f, 3f, 12f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(geometry.TryMarkGeometryAvailableForTesting(scope));
+
+                // Native re-probes every rendered frame, so the frame it spends picking a detour is invisible. At a
+                // 100ms AI tick a skipped step is a visible stall, and a pursuer that keeps re-detouring against a
+                // wall used to burn most of its ticks deciding. Every tick must now produce travel.
+                int stalledTicks = 0;
+                Vector3 previousPosition = initialPosition;
+                for (int tick = 0; tick < 20; tick++)
+                {
+                    service.ProcessAiTick(10f + tick * 0.1f, 0.1f);
+                    Vector3 position = GetRecord(service, enemyId).Descriptor.DungeonLocalPosition;
+                    if ((position - previousPosition).sqrMagnitude <= 0.0001f)
+                        stalledTicks++;
+                    previousPosition = position;
+                }
+
+                Assert.AreEqual(0, stalledTicks, "A pursuer with a target and a clear detour must never spend a tick standing still.");
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(geometryObject);
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonRosterService_AiTick_NonStrictGeometryUnavailableRetainsMovementFallback()
         {
             GameObject serviceObject = new GameObject("DFMP_RosterServiceUnavailableGeometryRoster");

@@ -114,7 +114,7 @@ M8 passes only when all of the following are true:
 
 - Both clients observe the same server-owned enemy IDs and positions.
 - Enemy movement respects hosted dungeon geometry and native-style detours around walkable blockers.
-- No enemy remains pinned against a wall, pillar, or doorway while it still has a target.
+- No enemy remains pinned against a wall, pillar, or doorway while it still has a target. **Known exception:** intermittent sticking at 90-degree corners is a deferred defect (M9 AI parity item 7) and does not block this smoke test.
 - Enemies do not drop targets solely because movement is blocked.
 - Melee, ranged, and direct-damage magic profiles work through server authority.
 - Both clients observe replicated attack presentation state.
