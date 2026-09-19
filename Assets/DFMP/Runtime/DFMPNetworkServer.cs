@@ -472,6 +472,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPFastTravelRequest>(OnFastTravelRequest);
             NetworkServer.RegisterHandler<DFMPDoorTransitionRequest>(OnDoorTransitionRequest);
             NetworkServer.RegisterHandler<DFMPDungeonTransitionRequest>(OnDungeonTransitionRequest);
+            NetworkServer.RegisterHandler<DFMPQuestTeleportRequest>(OnQuestTeleportRequest);
             NetworkServer.RegisterHandler<DFMPActionDoorSyncMessage>(OnActionDoorSyncMessage);
             NetworkServer.RegisterHandler<DFMPVampirismTransformationRequest>(OnVampirismTransformationRequest);
             NetworkServer.RegisterHandler<DFMPPlayerDeathReport>(OnPlayerDeathReport);
@@ -1045,6 +1046,8 @@ namespace DFMP.Runtime
                 return true;
             if (kind == DFMPTransitionKind.DungeonEntry && contextKind == DFMPWorldContextKind.Dungeon)
                 return true;
+            if (kind == DFMPTransitionKind.QuestTeleport && contextKind == DFMPWorldContextKind.Dungeon)
+                return true;
             if (kind == DFMPTransitionKind.Reconnect &&
                 (contextKind == DFMPWorldContextKind.BuildingInterior || contextKind == DFMPWorldContextKind.Dungeon))
                 return true;
@@ -1141,6 +1144,100 @@ namespace DFMP.Runtime
                     WorldZ = sessionState.WorldZ
                 },
                 assignedContext);
+        }
+
+        static void OnQuestTeleportRequest(NetworkConnectionToClient conn, DFMPQuestTeleportRequest request)
+        {
+            string reason;
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPTransitionAssignmentState assignmentState;
+            bool hasPendingTransition = transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState) &&
+                assignmentState != null && assignmentState.HasPendingAssignment;
+
+            if (sessionState == null || !sessionState.SpawnConfirmed || hasPendingTransition)
+            {
+                conn.Send(new DFMPQuestTeleportResponse
+                {
+                    RequestId = request.RequestId,
+                    Accepted = false,
+                    Reason = "InvalidOwner"
+                });
+                return;
+            }
+
+            if (!DFMPQuestObjectiveService.TryValidateTeleport(
+                request.RegionName,
+                request.LocationName,
+                request.MarkerIndex,
+                request.MarkerLocalPosition,
+                out reason))
+            {
+                conn.Send(new DFMPQuestTeleportResponse { RequestId = request.RequestId, Accepted = false, Reason = reason });
+                return;
+            }
+
+            if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.ContentReader == null ||
+                DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
+            {
+                conn.Send(new DFMPQuestTeleportResponse { RequestId = request.RequestId, Accepted = false, Reason = "Location data unavailable" });
+                return;
+            }
+
+            DFLocation location = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetLocation(request.RegionName, request.LocationName);
+            if (!location.Loaded || !location.HasDungeon)
+            {
+                conn.Send(new DFMPQuestTeleportResponse { RequestId = request.RequestId, Accepted = false, Reason = "Dungeon not found" });
+                return;
+            }
+
+            DFPosition mapPixel = MapsFile.GetPixelFromPixelID(location.MapTableData.MapId & 0x000fffff);
+            int startingBlockIndex = 0;
+            if (location.Dungeon.Blocks != null)
+            {
+                for (int index = 0; index < location.Dungeon.Blocks.Length; index++)
+                {
+                    if (location.Dungeon.Blocks[index].IsStartingBlock)
+                    {
+                        startingBlockIndex = index;
+                        break;
+                    }
+                }
+            }
+
+            DFMPWorldContextKey context = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Dungeon,
+                MapPixelX = mapPixel.X,
+                MapPixelY = mapPixel.Y,
+                RegionIndex = location.RegionIndex,
+                LocationIndex = location.LocationIndex,
+                LocationId = location.Name,
+                InstanceId = string.Empty,
+                DungeonBlockIndex = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? startingBlockIndex : -1,
+                DungeonBlockName = location.Dungeon.Blocks != null && location.Dungeon.Blocks.Length > 0 ? location.Dungeon.Blocks[startingBlockIndex].BlockName : string.Empty
+            };
+
+            bool accepted = TrySendTransitionAssignment(
+                conn,
+                DFMPTransitionKind.QuestTeleport,
+                DFMPSpawnProtocol.GetMapPixelCenter(mapPixel.X, mapPixel.Y),
+                context,
+                null,
+                -1,
+                true,
+                request.MarkerLocalPosition,
+                false,
+                default(StaticDoor));
+            conn.Send(new DFMPQuestTeleportResponse
+            {
+                RequestId = request.RequestId,
+                Accepted = accepted,
+                Reason = accepted ? string.Empty : "Transition assignment rejected"
+            });
         }
 
         public static bool TrySendVampirismTransformationAssignment(

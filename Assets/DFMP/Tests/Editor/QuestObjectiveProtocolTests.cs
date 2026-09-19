@@ -103,6 +103,54 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void Reentry_PreservesGenerationAndHealth()
+        {
+            var service = new DFMPQuestObjectiveService();
+            var registry = new DFMPDynamicEnemyRegistry();
+            var provider = new DFMPQuestEnemyProvider(registry);
+            DFMPQuestObjectiveRecord objective;
+            Assert.AreEqual(
+                DFMPQuestObjectiveResult.Accepted,
+                service.Register("character-a", 10, "Alice", Context, CreateRequest(1), new DFMPServerQuestConfig(), out objective));
+            Assert.AreEqual(DFMPQuestObjectiveResult.Accepted, service.MarkSpawned(objective.ObjectiveId));
+            DFMPDynamicEnemyRecord record;
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, provider.Spawn(objective, out record));
+            int generation = objective.EncounterGeneration;
+            int health = record.Health;
+
+            registry.TryApplyDamage(true, record.Identity.EnemyId, 3, out record, out _, out _);
+            service.PreservePhysicalState(objective.ObjectiveId, record.Health, record.MaxHealth);
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, provider.DespawnAlive(objective.ObjectiveId));
+            Assert.AreEqual(DFMPQuestObjectiveResult.Accepted, service.MarkDespawnedAlive(objective.ObjectiveId));
+            Assert.AreEqual(DFMPQuestObjectiveResult.Accepted, service.MarkSpawned(objective.ObjectiveId));
+            Assert.AreEqual(generation, objective.EncounterGeneration);
+            Assert.AreEqual(DFMPDynamicEnemyRegistryResult.Accepted, provider.Spawn(objective, out record));
+            Assert.AreEqual(health - 3, record.Health);
+        }
+
+        [Test]
+        public void HiddenObjective_DoesNotActivate()
+        {
+            var service = new DFMPQuestObjectiveService();
+            var config = new DFMPServerQuestConfig();
+            DFMPQuestObjectiveRecord objective;
+            Assert.AreEqual(
+                DFMPQuestObjectiveResult.Accepted,
+                service.Register("character-a", 10, "Alice", Context, CreateRequest(1), config, out objective));
+            objective.Hidden = true;
+            Assert.IsFalse(service.ShouldSpawn(objective, Context, Vector3.zero, config));
+        }
+
+        [Test]
+        public void QuestTeleport_RejectsInvalidMarkerBounds()
+        {
+            string reason;
+            Assert.IsFalse(DFMPQuestObjectiveService.TryValidateTeleport("Daggerfall", "Privateer's Hold", 99, Vector3.zero, out reason));
+            Assert.IsTrue(reason.Contains("marker"));
+            Assert.IsTrue(DFMPQuestObjectiveService.TryValidateTeleport("Daggerfall", "Privateer's Hold", 0, Vector3.one, out reason));
+        }
+
+        [Test]
         public void QuestEnemyProvider_UsesDistinctOwnerScopedEnemyIdentity()
         {
             var objectiveService = new DFMPQuestObjectiveService();

@@ -38,21 +38,15 @@ and pose, vitals, gold, attributes, skills, inventory, equipment, and complete
 quest-item identity. Restore order must remain Q/F/C/N before inventory so item
 resources exist before quest-linked items are reconstructed.
 
-The audit found persistence gaps outside those sections:
+The quest envelope now also captures the former persistence gaps:
 
-- **P1** — discovered travel-map locations (`PlayerGPS.DiscoverLocation`).
-- **P2** — active diseases, vampirism/lycanthropy, and effect bundles.
+- **P1** — discovered travel-map locations.
+- **P2** — diseases, vampirism/lycanthropy, and effect bundles.
 - **P3** — `CrimeCommitted` and per-region legal reputation.
 - **P4** — `WorldDataVariants` mutations.
-- **P5** — `TimeOfLastSkillTraining` (the skill/fatigue result itself is in R).
-- **P6** — physical owner-scoped foe generation, health, queued spells/items,
-  restraint/team/infighting state, and pending objective credit. Q preserves the
-  logical `Foe` resource only; the server enemy/objective records must preserve
-  the physical state.
-- **P7** — `QuestListsManager.oneTimeQuestsAccepted`. Native serialization
-  stores this in `SerializablePlayer`, outside Q/F/C/N and the current R fields.
-
-P1-P5 and P7 are reconnect defects, not permission to simplify native behavior.
+- **P5** — `TimeOfLastSkillTraining`.
+- **P6** — owner-scoped foe generation, health, queued loot/spells, restraint/team/infighting, and pending credit.
+- **P7** — `QuestListsManager.oneTimeQuestsAccepted`.
 
 ## Registered action matrix
 
@@ -67,8 +61,8 @@ P1-P5 and P7 are reconnect defects, not permission to simplify native behavior.
 | `ClickedNpc` | Personal-local | Consumes owner-local static-NPC click state; may branch or deduct gold. | Q + R gold | Ready. |
 | `ClickedItem` | Personal-local | Tests click state on an owner-local quest item. | Q + R item identity | Ready. |
 | `LevelCompleted` | Personal-local | Tests personal level progression. | Q + R level/skills | Ready. |
-| `InjuredFoe` | Owner-scoped quest-enemy command | Tests `Foe.InjuredTrigger`. | Q + P6 | Blocked until an owner objective result sets this logical trigger idempotently. |
-| `KilledFoe` | Owner-scoped quest-enemy command | Tests `Foe.KillCount` and optionally displays a message. | Q + P6 | Blocked until server death credit updates the owner's logical kill count. |
+| `InjuredFoe` | Owner-scoped quest-enemy command | Tests `Foe.InjuredTrigger`. | Q + P6 | Ready: non-fatal server damage delivers an injured result to the owner. |
+| `KilledFoe` | Owner-scoped quest-enemy command | Tests `Foe.KillCount` and optionally displays a message. | Q + P6 | Ready: server death credit updates the owner's logical kill count. |
 | `TotingItemAndClickedNpc` | Personal-local | Tests owner inventory plus NPC click, then releases the quest item for reoffer. | Q + R item identity | Ready. |
 | `DailyFrom` | Personal-local | Tests a daily interval against replicated `WorldTime`. | Q; time is replicated | Ready; read-only time dependency. |
 | `DroppedItemAtPlace` | Personal-local | Tests owner-local quest item placement at a quest place. | Q + R item identity/context | Ready. |
@@ -91,54 +85,54 @@ P1-P5 and P7 are reconnect defects, not permission to simplify native behavior.
 | `PlaceNpc` | Personal-local | Creates a `SiteLink` and assigns a `Person` to a quest marker. | Q | Ready. |
 | `PlaceItem` | Personal-local | Creates a `SiteLink` and assigns an item to a quest marker. | Q + R item identity | Ready; object remains owner-only. |
 | `GivePc` | Personal-local | Gives/reoffers a quest item or completes with no reward. | Q + R item identity | Ready. |
-| `GiveItem` | Owner-scoped quest-enemy command | Queues an item on a `Foe` (the practical native use), updates a spawned enemy/corpse, and removes the owner's copy. | Q + R item identity + P6 | Blocked for foe targets; server must place the item only in the owner's personal corpse loot. |
+| `GiveItem` | Owner-scoped quest-enemy command | Queues an item on a `Foe` (the practical native use), updates a spawned enemy/corpse, and removes the owner's copy. | Q + R item identity + P6 | Ready for foe targets: logical queue remains; physical loot is owner-only corpse loot. |
 | `StartStopTimer` | Personal-local | Starts/stops a quest `Clock`; elapsed time comes from replicated world time. | Q | Ready; do not blanket-disable clocks. |
-| `CreateFoe` | Owner-scoped quest-enemy command | On a world-time interval/chance, creates native enemy GameObjects around the player. | Q + P6 | Blocked; replace physical creation with validated owner objective registration/activation. |
-| `PlaceFoe` | Owner-scoped quest-enemy command | Creates a `SiteLink` and binds a `Foe` to a quest marker. | Q + P6 | Logical placement is valid; physical marker activation must use the owner-scoped server provider. |
+| `CreateFoe` | Owner-scoped quest-enemy command | On a world-time interval/chance, creates native enemy GameObjects around the player. | Q + P6 | Ready: native cadence/placement remains, physical spawn is an owner-scoped server registration. |
+| `PlaceFoe` | Owner-scoped quest-enemy command | Creates a `SiteLink` and binds a `Foe` to a quest marker. | Q + P6 | Ready: logical placement remains; physical activation uses the owner-scoped server provider. |
 | `HideNpc` | Personal-local | Sets a quest `Person.IsHidden`. | Q | Ready. |
 | `RestoreNpc` | Personal-local | Clears a quest `Person.IsHidden`. | Q | Ready. |
 | `AddFace` | Personal-local | Adds an owner HUD escort portrait for a person or foe. | Q | Ready; no physical foe mutation. |
 | `DropFace` | Personal-local | Removes an owner HUD escort portrait for a person or foe. | Q | Ready; no physical foe mutation. |
 | `GetItem` | Personal-local | Transfers an item from an owner-local NPC/resource to the player. | Q + R item identity | Ready for personal NPC/object resources. |
-| `StartQuest` | Personal-local | Loads and schedules another quest. | Q + P7 | Blocked on P7 for one-time quest offer parity after reconnect. |
-| `RunQuest` | Personal-local | Schedules a subquest, waits for its result, branches, then tombstones it. | Q + P7 | Blocked on P7 when the subquest is one-time. |
+| `StartQuest` | Personal-local | Loads and schedules another quest. | Q + P7 | Ready; one-time quest acceptance is in the quest envelope. |
+| `RunQuest` | Personal-local | Schedules a subquest, waits for its result, branches, then tombstones it. | Q + P7 | Ready; one-time quest acceptance is in the quest envelope. |
 | `UnsetTask` | Personal-local | Drops one or more tasks. | Q | Ready. |
 | `ChangeReputeWith` | Personal-local | Changes personal faction/NPC reputation. | Q + F | Ready. |
 | `ReputeExceedsDo` | Personal-local | Tests personal reputation and starts a task. | Q + F | Ready. |
-| `RevealLocation` | Personal-local | Discovers a travel-map location and optionally adds a notebook note. | Q + N + P1 | Blocked on P1 persistence for full reconnect parity. |
-| `RestrainFoe` | Owner-scoped quest-enemy command | Calls `Foe.SetRestrained()`. | Q + P6 | Blocked until restraint is a server-owned enemy state command. |
+| `RevealLocation` | Personal-local | Discovers a travel-map location and optionally adds a notebook note. | Q + N + P1 | Ready; discovered locations persist in the quest envelope. |
+| `RestrainFoe` | Owner-scoped quest-enemy command | Calls `Foe.SetRestrained()`. | Q + P6 | Ready: logical restraint plus owner-scoped server command. |
 | `MakePermanent` | Personal-local | Converts a quest item into a permanent inventory item. | Q + R item identity | Ready. |
 | `HaveItem` | Personal-local | Tests owner inventory for a quest item. | Q + R item identity | Ready. |
 | `AddAsQuestor` | Personal-local | Adds a resource to the quest's questor set. | Q | Ready. |
 | `DropAsQuestor` | Personal-local | Removes a resource from the quest's questor set. | Q | Ready. |
 | `ItemUsedDo` | Personal-local | Listens for owner use of a quest item and starts a task. | Q + R item identity | Ready. |
 | `TakeItem` | Personal-local | Releases/removes a quest item from owner inventory. | Q + R item identity | Ready. |
-| `TeleportPc` | Server-authorized transition/time | Creates a `SiteLink`, resolves a dungeon and marker, calls `RespawnPlayer()`, then writes the local transform on the next tick. | Q + R context/pose | Blocked; native relocation bypasses the transition assignment and acknowledgement path. |
+| `TeleportPc` | Server-authorized transition/time | Creates a `SiteLink`, resolves a dungeon and marker, calls `RespawnPlayer()`, then writes the local transform on the next tick. | Q + R context/pose | Guarded: `QUEST-TELEPORT-001` consumes native relocation and waits for a `QuestTeleport` assignment. |
 | `DialogLink` | Personal-local | Adds owner-local dialogue linked to a quest resource. | Q + C | Ready. |
 | `AddDialog` | Personal-local | Adds quest dialogue to the owner conversation system. | Q + C | Ready. |
 | `RumorMill` | Personal-local | Adds a quest rumor to the owner `TalkManager`. | Q + C | Ready. |
-| `MakePcDiseased` | Personal-local | Creates and assigns a disease effect bundle. | Q + P2 | Blocked on P2 persistence; do not fake the effect lifecycle. |
-| `CurePcDisease` | Personal-local | Cures disease or ends vampirism/lycanthropy. | Q + P2 | Blocked on P2 persistence. Existing one-minute cure hooks only prevent client world-time mutation; they do not persist disease state. |
+| `MakePcDiseased` | Personal-local | Creates and assigns a disease effect bundle. | Q + P2 | Ready; quest-adjacent player payload persists effect bundles. |
+| `CurePcDisease` | Personal-local | Cures disease or ends vampirism/lycanthropy. | Q + P2 | Ready; quest-adjacent player payload persists effect bundles. Existing one-minute cure hooks still prevent client world-time mutation. |
 | `CastSpellDo` | Personal-local | Observes the owner's readied/cast spell and starts a task on effect match. | Q | Ready. |
 | `CastEffectDo` | Personal-local | Observes the owner's readied/cast effect key and starts a task. | Q | Ready. |
-| `CastSpellOnFoe` | Owner-scoped quest-enemy command | Queues a classic/custom spell on a `Foe`. | Q + P6 | Blocked until the server enemy model can reproduce the native spell effect; no direct-damage-only stand-in. |
-| `RemoveFoe` | Owner-scoped quest-enemy command | Sets the logical `Foe.IsHidden`. | Q + P6 | Blocked until server despawn/retire state is updated with matching logical generation. |
-| `LegalRepute` | Personal-local | Changes current-region legal reputation. | Q + P3 | Blocked on P3 persistence. |
+| `CastSpellOnFoe` | Owner-scoped quest-enemy command | Queues a classic/custom spell on a `Foe`. | Q + P6 | Guarded: spell identity is queued on the owner objective; no direct-damage stand-in. Native M8 spell reproduction remains follow-up. |
+| `RemoveFoe` | Owner-scoped quest-enemy command | Sets the logical `Foe.IsHidden`. | Q + P6 | Ready: logical hide plus physical despawn of that owner's encounter. |
+| `LegalRepute` | Personal-local | Changes current-region legal reputation. | Q + P3 | Ready; legal reputation persists in quest-adjacent player state. |
 | `MuteNpc` | Personal-local | Changes owner-local quest-person dialogue availability. | Q | Ready. |
 | `DestroyNpc` | Personal-local | Soft-destroys an owner-local quest `Person`. | Q | Ready. |
-| `WorldUpdate` | Personal-local | Mutates client `WorldDataVariants` for a location/block/building. | Q + P4 | Blocked on P4 persistence; remains personal and must not become shared world state. |
-| `Enemies` | Unsupported defect | Calls scene-wide `GameManager.ClearEnemies()` or `MakeEnemiesHostile()`. | None sufficient | Unsupported: unscoped command can target server-owned dynamic enemies and unrelated owners' foes. Requires native-intent research and a scoped replacement, not a blanket mapping. |
-| `ClickedFoe` | Owner-scoped quest-enemy command | Tests `Foe.HasPlayerClicked`, may deduct owner gold, shows dialogue, and rearms click state. | Q + R gold + P6 | Blocked until the server validates owner interaction and delivers an idempotent click result. |
-| `KillFoe` | Owner-scoped quest-enemy command | Calls `Foe.Kill()` immediately. | Q + P6 | Blocked until an owner-authorized server kill command uses the M7/M8 death lifecycle. |
+| `WorldUpdate` | Personal-local | Mutates client `WorldDataVariants` for a location/block/building. | Q + P4 | Ready; world-variation payload is personal and persisted. Must not become shared world state. |
+| `Enemies` | Unsupported defect | Calls scene-wide `GameManager.ClearEnemies()` or `MakeEnemiesHostile()`. | None sufficient | Guarded: native side effect is consumed in multiplayer so it cannot target server-owned or other owners' foes. |
+| `ClickedFoe` | Owner-scoped quest-enemy command | Tests `Foe.HasPlayerClicked`, may deduct owner gold, shows dialogue, and rearms click state. | Q + R gold + P6 | Ready: owner activate on the server enemy delivers an idempotent click result. |
+| `KillFoe` | Owner-scoped quest-enemy command | Calls `Foe.Kill()` immediately. | Q + P6 | Ready: owner-authorized server kill uses the M7/M8 death lifecycle. |
 | `PayMoney` | Personal-local | Tests and deducts owner gold, then branches. | Q + R gold | Ready. |
 | `JournalNote` | Personal-local | Adds a message to the owner notebook. | Q + N | Ready. |
-| `ChangeFoeInfighting` | Owner-scoped quest-enemy command | Scans active native enemies and changes `QuestResourceBehaviour.IsAttackableByAI`. | Q + P6 | Blocked until this flag is represented and enforced by server AI. |
-| `ChangeFoeTeam` | Owner-scoped quest-enemy command | Scans active native enemies and changes `EnemyEntity.Team`. | Q + P6 | Blocked until team is represented and enforced by server AI. |
+| `ChangeFoeInfighting` | Owner-scoped quest-enemy command | Scans active native enemies and changes `QuestResourceBehaviour.IsAttackableByAI`. | Q + P6 | Guarded: local scan is consumed; flag is stored on the owner objective. |
+| `ChangeFoeTeam` | Owner-scoped quest-enemy command | Scans active native enemies and changes `EnemyEntity.Team`. | Q + P6 | Guarded: local scan is consumed; team is stored on the owner objective. |
 | `PlaySong` | Personal-local | Changes owner-local music presentation. | Q | Ready. |
-| `SetPlayerCrime` | Personal-local | Sets `PlayerEntity.CrimeCommitted`. | Q + P3 | Blocked on P3 persistence. |
-| `SpawnCityGuards` | Unsupported defect | Calls `PlayerEntity.SpawnCityGuards()`, creating unsynchronized local combatants. | None sufficient | Unsupported until guards have a server-owned provider with native spawn/AI parity. |
-| `UnrestrainFoe` | Owner-scoped quest-enemy command | Calls `Foe.ClearRestrained()`. | Q + P6 | Blocked until restraint is a server-owned enemy state command. |
-| `TrainPc` | Server-authorized transition/time | Completes the quest, records training time, attempts a three-hour advance, reduces fatigue, and tallies the skill. | Q + R skills/fatigue + P5 | Guarded: `M6-TIME-TRAIN-001` consumes the three-hour client advance. P5 still blocks reconnect parity. |
+| `SetPlayerCrime` | Personal-local | Sets `PlayerEntity.CrimeCommitted`. | Q + P3 | Ready; crime state persists in quest-adjacent player payload. |
+| `SpawnCityGuards` | Unsupported defect | Calls `PlayerEntity.SpawnCityGuards()`, creating unsynchronized local combatants. | None sufficient | Guarded: native spawn is consumed until guards have a server-owned provider. |
+| `UnrestrainFoe` | Owner-scoped quest-enemy command | Calls `Foe.ClearRestrained()`. | Q + P6 | Ready: logical clear plus owner-scoped server command. |
+| `TrainPc` | Server-authorized transition/time | Completes the quest, records training time, attempts a three-hour advance, reduces fatigue, and tallies the skill. | Q + R skills/fatigue + P5 | Guarded: `M6-TIME-TRAIN-001` consumes the three-hour client advance. Training time persists in quest-adjacent player state. |
 | `PromptMulti` | Personal-local | Shows a multi-choice owner UI and starts the selected task. | Q | Ready. |
 
 ## Exact authority hook points
@@ -204,13 +198,7 @@ shared time. This is registered as `M6-TIME-TRAIN-001` in `HOOKS.md`.
 
 ## Blockers
 
-1. Quest teleport needs a dedicated validated server request and transition
-   assignment. Implementing only the Layer 1 consume hook would deadlock the
-   action, and reusing door/developer teleport requests would weaken authority.
-2. Owner-scoped foe commands need the in-progress quest objective protocol
-   wired into the server-owned M8 registry, including physical-state persistence
-   and idempotent owner credit.
-3. `Enemies` has no safe scoped interpretation, and `SpawnCityGuards` has no
-   server-owned guard provider. Both remain explicit unsupported defects.
-4. P1-P5 and P7 must be added to the structured character/quest envelope before the
-   listed actions have reconnect parity.
+1. `Enemies` and `SpawnCityGuards` remain unsupported native defects. Multiplayer consumes their side effects so they cannot mutate shared enemies or spawn local guards. A scoped replacement still requires native-intent research (`Enemies`) and a server-owned guard provider (`SpawnCityGuards`).
+2. `CastSpellOnFoe` queues spell identity on the owner objective and does not fake damage. Native spell reproduction on M8 enemies is follow-up.
+3. `ChangeFoeTeam` / `ChangeFoeInfighting` no longer scan the local enemy list; stored flags still need M8 AI enforcement.
+4. `Weather` still has no Layer 3 weather replication, so clients can evaluate that trigger differently.

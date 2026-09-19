@@ -52,6 +52,14 @@ namespace DaggerfallWorkshop.Game.Questing
             if (foe == null)
                 return;
 
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand(this, foe, 4, 0, null))
+            {
+                foe.ClearRestrained();
+                SetComplete();
+                return;
+            }
+
             // Raise the restrained flag
             foe.ClearRestrained();
 

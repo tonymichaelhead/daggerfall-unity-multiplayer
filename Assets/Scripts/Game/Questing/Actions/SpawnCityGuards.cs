@@ -51,6 +51,13 @@ namespace DaggerfallWorkshop.Game.Questing
         {
             base.Update(caller);
 
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleUnsupportedQuestSceneAction != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandleUnsupportedQuestSceneAction(immediateSpawn ? "SpawnCityGuards.immediate" : "SpawnCityGuards"))
+            {
+                SetComplete();
+                return;
+            }
+
             GameManager.Instance.PlayerEntity.SpawnCityGuards(immediateSpawn);
 
             SetComplete();

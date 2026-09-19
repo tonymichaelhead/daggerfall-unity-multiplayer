@@ -262,6 +262,15 @@ namespace DaggerfallWorkshop.Game.Questing
             switch(macro)
             {
                 case MacroTypes.DetailsMacro:
+                    if (DFMP.Hooks.DaggerfallHooks.TryFormatQuestClockJournal != null)
+                    {
+                        string journalText = DFMP.Hooks.DaggerfallHooks.TryFormatQuestClockJournal(this);
+                        if (!string.IsNullOrEmpty(journalText))
+                        {
+                            textOut = journalText;
+                            return true;
+                        }
+                    }
                     if (DaggerfallUnity.Settings.ShowQuestJournalClocksAsCountdown)
                         textOut = GetDaysString(remainingTimeInSeconds);
                     else

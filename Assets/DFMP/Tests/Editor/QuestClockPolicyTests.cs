@@ -74,6 +74,16 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void SuppressedDeadline_JournalShowsNoDeadline()
+        {
+            Assert.AreEqual(
+                "no deadline",
+                DFMPQuestClockPolicy.FormatJournalText(true, false, DFMPQuestClockKind.FailureDeadline));
+            Assert.IsNull(DFMPQuestClockPolicy.FormatJournalText(true, false, DFMPQuestClockKind.Sequencing));
+            Assert.IsNull(DFMPQuestClockPolicy.FormatJournalText(true, false, DFMPQuestClockKind.Unknown));
+        }
+
+        [Test]
         public void AlteredBuiltInException_FailsClosed()
         {
             DFMPQuestClockKind kind = DFMPQuestClockPolicy.Classify(

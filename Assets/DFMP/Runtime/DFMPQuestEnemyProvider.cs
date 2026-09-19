@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using UnityEngine;
 
 namespace DFMP.Runtime
 {
@@ -42,7 +43,33 @@ namespace DFMP.Runtime
                 objective.ObjectiveId,
                 objective.EncounterGeneration);
             string enemyId = encounterId + "-enemy-0";
-            int health = DFMPDungeonRosterPolicy.GetInitialEnemyHealth(objective.MobileType);
+
+            DFMPDynamicEnemyRecord existing;
+            string mappedId;
+            if (enemyIdByObjective.TryGetValue(objective.ObjectiveId, out mappedId) &&
+                registry.TryGetRecord(mappedId, out existing))
+            {
+                if (existing.LifecycleState == DFMPDynamicEnemyLifecycleState.SpawnedAlive)
+                {
+                    record = existing;
+                    return DFMPDynamicEnemyRegistryResult.AlreadyRegistered;
+                }
+
+                if (existing.LifecycleState == DFMPDynamicEnemyLifecycleState.DespawnedAlive)
+                {
+                    DFMPDynamicEnemyRegistryResult resume = registry.TryTransition(
+                        true,
+                        mappedId,
+                        DFMPDynamicEnemyLifecycleState.SpawnedAlive);
+                    if (resume == DFMPDynamicEnemyRegistryResult.Accepted &&
+                        registry.TryGetRecord(mappedId, out record))
+                        return DFMPDynamicEnemyRegistryResult.Accepted;
+                }
+            }
+
+            int defaultHealth = DFMPDungeonRosterPolicy.GetInitialEnemyHealth(objective.MobileType);
+            int maxHealth = objective.PreservedMaxHealth > 0 ? objective.PreservedMaxHealth : defaultHealth;
+            int health = objective.PreservedHealth > 0 ? Mathf.Min(objective.PreservedHealth, maxHealth) : maxHealth;
             record = new DFMPDynamicEnemyRecord
             {
                 Identity = new DFMPDynamicEnemyIdentity
@@ -70,7 +97,7 @@ namespace DFMP.Runtime
                 QuestObjectiveId = objective.ObjectiveId,
                 QuestLootJson = objective.QuestLootJson,
                 Health = health,
-                MaxHealth = health,
+                MaxHealth = maxHealth,
                 TargetConnectionId = -1
             };
 
@@ -81,6 +108,33 @@ namespace DFMP.Runtime
                 result == DFMPDynamicEnemyRegistryResult.AlreadyRegistered)
                 enemyIdByObjective[objective.ObjectiveId] = enemyId;
             return result;
+        }
+
+        public bool TryKill(string objectiveId, out DFMPDynamicEnemyRecord record, out bool killed)
+        {
+            record = default(DFMPDynamicEnemyRecord);
+            killed = false;
+            string enemyId;
+            if (!TryGetEnemyId(objectiveId, out enemyId))
+                return false;
+            if (!registry.TryGetRecord(enemyId, out record))
+                return false;
+            if (record.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
+                return false;
+
+            int amount = Mathf.Max(1, record.Health);
+            return registry.TryApplyDamage(true, enemyId, amount, out record, out _, out killed) ==
+                DFMPDynamicEnemyRegistryResult.Accepted;
+        }
+
+        public bool TrySetQuestLoot(string objectiveId, string questLootJson, out DFMPDynamicEnemyRecord record)
+        {
+            record = default(DFMPDynamicEnemyRecord);
+            string enemyId;
+            if (!TryGetEnemyId(objectiveId, out enemyId))
+                return false;
+            return registry.TrySetQuestFields(true, enemyId, questLootJson, out record) ==
+                DFMPDynamicEnemyRegistryResult.Accepted;
         }
 
         public DFMPDynamicEnemyRegistryResult DespawnAlive(string objectiveId)

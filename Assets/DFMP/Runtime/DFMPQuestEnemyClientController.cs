@@ -49,8 +49,10 @@ namespace DFMP.Runtime
             DontDestroyOnLoad(gameObject);
             DaggerfallHooks.TryHandlePlacedQuestFoe = TryHandlePlacedQuestFoe;
             DaggerfallHooks.TryHandleDynamicQuestFoePlacement = TryHandleDynamicQuestFoePlacement;
+            DaggerfallHooks.TryHandleQuestFoeCommand = TryHandleQuestFoeCommand;
             NetworkClient.RegisterHandler<DFMPQuestObjectiveResponseMessage>(OnObjectiveResponse);
             NetworkClient.RegisterHandler<DFMPQuestObjectiveResultMessage>(OnObjectiveResult);
+            QuestMachine.OnQuestEnded += OnQuestEnded;
         }
 
         void OnDestroy()
@@ -59,6 +61,9 @@ namespace DFMP.Runtime
                 DaggerfallHooks.TryHandlePlacedQuestFoe = null;
             if (DaggerfallHooks.TryHandleDynamicQuestFoePlacement == TryHandleDynamicQuestFoePlacement)
                 DaggerfallHooks.TryHandleDynamicQuestFoePlacement = null;
+            if (DaggerfallHooks.TryHandleQuestFoeCommand == TryHandleQuestFoeCommand)
+                DaggerfallHooks.TryHandleQuestFoeCommand = null;
+            QuestMachine.OnQuestEnded -= OnQuestEnded;
             if (instance == this)
                 instance = null;
         }
@@ -227,6 +232,19 @@ namespace DFMP.Runtime
                 return;
             }
 
+            DFMPQuestObjectiveCreditKind creditKind = (DFMPQuestObjectiveCreditKind)result.CreditKind;
+            if (creditKind == DFMPQuestObjectiveCreditKind.Injured)
+            {
+                foe.SetInjured();
+                return;
+            }
+
+            if (creditKind == DFMPQuestObjectiveCreditKind.Clicked)
+            {
+                foe.SetPlayerClicked();
+                return;
+            }
+
             foe.IncrementKills(Mathf.Max(1, result.KillCount));
             DFMPPositionReporter.RequestQuestSave();
             NetworkClient.Send(new DFMPQuestObjectiveResultAckMessage
@@ -235,6 +253,70 @@ namespace DFMP.Runtime
                 ObjectiveId = result.ObjectiveId
             });
             Debug.Log($"[DFMP Quest] Applied quest foe result: objectiveId={result.ObjectiveId}, resultId={result.ResultId}, killCount={result.KillCount}.");
+        }
+
+        bool TryHandleQuestFoeCommand(
+            object actionObject,
+            object foeObject,
+            int commandKind,
+            int intPayload,
+            string stringPayload)
+        {
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return false;
+
+            Foe foe = foeObject as Foe;
+            if (foe == null || foe.ParentQuest == null)
+                return false;
+
+            if (commandKind == (int)DFMPQuestFoeCommandKind.GiveItem)
+                stringPayload = BuildQuestLootJson(foe);
+
+            NetworkClient.Send(new DFMPQuestFoeCommandMessage
+            {
+                RequestId = nextRequestId++,
+                QuestUid = foe.ParentQuest.UID,
+                FoeSymbol = foe.Symbol != null ? foe.Symbol.Original : string.Empty,
+                CommandKind = commandKind,
+                IntPayload = intPayload,
+                StringPayload = stringPayload ?? string.Empty
+            });
+            return true;
+        }
+
+        void OnQuestEnded(Quest quest)
+        {
+            if (quest == null || !NetworkClient.isConnected)
+                return;
+
+            var cancelled = new System.Collections.Generic.List<string>();
+            foreach (var pair in foesByObjectiveId)
+            {
+                if (pair.Value != null && pair.Value.ParentQuest == quest)
+                    cancelled.Add(pair.Key);
+            }
+
+            for (int index = 0; index < cancelled.Count; index++)
+            {
+                NetworkClient.Send(new DFMPQuestObjectiveCancellationMessage
+                {
+                    RequestId = nextRequestId++,
+                    ObjectiveId = cancelled[index]
+                });
+                foesByObjectiveId.Remove(cancelled[index]);
+            }
+        }
+
+        public static void NotifyOwnerClickedObjective(string objectiveId)
+        {
+            if (instance == null || string.IsNullOrWhiteSpace(objectiveId) || !NetworkClient.isConnected)
+                return;
+
+            Foe foe;
+            if (!instance.foesByObjectiveId.TryGetValue(objectiveId, out foe) || foe == null || foe.ParentQuest == null)
+                return;
+
+            instance.TryHandleQuestFoeCommand(null, foe, (int)DFMPQuestFoeCommandKind.Click, 0, null);
         }
     }
 }

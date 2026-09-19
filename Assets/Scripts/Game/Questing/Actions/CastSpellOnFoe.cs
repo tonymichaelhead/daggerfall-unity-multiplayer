@@ -89,6 +89,8 @@ namespace DaggerfallWorkshop.Game.Questing
 
             // Add spell to Foe resource queue
             foe.QueueSpell(spell);
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand != null)
+                DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand(this, foe, 9, spell.ClassicID, spell.CustomKey);
 
             SetComplete();
         }

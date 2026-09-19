@@ -110,15 +110,6 @@ namespace DaggerfallWorkshop.Game.Questing
             if (!DaggerfallUnity.Instance.ContentReader.GetLocation(place.SiteDetails.regionName, place.SiteDetails.locationName, out location))
                 return;
 
-            // Spawn inside dungeon at this world position
-            DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel((int)location.MapTableData.Longitude, location.MapTableData.Latitude);
-            DFPosition worldPos = MapsFile.MapPixelToWorldCoord(mapPixel.X, mapPixel.Y);
-            GameManager.Instance.PlayerEnterExit.RespawnPlayer(
-                worldPos.X,
-                worldPos.Y,
-                true,
-                true);
-
             // Determine start position
             if (usingMarker)
             {
@@ -133,6 +124,31 @@ namespace DaggerfallWorkshop.Game.Questing
                 Vector3 dungeonBlockPosition = new Vector3(marker.dungeonX * RDBLayout.RDBSide, 0, marker.dungeonZ * RDBLayout.RDBSide);
                 resumePosition = dungeonBlockPosition + marker.flatPosition;
             }
+
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleQuestTeleport != null)
+            {
+                int status = DFMP.Hooks.DaggerfallHooks.TryHandleQuestTeleport(
+                    this,
+                    place,
+                    location,
+                    resumePosition,
+                    usingMarker ? targetMarker : 0);
+                if (status != 0)
+                {
+                    if (status == 2)
+                        SetComplete();
+                    return;
+                }
+            }
+
+            // Spawn inside dungeon at this world position
+            DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel((int)location.MapTableData.Longitude, location.MapTableData.Latitude);
+            DFPosition worldPos = MapsFile.MapPixelToWorldCoord(mapPixel.X, mapPixel.Y);
+            GameManager.Instance.PlayerEnterExit.RespawnPlayer(
+                worldPos.X,
+                worldPos.Y,
+                true,
+                true);
 
             resumePending = true;
         }

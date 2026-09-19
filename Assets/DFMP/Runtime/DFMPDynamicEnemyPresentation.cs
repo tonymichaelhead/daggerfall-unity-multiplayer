@@ -528,6 +528,16 @@ namespace DFMP.Runtime
             cueTransform.rotation = DFMPRemotePlayerPresentation.GetLabelBillboardRotation(
                 cueTransform.position,
                 camera.transform.position);
+
+            if (InputManager.Instance != null &&
+                InputManager.Instance.ActionComplete(InputManager.Actions.ActivateCenterObject))
+            {
+                RaycastHit hit;
+                if (Physics.Raycast(camera.transform.position, camera.transform.forward, out hit, 4f) &&
+                    hit.transform != null &&
+                    (hit.transform == proxy.transform || hit.transform.IsChildOf(proxy.transform)))
+                    DFMPQuestEnemyClientController.NotifyOwnerClickedObjective(state.QuestObjectiveId);
+            }
         }
 
         GameObject GetOrCreateCorpse(

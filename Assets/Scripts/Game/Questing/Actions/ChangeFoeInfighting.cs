@@ -58,6 +58,13 @@ namespace DaggerfallWorkshop.Game.Questing
             if (foe == null)
                  return;
 
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand(this, foe, 6, isAttackableByAI ? 1 : 0, null))
+            {
+                SetComplete();
+                return;
+            }
+
             foreach (DaggerfallEnemy enemy in ActiveGameObjectDatabase.GetActiveEnemyEntities())
             {
                 if (enemy.QuestSpawn)

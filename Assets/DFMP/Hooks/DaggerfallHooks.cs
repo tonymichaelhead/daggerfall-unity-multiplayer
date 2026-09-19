@@ -20,6 +20,10 @@ namespace DFMP.Hooks
         public static Func<string, int, bool> TryHandleTimeAdvance;
         public static Func<bool> TryHandleVampirismTransformation;
         public static Func<object, bool> ShouldSuppressQuestClockExpiry;
+        public static Func<object, string> TryFormatQuestClockJournal;
+        public static Func<object, object, object, Vector3, int, int> TryHandleQuestTeleport;
+        public static Func<object, object, int, int, string, bool> TryHandleQuestFoeCommand;
+        public static Func<string, bool> TryHandleUnsupportedQuestSceneAction;
         public static Func<bool> TryHandlePlayerDeath;
         public static Func<object, bool> TryHandlePlayerMissileHit;
         public static Func<object, object, object, bool, bool, bool> TryHandlePlayerWeaponHit;

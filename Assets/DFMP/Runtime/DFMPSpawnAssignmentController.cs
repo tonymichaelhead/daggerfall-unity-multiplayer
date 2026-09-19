@@ -540,9 +540,16 @@ namespace DFMP.Runtime
                 return;
             }
 
-            if ((transitionState.Assignment.Kind == DFMPTransitionKind.DungeonEntry || transitionState.Assignment.Kind == DFMPTransitionKind.DungeonExit) && hasPendingDungeonTransition)
+            if ((transitionState.Assignment.Kind == DFMPTransitionKind.DungeonEntry ||
+                 transitionState.Assignment.Kind == DFMPTransitionKind.DungeonExit) && hasPendingDungeonTransition)
             {
                 UpdateDungeonTransitionAssignment(streamingWorld);
+                return;
+            }
+
+            if (transitionState.Assignment.Kind == DFMPTransitionKind.QuestTeleport)
+            {
+                UpdateQuestTeleportAssignment(streamingWorld);
                 return;
             }
 
@@ -1050,6 +1057,67 @@ namespace DFMP.Runtime
             ClearPendingDungeonTransition();
             SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Transition] Client acknowledged assigned dungeon transition: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");
+        }
+
+        void UpdateQuestTeleportAssignment(StreamingWorld streamingWorld)
+        {
+            DFMPTransitionAssignment assignment = transitionState.Assignment;
+            if (transitionState.TryRequestTeleport())
+            {
+                fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
+                transitionApplied = false;
+                reconnectInteriorOpened = false;
+                SuppressPositionReportsBriefly();
+                if (GameManager.HasInstance)
+                {
+                    PlayerEnterExit existingEnterExit = GameManager.Instance.PlayerEnterExit;
+                    if (existingEnterExit != null && existingEnterExit.IsPlayerInside)
+                        existingEnterExit.EnableExteriorParent(cleanup: true);
+                }
+
+                if (streamingWorld.LocalPlayerGPS != null)
+                {
+                    streamingWorld.LocalPlayerGPS.WorldX = assignment.WorldX;
+                    streamingWorld.LocalPlayerGPS.WorldZ = assignment.WorldZ;
+                }
+
+                streamingWorld.TeleportToCoordinates(
+                    assignment.MapPixelX,
+                    assignment.MapPixelY,
+                    StreamingWorld.RepositionMethods.None);
+                return;
+            }
+
+            if (!reconnectInteriorOpened)
+            {
+                if (!TryOpenAssignedInterior(assignment))
+                    return;
+                if (assignment.HasInteriorLocalPosition)
+                    ApplyInteriorLocalPose(assignment);
+                reconnectInteriorOpened = true;
+                transitionApplied = true;
+                return;
+            }
+
+            if (!transitionApplied || streamingWorld.IsRepositioningPlayer || !IsAssignedInteriorReady(assignment))
+                return;
+
+            var acknowledgement = new DFMPTransitionAcknowledgement
+            {
+                AssignmentId = assignment.AssignmentId,
+                WorldX = streamingWorld.LocalPlayerGPS.WorldX,
+                WorldY = 0f,
+                WorldZ = streamingWorld.LocalPlayerGPS.WorldZ,
+                Context = DFMPSpawnProtocol.GetAssignedContextReport(assignment)
+            };
+
+            if (!transitionState.TryAcknowledge(acknowledgement, false))
+                return;
+
+            NetworkClient.Send(acknowledgement);
+            hasImmediateWorldContextReport = DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(assignment.Kind);
+            DFMPQuestActionClientController.NotifyQuestTeleportAcknowledged();
+            SuppressPositionReportsBriefly();
         }
 
         void ClearPendingDoorTransition()

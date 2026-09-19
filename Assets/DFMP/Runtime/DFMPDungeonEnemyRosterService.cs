@@ -232,12 +232,46 @@ namespace DFMP.Runtime
             string enemyId;
             if (!questEnemyProvider.TryGetEnemyId(objectiveId, out enemyId))
                 return false;
+
+            DFMPDynamicEnemyRecord record;
+            if (registry.TryGetRecord(enemyId, out record) && DFMPNetworkServer.QuestObjectiveService != null)
+                DFMPNetworkServer.QuestObjectiveService.PreservePhysicalState(objectiveId, record.Health, record.MaxHealth);
+
             DFMPDynamicEnemyRegistryResult result = questEnemyProvider.DespawnAlive(objectiveId);
             if (result != DFMPDynamicEnemyRegistryResult.Accepted)
                 return false;
 
             DestroyStateObject(enemyId);
             return true;
+        }
+
+        public bool TryKillQuestObjective(string objectiveId, out DFMPDynamicEnemyRecord record, out bool killed)
+        {
+            record = default(DFMPDynamicEnemyRecord);
+            killed = false;
+            if (questEnemyProvider == null)
+                return false;
+            if (!questEnemyProvider.TryKill(objectiveId, out record, out killed))
+                return false;
+            if (killed)
+            {
+                ClearTransientAiState(record.Identity.EnemyId);
+                DFMPEventBus.Instance.PublishEnemyDied(new DFMPEnemyDiedEvent
+                {
+                    EnemyId = record.Identity.EnemyId,
+                    Encounter = record.Identity.Encounter,
+                    KillerConnectionId = record.QuestOwnerConnectionId,
+                    DamageAmount = record.MaxHealth
+                });
+            }
+            return true;
+        }
+
+        public bool TrySetQuestLoot(string objectiveId, string questLootJson)
+        {
+            DFMPDynamicEnemyRecord record;
+            return questEnemyProvider != null &&
+                questEnemyProvider.TrySetQuestLoot(objectiveId, questLootJson, out record);
         }
 
         void ProcessContextAi(DFMPWorldContextKey context, string[] enemyIds, float currentTime, float deltaTime)
@@ -861,6 +895,19 @@ namespace DFMP.Runtime
             {
                 if (registry.TryUpdateAiState(true, enemyId, updatedRecord.Descriptor, killerConnectionId, false, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
                     UpdateStateProjection(updatedRecord);
+                if (updatedRecord.Identity.Encounter.ProviderKind == DFMPDynamicEnemyProviderKind.Quest &&
+                    !string.IsNullOrEmpty(updatedRecord.QuestObjectiveId) &&
+                    DFMPNetworkServer.QuestObjectiveService != null)
+                {
+                    DFMPQuestObjectiveResultMessage injured;
+                    if (DFMPNetworkServer.QuestObjectiveService.MarkInjured(updatedRecord.QuestObjectiveId, out injured) ==
+                        DFMPQuestObjectiveResult.Accepted)
+                    {
+                        Mirror.NetworkConnectionToClient owner;
+                        if (Mirror.NetworkServer.connections.TryGetValue(updatedRecord.QuestOwnerConnectionId, out owner) && owner != null)
+                            owner.Send(injured);
+                    }
+                }
             }
 
             if (killed)

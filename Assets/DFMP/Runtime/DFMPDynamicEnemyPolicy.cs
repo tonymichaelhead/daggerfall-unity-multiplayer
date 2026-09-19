@@ -1127,6 +1127,26 @@ namespace DFMP.Runtime
             return DFMPDynamicEnemyRegistryResult.Accepted;
         }
 
+        public DFMPDynamicEnemyRegistryResult TrySetQuestFields(
+            bool isServerAuthority,
+            string enemyId,
+            string questLootJson,
+            out DFMPDynamicEnemyRecord updatedRecord)
+        {
+            updatedRecord = default(DFMPDynamicEnemyRecord);
+            if (!isServerAuthority)
+                return DFMPDynamicEnemyRegistryResult.InvalidAuthority;
+
+            DFMPDynamicEnemyRecord record;
+            if (!recordsByEnemyId.TryGetValue(enemyId ?? string.Empty, out record))
+                return DFMPDynamicEnemyRegistryResult.MissingEnemy;
+
+            record.QuestLootJson = questLootJson ?? string.Empty;
+            recordsByEnemyId[enemyId] = record;
+            updatedRecord = record;
+            return DFMPDynamicEnemyRegistryResult.Accepted;
+        }
+
         public DFMPDynamicEnemyRegistryResult TryUpdateAiState(
             bool isServerAuthority,
             string enemyId,

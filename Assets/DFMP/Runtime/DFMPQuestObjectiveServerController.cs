@@ -28,6 +28,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPQuestObjectiveRegistrationMessage>(OnRegister);
             NetworkServer.RegisterHandler<DFMPQuestObjectiveCancellationMessage>(OnCancel);
             NetworkServer.RegisterHandler<DFMPQuestObjectiveResultAckMessage>(OnResultAck);
+            NetworkServer.RegisterHandler<DFMPQuestFoeCommandMessage>(OnFoeCommand);
             DFMPEventBus.Instance.EnemyDied += OnEnemyDied;
             initialized = true;
         }
@@ -144,7 +145,8 @@ namespace DFMP.Runtime
                     ResultId = objective.PendingResultId,
                     ObjectiveId = objective.ObjectiveId,
                     Generation = objective.EncounterGeneration,
-                    KillCount = objective.PendingKillCount
+                    KillCount = objective.PendingKillCount,
+                    CreditKind = (int)DFMPQuestObjectiveCreditKind.Kill
                 });
             }
             if (result == DFMPQuestObjectiveResult.Accepted)
@@ -224,6 +226,74 @@ namespace DFMP.Runtime
             if (objectiveService.TryGet(enemy.QuestObjectiveId, out objective))
             {
                 PublishLifecycle(objective, DFMPQuestObjectiveLifecycle.CreditPending, "enemy-killed");
+                Persist(objective);
+            }
+        }
+
+        void OnFoeCommand(NetworkConnectionToClient connection, DFMPQuestFoeCommandMessage request)
+        {
+            string characterId;
+            if (connection == null ||
+                !DFMPNetworkServer.TryGetActiveCharacterId(connection.connectionId, out characterId))
+                return;
+
+            DFMPQuestObjectiveRecord[] matches = objectiveService.FindForQuestFoe(
+                characterId,
+                request.QuestUid,
+                request.FoeSymbol);
+            if (matches.Length == 0)
+                return;
+
+            DFMPQuestFoeCommandKind kind = (DFMPQuestFoeCommandKind)request.CommandKind;
+            for (int index = 0; index < matches.Length; index++)
+            {
+                DFMPQuestObjectiveRecord objective = matches[index];
+                switch (kind)
+                {
+                    case DFMPQuestFoeCommandKind.Kill:
+                        DFMPDynamicEnemyRecord killedRecord;
+                        bool killed;
+                        if (!enemyService.TryKillQuestObjective(objective.ObjectiveId, out killedRecord, out killed))
+                        {
+                            DFMPQuestObjectiveResultMessage resultMessage;
+                            if (objectiveService.MarkKilled(objective.ObjectiveId, 1, out resultMessage) == DFMPQuestObjectiveResult.Accepted)
+                                connection.Send(resultMessage);
+                        }
+                        break;
+                    case DFMPQuestFoeCommandKind.Remove:
+                        objective.Hidden = true;
+                        enemyService.TryDespawnQuestObjective(objective.ObjectiveId);
+                        if (objective.Lifecycle == DFMPQuestObjectiveLifecycle.SpawnedAlive)
+                            objectiveService.MarkDespawnedAlive(objective.ObjectiveId);
+                        PublishLifecycle(objective, DFMPQuestObjectiveLifecycle.DespawnedAlive, "remove-foe");
+                        break;
+                    case DFMPQuestFoeCommandKind.Restrain:
+                        objective.Restrained = true;
+                        break;
+                    case DFMPQuestFoeCommandKind.Unrestrain:
+                        objective.Restrained = false;
+                        break;
+                    case DFMPQuestFoeCommandKind.ChangeTeam:
+                        objective.Team = request.IntPayload;
+                        break;
+                    case DFMPQuestFoeCommandKind.ChangeInfighting:
+                        objective.AttackableByAi = request.IntPayload != 0;
+                        break;
+                    case DFMPQuestFoeCommandKind.GiveItem:
+                        objective.QuestLootJson = request.StringPayload ?? string.Empty;
+                        enemyService.TrySetQuestLoot(objective.ObjectiveId, objective.QuestLootJson);
+                        break;
+                    case DFMPQuestFoeCommandKind.CastSpell:
+                        objective.SpellQueueJson = request.StringPayload ?? string.Empty;
+                        break;
+                    case DFMPQuestFoeCommandKind.Click:
+                        DFMPQuestObjectiveResultMessage clickResult;
+                        if (objectiveService.MarkClicked(objective.ObjectiveId, connection.connectionId, out clickResult) ==
+                            DFMPQuestObjectiveResult.Accepted)
+                            connection.Send(clickResult);
+                        break;
+                }
+
                 Persist(objective);
             }
         }

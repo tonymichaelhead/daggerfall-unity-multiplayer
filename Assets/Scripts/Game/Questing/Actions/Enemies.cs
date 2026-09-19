@@ -48,6 +48,13 @@ namespace DaggerfallWorkshop.Game.Questing
 
         public override void Update(Task caller)
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleUnsupportedQuestSceneAction != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandleUnsupportedQuestSceneAction(clear ? "Enemies.clear" : "Enemies.makehostile"))
+            {
+                SetComplete();
+                return;
+            }
+
             if (clear)
                 GameManager.Instance.ClearEnemies();
             else

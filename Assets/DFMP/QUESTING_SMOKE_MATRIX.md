@@ -11,6 +11,8 @@ for the `[DFMP Quest Metrics]` sample at the end of each slice.
 - `QuestObjectiveProtocolTests`
 - `DynamicEnemyPolicyTests.QuestOwnerCue_RequiresQuestOwnershipNearRangeAndFocus`
 - `QuestClockPolicyTests`
+- `QuestObjectiveProtocolTests.Reentry_PreservesGenerationAndHealth`
+- `QuestObjectiveProtocolTests.QuestTeleport_RejectsInvalidMarkerBounds`
 
 ## Slice 1: personal non-combat persistence
 

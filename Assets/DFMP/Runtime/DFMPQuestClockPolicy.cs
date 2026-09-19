@@ -94,6 +94,16 @@ namespace DFMP.Runtime
                 kind == DFMPQuestClockKind.FailureDeadline;
         }
 
+        public static string FormatJournalText(
+            bool isMultiplayerClient,
+            bool failureDeadlinesEnabled,
+            DFMPQuestClockKind kind)
+        {
+            return ShouldSuppress(isMultiplayerClient, failureDeadlinesEnabled, kind)
+                ? "no deadline"
+                : null;
+        }
+
         static HashSet<string> BuildCatalog()
         {
             var result = new HashSet<string>(StringComparer.Ordinal);

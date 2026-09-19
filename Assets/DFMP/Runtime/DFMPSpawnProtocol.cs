@@ -31,7 +31,8 @@ namespace DFMP.Runtime
         DeathRespawn,
         VampirismTransformation,
         Reconnect,
-        SaveLoad
+        SaveLoad,
+        QuestTeleport
     }
 
     public static class DFMPTransitionReportPolicy
@@ -39,7 +40,8 @@ namespace DFMP.Runtime
         public static bool ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind transitionKind)
         {
             return transitionKind == DFMPTransitionKind.DungeonEntry ||
-                transitionKind == DFMPTransitionKind.Reconnect;
+                transitionKind == DFMPTransitionKind.Reconnect ||
+                transitionKind == DFMPTransitionKind.QuestTeleport;
         }
     }
 

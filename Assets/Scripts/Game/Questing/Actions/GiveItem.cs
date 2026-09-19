@@ -73,14 +73,17 @@ namespace DaggerfallWorkshop.Game.Questing.Actions
             {
                 // Add to Foe item queue
                 (target as Foe).QueueItem(item.DaggerfallUnityItem);
-
-                // Dequeue items on entity immediately if target already exists in the world
-                // Will also handle placing items to dead enemy loot container
-                if (target.QuestResourceBehaviour)
+                if (DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand == null ||
+                    !DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand(this, target, 8, 0, null))
                 {
-                    DaggerfallEntityBehaviour entityBehaviour = target.QuestResourceBehaviour.GetComponent<DaggerfallEntityBehaviour>();
-                    if (entityBehaviour)
-                        target.QuestResourceBehaviour.AddItemQueue(target as Foe, entityBehaviour);
+                    // Dequeue items on entity immediately if target already exists in the world
+                    // Will also handle placing items to dead enemy loot container
+                    if (target.QuestResourceBehaviour)
+                    {
+                        DaggerfallEntityBehaviour entityBehaviour = target.QuestResourceBehaviour.GetComponent<DaggerfallEntityBehaviour>();
+                        if (entityBehaviour)
+                            target.QuestResourceBehaviour.AddItemQueue(target as Foe, entityBehaviour);
+                    }
                 }
             }
             else

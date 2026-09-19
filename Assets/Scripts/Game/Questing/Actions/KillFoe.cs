@@ -59,6 +59,13 @@ namespace DaggerfallWorkshop.Game.Questing.Actions
                 throw new Exception(string.Format("Could not find Foe resource symbol {0}", foeSymbol));
             }
 
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandleQuestFoeCommand(this, foe, 1, 0, null))
+            {
+                SetComplete();
+                return;
+            }
+
             foe.Kill();
             SetComplete();
         }

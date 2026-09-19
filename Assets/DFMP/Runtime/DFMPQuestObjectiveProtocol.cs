@@ -41,6 +41,26 @@ namespace DFMP.Runtime
         InvalidTransition
     }
 
+    public enum DFMPQuestObjectiveCreditKind
+    {
+        Kill = 0,
+        Injured = 1,
+        Clicked = 2
+    }
+
+    public enum DFMPQuestFoeCommandKind
+    {
+        Kill = 1,
+        Remove = 2,
+        Restrain = 3,
+        Unrestrain = 4,
+        ChangeTeam = 5,
+        ChangeInfighting = 6,
+        Click = 7,
+        GiveItem = 8,
+        CastSpell = 9
+    }
+
     public struct DFMPQuestObjectiveRegistrationMessage : NetworkMessage
     {
         public ulong RequestId;
@@ -70,6 +90,35 @@ namespace DFMP.Runtime
         public string ObjectiveId;
         public int Generation;
         public int KillCount;
+        public int CreditKind;
+    }
+
+    public struct DFMPQuestFoeCommandMessage : NetworkMessage
+    {
+        public ulong RequestId;
+        public ulong QuestUid;
+        public string FoeSymbol;
+        public int CommandKind;
+        public int IntPayload;
+        public string StringPayload;
+    }
+
+    public struct DFMPQuestTeleportRequest : NetworkMessage
+    {
+        public ulong RequestId;
+        public ulong QuestUid;
+        public string PlaceSymbol;
+        public string RegionName;
+        public string LocationName;
+        public int MarkerIndex;
+        public Vector3 MarkerLocalPosition;
+    }
+
+    public struct DFMPQuestTeleportResponse : NetworkMessage
+    {
+        public ulong RequestId;
+        public bool Accepted;
+        public string Reason;
     }
 
     public struct DFMPQuestObjectiveResultAckMessage : NetworkMessage
@@ -112,6 +161,14 @@ namespace DFMP.Runtime
         public int CreditedKillCount;
         public string QuestLootJson = string.Empty;
         public float OwnerOutsideSince = -1f;
+        public int PreservedHealth;
+        public int PreservedMaxHealth;
+        public bool Hidden;
+        public bool Injured;
+        public bool Restrained;
+        public int Team = -1;
+        public bool AttackableByAi = true;
+        public string SpellQueueJson = string.Empty;
     }
 
     public static class DFMPQuestObjectiveIdentity
@@ -326,6 +383,9 @@ namespace DFMP.Runtime
                 !objective.Context.Equals(ownerContext))
                 return false;
 
+            if (objective.Hidden)
+                return false;
+
             config = config ?? new DFMPServerQuestConfig();
             config.Normalize();
             return HorizontalDistance(ownerPosition, objective.ObjectivePosition, objective.Context.Kind) <= config.EnemyActivationRadius;
@@ -365,7 +425,8 @@ namespace DFMP.Runtime
                 objective.Lifecycle != DFMPQuestObjectiveLifecycle.DespawnedAlive)
                 return DFMPQuestObjectiveResult.InvalidTransition;
 
-            objective.EncounterGeneration++;
+            if (objective.Lifecycle == DFMPQuestObjectiveLifecycle.Armed)
+                objective.EncounterGeneration++;
             objective.Lifecycle = DFMPQuestObjectiveLifecycle.SpawnedAlive;
             objective.OwnerOutsideSince = -1f;
             return DFMPQuestObjectiveResult.Accepted;
@@ -404,9 +465,121 @@ namespace DFMP.Runtime
                 ResultId = objective.PendingResultId,
                 ObjectiveId = objective.ObjectiveId,
                 Generation = objective.EncounterGeneration,
-                KillCount = objective.PendingKillCount
+                KillCount = objective.PendingKillCount,
+                CreditKind = (int)DFMPQuestObjectiveCreditKind.Kill
             };
             return DFMPQuestObjectiveResult.Accepted;
+        }
+
+        public DFMPQuestObjectiveResult MarkInjured(string objectiveId, out DFMPQuestObjectiveResultMessage result)
+        {
+            result = default(DFMPQuestObjectiveResultMessage);
+            DFMPQuestObjectiveRecord objective;
+            if (!TryGet(objectiveId, out objective))
+                return DFMPQuestObjectiveResult.MissingObjective;
+            if (objective.Lifecycle != DFMPQuestObjectiveLifecycle.SpawnedAlive)
+                return DFMPQuestObjectiveResult.InvalidTransition;
+
+            objective.Injured = true;
+            result = new DFMPQuestObjectiveResultMessage
+            {
+                ResultId = 0,
+                ObjectiveId = objective.ObjectiveId,
+                Generation = objective.EncounterGeneration,
+                KillCount = 0,
+                CreditKind = (int)DFMPQuestObjectiveCreditKind.Injured
+            };
+            return DFMPQuestObjectiveResult.Accepted;
+        }
+
+        public DFMPQuestObjectiveResult MarkClicked(string objectiveId, int ownerConnectionId, out DFMPQuestObjectiveResultMessage result)
+        {
+            result = default(DFMPQuestObjectiveResultMessage);
+            DFMPQuestObjectiveRecord objective;
+            if (!TryGet(objectiveId, out objective))
+                return DFMPQuestObjectiveResult.MissingObjective;
+            if (objective.OwnerConnectionId != ownerConnectionId)
+                return DFMPQuestObjectiveResult.InvalidOwner;
+            if (objective.Lifecycle == DFMPQuestObjectiveLifecycle.Cancelled ||
+                objective.Lifecycle == DFMPQuestObjectiveLifecycle.Credited)
+                return DFMPQuestObjectiveResult.InvalidTransition;
+
+            result = new DFMPQuestObjectiveResultMessage
+            {
+                ResultId = 0,
+                ObjectiveId = objective.ObjectiveId,
+                Generation = objective.EncounterGeneration,
+                KillCount = 0,
+                CreditKind = (int)DFMPQuestObjectiveCreditKind.Clicked
+            };
+            return DFMPQuestObjectiveResult.Accepted;
+        }
+
+        public void PreservePhysicalState(string objectiveId, int health, int maxHealth)
+        {
+            DFMPQuestObjectiveRecord objective;
+            if (!TryGet(objectiveId, out objective))
+                return;
+            objective.PreservedHealth = Mathf.Max(0, health);
+            objective.PreservedMaxHealth = Mathf.Max(0, maxHealth);
+        }
+
+        public DFMPQuestObjectiveRecord[] FindForQuestFoe(string characterId, ulong questUid, string foeSymbol)
+        {
+            var result = new List<DFMPQuestObjectiveRecord>();
+            foreach (DFMPQuestObjectiveRecord objective in objectives.Values)
+            {
+                if (string.Equals(objective.OwnerCharacterId, characterId, StringComparison.OrdinalIgnoreCase) &&
+                    objective.QuestUid == questUid &&
+                    string.Equals(objective.FoeSymbol, foeSymbol ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                    objective.Lifecycle != DFMPQuestObjectiveLifecycle.Cancelled &&
+                    objective.Lifecycle != DFMPQuestObjectiveLifecycle.Credited)
+                    result.Add(objective);
+            }
+            return result.ToArray();
+        }
+
+        public DFMPQuestObjectiveRecord[] FindForQuest(string characterId, ulong questUid)
+        {
+            var result = new List<DFMPQuestObjectiveRecord>();
+            foreach (DFMPQuestObjectiveRecord objective in objectives.Values)
+            {
+                if (string.Equals(objective.OwnerCharacterId, characterId, StringComparison.OrdinalIgnoreCase) &&
+                    objective.QuestUid == questUid &&
+                    objective.Lifecycle != DFMPQuestObjectiveLifecycle.Cancelled &&
+                    objective.Lifecycle != DFMPQuestObjectiveLifecycle.Credited)
+                    result.Add(objective);
+            }
+            return result.ToArray();
+        }
+
+        public static bool TryValidateTeleport(
+            string regionName,
+            string locationName,
+            int markerIndex,
+            Vector3 markerLocalPosition,
+            out string reason)
+        {
+            reason = string.Empty;
+            if (string.IsNullOrWhiteSpace(regionName) || string.IsNullOrWhiteSpace(locationName))
+            {
+                reason = "quest teleport destination is incomplete";
+                return false;
+            }
+
+            if (markerIndex < -1 || markerIndex > 64)
+            {
+                reason = "quest teleport marker is out of bounds";
+                return false;
+            }
+
+            if (!IsFinite(markerLocalPosition))
+            {
+                reason = "quest teleport marker pose is invalid";
+                return false;
+            }
+
+            return true;
         }
 
         public DFMPQuestObjectiveResult AcknowledgeResult(
