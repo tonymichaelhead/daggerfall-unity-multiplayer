@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using DaggerfallWorkshop.Game.Questing;
@@ -219,6 +220,91 @@ namespace DFMP.Tests
                 new string('q', DFMPQuestStateCodec.MaximumSectionBytes + 1);
             Assert.IsFalse(DFMPQuestStateCodec.TryValidate(restored.QuestState, out reason));
             Assert.IsTrue(reason.Contains("section"));
+        }
+
+        [Test]
+        public void QuestStateEnvelope_AcceptsLegacyVersionAndRoundTripsGuildMemberships()
+        {
+            var memberships = new Dictionary<int, GuildMembership_v1>
+            {
+                {
+                    2,
+                    new GuildMembership_v1
+                    {
+                        rank = 3,
+                        lastRankChange = 40,
+                        variant = 0,
+                        flags = 1
+                    }
+                }
+            };
+            DFMPGuildMembershipRecord[] records = DFMPQuestStateCodec.FromMembershipData(memberships);
+            Assert.AreEqual(1, records.Length);
+            Assert.AreEqual(2, records[0].GuildGroup);
+            Assert.AreEqual(3, records[0].Rank);
+
+            Dictionary<int, GuildMembership_v1> restoredMemberships =
+                DFMPQuestStateCodec.ToMembershipData(records);
+            Assert.AreEqual(3, restoredMemberships[2].rank);
+            Assert.AreEqual(40, restoredMemberships[2].lastRankChange);
+            Assert.AreEqual(1, restoredMemberships[2].flags);
+
+            var current = new DFMPQuestStateEnvelope
+            {
+                Version = DFMPQuestStateEnvelope.CurrentVersion,
+                QuestMachineJson = "{\"siteLinks\":[],\"quests\":[]}",
+                GuildMemberships = records,
+                VampireMemberships = new DFMPGuildMembershipRecord[0],
+                BankJson = "[]",
+                BankDeedJson = "{}",
+                LightSourceUID = 99
+            };
+
+            string payload = DFMPQuestStateCodec.Encode(current);
+            DFMPQuestStateEnvelope decoded;
+            string reason;
+            Assert.IsTrue(DFMPQuestStateCodec.TryDecode(payload, out decoded, out reason), reason);
+            Assert.AreEqual(DFMPQuestStateEnvelope.CurrentVersion, decoded.Version);
+            Assert.AreEqual(1, decoded.GuildMemberships.Length);
+            Assert.AreEqual(3, decoded.GuildMemberships[0].Rank);
+            Assert.AreEqual(99UL, decoded.LightSourceUID);
+            Assert.AreEqual("[]", decoded.BankJson);
+
+            var legacy = new DFMPQuestStateEnvelope
+            {
+                Version = DFMPQuestStateEnvelope.MinimumSupportedVersion,
+                QuestMachineJson = "{\"siteLinks\":[],\"quests\":[]}",
+                QuestAdjacentPlayerJson = "{\"guildMemberships\":{}}"
+            };
+            Assert.IsTrue(DFMPQuestStateCodec.TryValidate(legacy, out reason), reason);
+            Assert.AreEqual(0, legacy.GuildMemberships.Length);
+
+            legacy.Version = DFMPQuestStateEnvelope.CurrentVersion + 1;
+            Assert.IsFalse(DFMPQuestStateCodec.TryValidate(legacy, out reason));
+            Assert.IsTrue(reason.Contains("version"));
+        }
+
+        [Test]
+        public void QuestStateEnvelope_EmptyCurrentGuildMembershipsAreDistinctFromLegacyMissingSection()
+        {
+            var currentEmpty = new DFMPQuestStateEnvelope
+            {
+                Version = DFMPQuestStateEnvelope.FirstClassGuildVersion,
+                QuestMachineJson = "{\"siteLinks\":[],\"quests\":[]}",
+                GuildMemberships = new DFMPGuildMembershipRecord[0]
+            };
+            string reason;
+            Assert.IsTrue(DFMPQuestStateCodec.TryValidate(currentEmpty, out reason), reason);
+            Assert.IsTrue(currentEmpty.Version >= DFMPQuestStateEnvelope.FirstClassGuildVersion);
+
+            var legacy = new DFMPQuestStateEnvelope
+            {
+                Version = 1,
+                QuestMachineJson = "{\"siteLinks\":[],\"quests\":[]}"
+            };
+            Assert.IsTrue(DFMPQuestStateCodec.TryValidate(legacy, out reason), reason);
+            Assert.IsTrue(legacy.Version < DFMPQuestStateEnvelope.FirstClassGuildVersion);
+            Assert.AreEqual(0, legacy.GuildMemberships.Length);
         }
 
         [Test]

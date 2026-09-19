@@ -38,7 +38,7 @@ and pose, vitals, gold, attributes, skills, inventory, equipment, and complete
 quest-item identity. Restore order must remain Q/F/C/N before inventory so item
 resources exist before quest-linked items are reconstructed.
 
-The quest envelope now also captures the former persistence gaps:
+The quest envelope now also captures:
 
 - **P1** — discovered travel-map locations.
 - **P2** — diseases, vampirism/lycanthropy, and effect bundles.
@@ -47,6 +47,9 @@ The quest envelope now also captures the former persistence gaps:
 - **P5** — `TimeOfLastSkillTraining`.
 - **P6** — owner-scoped foe generation, health, queued loot/spells, restraint/team/infighting, and pending credit.
 - **P7** — `QuestListsManager.oneTimeQuestsAccepted`.
+- **P8** — first-class guild and vampire memberships (group, rank, last rank change, variant, flags). Envelope v1 still restores memberships from `QuestAdjacentPlayerJson`.
+- **P9** — biography mods, skill-use progress, wagon/other items, rented rooms, Thieves Guild / Dark Brotherhood invitation tallies, bank accounts, houses, owned ship, and escorting-companion faces.
+- Close-flush: pause-menu Exit, window close, and `StopClient` send identity, pose/context, and the full envelope before disconnect. Guild join/leave also request an immediate envelope save.
 
 ## Registered action matrix
 

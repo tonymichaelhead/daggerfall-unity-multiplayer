@@ -36,6 +36,8 @@ namespace DFMP.Runtime
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit = TryHandlePlayerMissileHit;
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = TryHandlePlayerWeaponHit;
             DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled = OnActionDoorToggled;
+            DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged = RequestQuestSave;
+            DFMP.Hooks.DaggerfallHooks.TryHandleExitGame = TryHandleExitGame;
         }
 
         public static void Reset()
@@ -46,6 +48,8 @@ namespace DFMP.Runtime
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerMissileHit = null;
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = null;
             DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled = null;
+            DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged = null;
+            DFMP.Hooks.DaggerfallHooks.TryHandleExitGame = null;
             nextDamageRequestId = 1;
             nextDamageSequence = 1;
             instance = null;
@@ -53,8 +57,39 @@ namespace DFMP.Runtime
 
         public static void RequestQuestSave()
         {
-            if (instance != null)
-                instance.nextQuestStateReportTime = 0f;
+            if (instance == null)
+                return;
+
+            instance.nextQuestStateReportTime = 0f;
+            if (NetworkClient.isConnected)
+                instance.SendQuestStateReport(true);
+        }
+
+        /// <summary>
+        /// Sends identity, pose/context, and quest envelope immediately, ignoring autosave timers.
+        /// Must run while still connected.
+        /// </summary>
+        public static bool FlushPersistentState()
+        {
+            if (instance == null || !NetworkClient.isConnected)
+                return false;
+
+            instance.SendIdentityReport(true);
+            StreamingWorld streamingWorld = FindObjectOfType<StreamingWorld>();
+            if (streamingWorld != null && streamingWorld.IsReady && streamingWorld.LocalPlayerGPS != null)
+            {
+                instance.SendWorldContextReport(streamingWorld, true);
+                instance.SendPositionReport(streamingWorld, true);
+            }
+
+            instance.SendQuestStateReport(true);
+            Debug.Log("[DFMP Character] Flushed persistable character state before disconnect.");
+            return true;
+        }
+
+        static bool TryHandleExitGame()
+        {
+            return DFMPClientBootstrap.TryHandleMultiplayerExit();
         }
 
         void OnDestroy()
@@ -84,15 +119,20 @@ namespace DFMP.Runtime
 
             if (hasImmediateWorldContextReport)
             {
-                if (SendWorldContextReport(streamingWorld))
+                if (SendWorldContextReport(streamingWorld, true))
                     DFMPSpawnAssignmentController.CompleteImmediateWorldContextReport();
                 return;
             }
 
             ReportPlayerAction(streamingWorld);
             nextReportTime = Time.unscaledTime + DFMPPositionProtocol.MinimumReportInterval;
-            SendIdentityReport();
-            SendWorldContextReport(streamingWorld);
+            SendIdentityReport(false);
+            SendWorldContextReport(streamingWorld, false);
+            SendPositionReport(streamingWorld, false);
+        }
+
+        void SendPositionReport(StreamingWorld streamingWorld, bool forceReliable)
+        {
             Vector3 playerScenePosition = streamingWorld.LocalPlayerGPS.transform.position;
             Vector3 groundScenePosition = DFMPRemotePlayerPresentation.GroundScenePosition(streamingWorld, playerScenePosition);
             CharacterController playerController = GameManager.Instance != null ? GameManager.Instance.PlayerController : null;
@@ -125,6 +165,7 @@ namespace DFMP.Runtime
                     controllerSkinWidth) - playerEnterExit.Interior.transform.position.y;
             }
 
+            int channel = forceReliable ? Channels.Reliable : Channels.Unreliable;
             NetworkClient.Send(new DFMPPlayerPositionReport
             {
                 WorldX = streamingWorld.LocalPlayerGPS.WorldX,
@@ -141,7 +182,7 @@ namespace DFMP.Runtime
                 DungeonLocalX = interiorLocalPosition.x,
                 DungeonLocalY = interiorLocalPosition.y,
                 DungeonLocalZ = interiorLocalPosition.z
-            }, Channels.Unreliable);
+            }, channel);
         }
 
         static bool IsLocalPlayerAvailable()
@@ -284,7 +325,7 @@ namespace DFMP.Runtime
             }
         }
 
-        void SendIdentityReport()
+        void SendIdentityReport(bool force)
         {
             if (GameManager.Instance == null || GameManager.Instance.PlayerEntity == null)
                 return;
@@ -299,7 +340,8 @@ namespace DFMP.Runtime
 
             // Heartbeat alone would drop an equip made seconds before the player quits.
             bool inventoryChanged = signature != lastInventorySignature;
-            if (inventoryChanged ? Time.unscaledTime < nextChangeReportTime : Time.unscaledTime < nextIdentityReportTime)
+            if (!force &&
+                (inventoryChanged ? Time.unscaledTime < nextChangeReportTime : Time.unscaledTime < nextIdentityReportTime))
                 return;
 
             lastInventorySignature = signature;
@@ -339,34 +381,39 @@ namespace DFMP.Runtime
                 EquipmentJson = string.Empty
             });
 
-            if (Time.unscaledTime >= nextQuestStateReportTime)
-            {
-                nextQuestStateReportTime =
-                    Time.unscaledTime + DFMPWorldSettings.CurrentQuestAutosaveIntervalSeconds;
-                DFMPQuestStateEnvelope questState;
-                string questReason;
-                if (DFMPQuestStateCodec.TryCapture(out questState, out questReason))
-                {
-                    string payload = DFMPQuestStateCodec.Encode(questState);
-                    string checksum = DFMPQuestPayloadProtocol.ComputeChecksum(Encoding.UTF8.GetBytes(payload));
-                    if (!string.Equals(checksum, lastQuestPayloadChecksum, System.StringComparison.Ordinal))
-                    {
-                        string sentChecksum;
-                        if (DFMPNetworkClient.SendQuestState(questState, out sentChecksum))
-                            lastQuestPayloadChecksum = sentChecksum;
-                    }
-                }
-            }
+            SendQuestStateReport(force);
         }
 
-        bool SendWorldContextReport(StreamingWorld streamingWorld)
+        void SendQuestStateReport(bool force)
+        {
+            if (!force && Time.unscaledTime < nextQuestStateReportTime)
+                return;
+
+            nextQuestStateReportTime =
+                Time.unscaledTime + DFMPWorldSettings.CurrentQuestAutosaveIntervalSeconds;
+            DFMPQuestStateEnvelope questState;
+            string questReason;
+            if (!DFMPQuestStateCodec.TryCapture(out questState, out questReason))
+                return;
+
+            string payload = DFMPQuestStateCodec.Encode(questState);
+            string checksum = DFMPQuestPayloadProtocol.ComputeChecksum(Encoding.UTF8.GetBytes(payload));
+            if (!force && string.Equals(checksum, lastQuestPayloadChecksum, System.StringComparison.Ordinal))
+                return;
+
+            string sentChecksum;
+            if (DFMPNetworkClient.SendQuestState(questState, out sentChecksum))
+                lastQuestPayloadChecksum = sentChecksum;
+        }
+
+        bool SendWorldContextReport(StreamingWorld streamingWorld, bool force)
         {
             DFMPWorldContextReport report;
             if (!TryBuildWorldContextReport(streamingWorld, out report))
                 return false;
 
             int signature = DFMPWorldContextProtocol.GetSignature(report);
-            if (signature == lastContextSignature)
+            if (!force && signature == lastContextSignature)
                 return true;
 
             lastContextSignature = signature;

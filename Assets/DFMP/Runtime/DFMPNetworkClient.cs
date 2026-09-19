@@ -382,6 +382,7 @@ namespace DFMP.Runtime
 
         public static void Stop()
         {
+            DFMPPositionReporter.FlushPersistentState();
             questPayloadAssembler.Reset();
             DFMPNetworkManager networkManager = Manager;
             if (networkManager != null && networkManager.isNetworkActive)

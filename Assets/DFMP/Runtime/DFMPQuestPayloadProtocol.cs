@@ -91,7 +91,8 @@ namespace DFMP.Runtime
                 return false;
             }
 
-            if (chunk.EnvelopeVersion != DFMPQuestStateEnvelope.CurrentVersion)
+            if (chunk.EnvelopeVersion < DFMPQuestStateEnvelope.MinimumSupportedVersion ||
+                chunk.EnvelopeVersion > DFMPQuestStateEnvelope.CurrentVersion)
             {
                 reason = "quest chunk version is unsupported";
                 return false;

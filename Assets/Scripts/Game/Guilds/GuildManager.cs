@@ -123,6 +123,8 @@ namespace DaggerfallWorkshop.Game.Guilds
         {
             guild.Join();
             Memberships[guildGroup] = guild;
+            if (DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged != null)
+                DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged();
         }
 
         public void RemoveMembership(IGuild guild)
@@ -140,6 +142,8 @@ namespace DaggerfallWorkshop.Game.Guilds
             {
                 guild.Leave();
                 Memberships.Remove(guildGroup);
+                if (DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged != null)
+                    DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged();
             }
         }
 

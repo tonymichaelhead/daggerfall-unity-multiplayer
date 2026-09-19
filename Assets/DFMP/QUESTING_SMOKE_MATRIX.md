@@ -20,10 +20,15 @@ for the `[DFMP Quest Metrics]` sample at the end of each slice.
    adds a journal/notebook entry, and reveals a location.
 2. Record active quest count, current log text, inventory quest item, faction
    reputation, guild state, legal reputation, and discovered map locations.
-3. Disconnect cleanly, restart the dedicated server, and reconnect.
+3. Disconnect cleanly (pause-menu Exit **or** closing the client window), restart
+   the dedicated server, and reconnect.
 4. Verify every recorded value, quest item UID/symbol, and current branch is
    unchanged. Complete the quest and verify rewards persist after a second
    reconnect.
+5. Join the Fighters Guild (or equivalent), change nothing else, Exit immediately
+   from the pause menu, reconnect, and confirm membership at rank 0 with faction
+   reputation intact. Repeat once by closing the client window after changing
+   gold, equipment, or health.
 
 ## Slice 2: marker-bound foe and helper credit
 

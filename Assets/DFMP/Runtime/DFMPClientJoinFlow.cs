@@ -440,9 +440,9 @@ namespace DFMP.Runtime
             playerEntity.GoldPieces = snapshot.Gold;
             ApplyProgression(playerEntity, snapshot.StartingLevelUpSkillSum);
             bool questStateRestored = !snapshot.HasQuestState;
+            DFMPQuestStateEnvelope questState = null;
             if (snapshot.HasQuestState)
             {
-                DFMPQuestStateEnvelope questState;
                 string questReason;
                 if (DFMPQuestStateCodec.TryDecode(pendingQuestPayload, out questState, out questReason) &&
                     DFMPQuestStateCodec.TryRestore(questState, out questReason))
@@ -486,6 +486,9 @@ namespace DFMP.Runtime
             {
                 Debug.LogWarning($"[DFMP Join] Inventory snapshot rejected during restore: reason={inventoryReason}.");
             }
+
+            if (questStateRestored && questState != null && questState.LightSourceUID != 0)
+                playerEntity.LightSource = playerEntity.Items.GetItem(questState.LightSourceUID);
             ServerIdentityApplied = true;
             hasPendingSnapshot = false;
             pendingQuestTransferId = null;

@@ -721,6 +721,9 @@ namespace DaggerfallWorkshop.Game
                     uiManager.PushWindow(dfDemoClassQuestions);
                     break;
                 case DaggerfallUIMessages.dfuiExitGame:
+                    if (DFMP.Hooks.DaggerfallHooks.TryHandleExitGame != null &&
+                        DFMP.Hooks.DaggerfallHooks.TryHandleExitGame())
+                        break;
 #if UNITY_EDITOR
                     DaggerfallUnity.Settings.SaveSettings();
                     UnityEditor.EditorApplication.isPlaying = false;

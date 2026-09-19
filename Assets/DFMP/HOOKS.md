@@ -23,7 +23,7 @@ git diff --stat --ignore-cr-at-eol upstream/master..master -- Assets/Scripts
 git grep -nE "using Mirror|NetworkBehaviour|NetworkServer|NetworkClient" -- Assets/Scripts
 ```
 
-Current baseline as of 2026-09-18: **17 files, 89 insertions, 17 deletions, 0 networking references.**
+Current baseline as of 2026-09-19: **33 files, 229 insertions, 34 deletions, 0 networking references.**
 
 Growth not explained by a newly registered hook below means multiplayer logic has leaked
 into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
@@ -73,6 +73,8 @@ into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
 | QUEST-FOE-CMD-008 | `Assets/Scripts/Game/Questing/Actions/ChangeFoeInfighting.cs` | `Update()` before scanning active local enemies | Prevent unscoped local enemy scans; apply infighting on the owner-scoped server encounter. | 2026-09-19 |
 | QUEST-SCENE-001 | `Assets/Scripts/Game/Questing/Actions/Enemies.cs` | `Update()` before `ClearEnemies()` / `MakeEnemiesHostile()` | Consume the unscoped scene-wide command so it cannot mutate server-owned or other owners' enemies. | 2026-09-19 |
 | QUEST-SCENE-002 | `Assets/Scripts/Game/Questing/Actions/SpawnCityGuards.cs` | `Update()` before `SpawnCityGuards()` | Consume local unsynchronized guard spawns until a server-owned guard provider exists. | 2026-09-19 |
+| DFMP-PERSIST-GUILD-001 | `Assets/Scripts/Game/Guilds/GuildManager.cs` | `AddMembership()` / `RemoveMembership()` after membership mutation | Notify DFMP so guild join/leave can flush quest-adjacent character state immediately rather than waiting for the 60s autosave. | 2026-09-19 |
+| DFMP-PERSIST-EXIT-001 | `Assets/Scripts/Game/DaggerfallUI.cs` | `dfuiExitGame` before vanilla `Application.Quit` | Allow DFMP to flush persistable character state and delay quit until the reliable payload can land. | 2026-09-19 |
 
 ---
 
