@@ -1,4 +1,5 @@
 using DFMP.Hooks;
+using DaggerfallWorkshop.Game;
 using Mirror;
 using UnityEngine;
 
@@ -11,6 +12,8 @@ namespace DFMP.Runtime
         {
             DaggerfallHooks.TryHandleRestAdvance = TryHandleRestAdvance;
             DaggerfallHooks.TryHandleTimeAdvance = TryHandleTimeAdvance;
+            DaggerfallHooks.TryHandleRestWorldTimeTick = TryHandleRestWorldTimeTick;
+            DaggerfallHooks.OnRestHourElapsed = OnRestHourElapsed;
         }
 
         static bool TryHandleTimeAdvance(string source, int seconds)
@@ -19,6 +22,14 @@ namespace DFMP.Runtime
                 return false;
 
             Debug.Log($"[DFMP Time] Blocked client-side time advancement: source={source}, seconds={seconds}.");
+            return true;
+        }
+
+        static bool TryHandleRestWorldTimeTick()
+        {
+            if (!DFMPRestAdvancePolicy.ShouldSkipRestWorldTime(NetworkClient.isConnected))
+                return false;
+
             return true;
         }
 
@@ -31,9 +42,22 @@ namespace DFMP.Runtime
             if (!DFMPRestAdvancePolicy.ShouldConsumeRestAdvance(NetworkClient.isConnected, mode))
                 return false;
 
-            DFMPNetworkClient.RequestRest(restModeName);
-            Debug.Log($"[DFMP Rest] Blocked client-side rest/loiter time advancement: mode={mode}.");
+            ShowBlockedMessage(DFMPRestAdvancePolicy.GetBlockedRestMessage(mode));
+            Debug.Log($"[DFMP Rest] Blocked client-side rest/loiter: mode={mode}, policy={DFMPWorldSettings.CurrentRestPolicy}.");
             return true;
+        }
+
+        static void OnRestHourElapsed()
+        {
+            DFMPRestSessionController.NotifyHourElapsed();
+        }
+
+        static void ShowBlockedMessage(string message)
+        {
+            if (DaggerfallUI.Instance == null)
+                return;
+
+            DaggerfallUI.MessageBox(message);
         }
     }
 }

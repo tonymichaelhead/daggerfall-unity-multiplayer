@@ -107,6 +107,22 @@ namespace DFMP.Runtime
             };
         }
 
+        public void ApplyRestRecovery(int healthRecovered, int fatigueRecovered, int spellPointsRecovered)
+        {
+            Health = ClampVital(Health + Math.Max(0, healthRecovered), MaxHealth);
+            Fatigue = ClampVital(Fatigue + Math.Max(0, fatigueRecovered), MaxFatigue);
+            SpellPoints = ClampVital(SpellPoints + Math.Max(0, spellPointsRecovered), MaxSpellPoints);
+        }
+
+        static int ClampVital(int current, int maximum)
+        {
+            int boundedMaximum = Math.Max(0, maximum);
+            if (current < 0)
+                return 0;
+
+            return current > boundedMaximum ? boundedMaximum : current;
+        }
+
         int GetCurrentValue(DFMPVitalKind vitalKind)
         {
             switch (vitalKind)

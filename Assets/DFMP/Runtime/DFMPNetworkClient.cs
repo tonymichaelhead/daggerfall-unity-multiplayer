@@ -79,8 +79,10 @@ namespace DFMP.Runtime
             Manager.sendRate = tickRate;
 
             DFMPTimeState.RegisterClientSpawnHandler();
+            DFMPWorldSettings.RegisterClientSpawnHandler();
             DFMPPlayerSessionState.RegisterClientSpawnHandler();
             DFMPDynamicEnemyState.RegisterClientSpawnHandler();
+            DFMPRestSessionController.EnsureInstance();
             DFMPSpawnAssignmentController.RegisterClientHandler();
             DFMPDeveloperCommandController.RegisterClient();
             NetworkClient.RegisterHandler<DFMPChatDeliveryMessage>(OnChatMessageReceived);
@@ -154,8 +156,13 @@ namespace DFMP.Runtime
 
         public static void RequestRest(string restModeName)
         {
+            RequestRest(restModeName, DFMPRestRequestKind.Start);
+        }
+
+        public static void RequestRest(string restModeName, DFMPRestRequestKind kind)
+        {
             if (NetworkClient.isConnected)
-                NetworkClient.Send(new DFMPRestRequest { RestModeName = restModeName });
+                NetworkClient.Send(new DFMPRestRequest { RestModeName = restModeName, Kind = kind });
         }
 
         public static void RequestPlayerDamage(int targetConnectionId, int amount)
@@ -183,9 +190,12 @@ namespace DFMP.Runtime
         static void OnRestResponseReceived(DFMPRestResponse message)
         {
             if (message.Accepted)
-                Debug.Log("[DFMP Rest] Server accepted rest request; recovery is pending server implementation.");
+                Debug.Log($"[DFMP Rest] Server accepted rest request: kind={message.Kind}.");
             else
-                Debug.LogWarning($"[DFMP Rest] Server rejected rest request: reason={message.RejectionReason}.");
+            {
+                Debug.LogWarning($"[DFMP Rest] Server rejected rest request: kind={message.Kind}, reason={message.RejectionReason}.");
+                DFMPRestSessionController.NotifyRequestRejected(message.Kind);
+            }
         }
 
         public static void RequestSelectCharacter(string characterId)
@@ -283,6 +293,7 @@ namespace DFMP.Runtime
             playerEntity.CurrentHealth = message.Health;
             playerEntity.CurrentMagicka = message.SpellPoints;
             playerEntity.CurrentFatigue = message.Fatigue;
+            DFMPRestSessionController.NotifyVitalSnapshot(message.Health);
             Debug.Log($"[DFMP Combat] Applied authoritative vital snapshot: health={message.Health}/{message.MaxHealth}, fatigue={message.Fatigue}/{message.MaxFatigue}, spellPoints={message.SpellPoints}/{message.MaxSpellPoints}, dead={message.IsDead}.");
         }
 
@@ -321,6 +332,7 @@ namespace DFMP.Runtime
             DFMPPositionReporter.Reset();
             DFMPRemotePlayerPresentationController.Reset();
             DFMPDynamicEnemyPresentationController.Reset();
+            DFMPRestSessionController.Reset();
 
             if (DaggerfallUnity.Instance != null)
                 DaggerfallUnity.Instance.Option_ImportEnemyPrefabs = true;

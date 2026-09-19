@@ -1011,6 +1011,31 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void WorldInterestManagement_AllowsGlobalWorldSettingsForReadyObservers()
+        {
+            GameObject interestGo = new GameObject("DFMP_InterestManagementTest");
+            GameObject settingsGo = new GameObject("DFMP_WorldSettingsIdentityTest");
+            try
+            {
+                var interest = interestGo.AddComponent<DFMPWorldInterestManagement>();
+                var settingsIdentity = settingsGo.AddComponent<NetworkIdentity>();
+                settingsGo.AddComponent<DFMPWorldSettings>();
+                var readyConnection = new NetworkConnectionToClient(82);
+                readyConnection.isReady = true;
+                var notReadyConnection = new NetworkConnectionToClient(83);
+
+                Assert.IsTrue(interest.ShouldObserve(settingsIdentity, readyConnection));
+                Assert.IsFalse(interest.ShouldObserve(settingsIdentity, notReadyConnection));
+            }
+            finally
+            {
+                Object.DestroyImmediate(settingsGo);
+                Object.DestroyImmediate(interestGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void WorldInterestManagement_AllowsOnlyCoLocatedSessionObservers()
         {
             GameObject interestGo = new GameObject("DFMP_InterestManagementTest");

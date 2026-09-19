@@ -35,12 +35,33 @@ namespace DFMP.Runtime
 
         public static bool ShouldConsumeRestAdvance(bool isMultiplayerClientConnected, DFMPRestAdvanceMode mode)
         {
+            return ShouldConsumeRestAdvance(isMultiplayerClientConnected, mode, DFMPWorldSettings.CurrentRestPolicy);
+        }
+
+        public static bool ShouldConsumeRestAdvance(bool isMultiplayerClientConnected, DFMPRestAdvanceMode mode, string restPolicy)
+        {
             if (!isMultiplayerClientConnected)
                 return false;
 
-            return mode == DFMPRestAdvanceMode.TimedRest ||
-                   mode == DFMPRestAdvanceMode.FullRest ||
-                   mode == DFMPRestAdvanceMode.Loiter;
+            if (mode == DFMPRestAdvanceMode.Loiter)
+                return true;
+
+            if (mode == DFMPRestAdvanceMode.TimedRest || mode == DFMPRestAdvanceMode.FullRest)
+                return !DFMPServerRestConfig.IsServerManaged(restPolicy);
+
+            return false;
+        }
+
+        public static bool ShouldSkipRestWorldTime(bool isMultiplayerClientConnected)
+        {
+            return isMultiplayerClientConnected;
+        }
+
+        public static string GetBlockedRestMessage(DFMPRestAdvanceMode mode)
+        {
+            return mode == DFMPRestAdvanceMode.Loiter
+                ? "Loitering is disabled in multiplayer."
+                : "Resting is disabled on this server.";
         }
     }
 }

@@ -252,8 +252,8 @@ Everything the server needs to know where players are before it can own entities
   - Vampirism persistence across reconnect, restart, and character restore is explicitly deferred to Phase 2.
   - Lycanthropy transformation and its hidden timers are explicitly deferred to Phase 2; M6 does not intercept, synchronize, or partially implement lycanthropy.
 - **Rest and healing replacement**, since rest no longer advances the clock:
-  - **MVP policy:** rest, rest-until-healed, and loiter are disabled by default. Clients never advance server time through these actions.
-  - The server configuration preserves a `ServerManaged` policy for a future milestone; it is not part of the MVP gameplay loop yet.
+  - **Default policy:** rest, rest-until-healed, and loiter are disabled (`Rest.Policy = Disabled`). Clients never advance server time through these actions.
+  - **Delivered `Rest.Policy = ServerManaged`:** timed rest and rest-until-healed run as vanilla DFU rest (hour prompt, vitals, medical skill, sleep-end, inn rented-hour countdown, interruptible) without advancing server or client world time. Loiter stays disabled. Nearby existing server-owned enemies can still interrupt rest; random rest-time encounter spawns are not added.
   - Renting an inn room, and temple or guild paid restoration services, remain separate restoration paths and do not advance global time.
 
   M6 closeout notes:
@@ -263,6 +263,7 @@ Everything the server needs to know where players are before it can own entities
   - Saved tavern anchors are recorded on confirmed inn entry. M6 intentionally falls back to the configured exterior starting location during death respawn rather than attempting an invalid interior teleport; server-issued saved-interior reopening is owned by P-WORLD.
   - Death handling is server-owned and no-wipe: duplicate or pending reports are rejected, pre-spawn deaths are not intercepted on the client, stale acknowledgements are rejected, and a pending death respawn is finalized before disconnect cleanup.
   - Vampirism is a live-session transformation only. Persistence across reconnect, restart, and character restore remains explicitly deferred to Phase 2. Lycanthropy remains fully deferred.
+  - **`Rest.Policy = ServerManaged` is delivered.** Timed rest and rest-until-healed run as vanilla DFU rest without advancing shared world time. Loiter remains disabled. Policy is replicated at runtime via `DFMPWorldSettings` and `DFMPNetworkServer.SetRestPolicy` so an R3 admin/GM menu can toggle it later. Random rest-time encounter spawns and the admin-menu widget remain out of scope.
 
 Verification:
 
@@ -270,6 +271,7 @@ Verification:
 - Focused EditMode coverage includes spawn and transition acknowledgement validation, respawn-anchor selection, character persistence, join/reconnect resolution, and death-respawn lifecycle policy.
 - Graphical transition smoke tests covered doors, dungeon entry and exit, fast travel, reconnect, death respawn, repeated death, and disconnect during a pending death respawn. Expected evidence includes accepted `DeathRespawn` assignments, validated acknowledgements, restored vitals, and `Finalized pending death respawn on disconnect` before disconnect cleanup.
 - Vampirism transformation smoke evidence covers server-owned time advancement, cemetery relocation, client effect application, and transition acknowledgement. Vampirism persistence is not an M6 acceptance criterion.
+- Rest smoke: with `ServerManaged`, timed rest and rest-until-healed restore vitals and medical/level-up while the world clock stays unchanged; nearby existing enemies can break rest; loiter is refused; `Disabled` blocks rest with an in-game message.
 
 ### M6.5: Spike — Headless Dungeon Geometry
 
@@ -589,7 +591,7 @@ Status: Planned.
 - Startup validation that rejects malformed values with a specific, actionable message and exits, rather than silently falling back to defaults.
 - Config reload for the subset of values that are safe to change on a running server, with the rest clearly marked restart-only.
 - A documented, fully commented reference config shipped with the build.
-- Implement and document `Rest.Policy = ServerManaged`: in-place, interruptible recovery over compressed real time without advancing global time, including server-owned rest-driven practice and progression.
+- **Delivered:** `Rest.Policy = Disabled | ServerManaged`. `ServerManaged` is vanilla rest without clock advance (see M6). Remaining R1 rest/travel work is any extra owner knobs, not re-implementing rest recovery. The in-game admin/GM toggle stays R3.
 
 Verification:
 
@@ -628,6 +630,7 @@ An early F12 administration prototype now provides a server-authored connected-p
 - In-game chat command framework, with commands registerable by both the core and R2 scripts.
 - Core moderation commands: kick, ban, unban, mute, whitelist add and remove, teleport, and player lookup.
 - GM/world-control commands should expose the same server action service used by R2 scripts, including an `Advance World Time` action, player infection/cure, player teleport, and later enemy spawn/despawn. The client menu is only a request UI; authority, validation, permission checks, confirmation for large jumps, and audit remain server-side.
+- Rest policy toggle in the admin/GM menu: `Rest.Policy` `Disabled` / `ServerManaged`, calling the existing `DFMPNetworkServer.SetRestPolicy` API, with role checks and audit. Optional persist back to `dfmp-server.json` can land with that menu; the setter must not require a server restart.
 - Audit log of moderation actions, keyed to account identity.
 - Additional chat channels beyond the single global channel, at minimum a staff channel and private messages.
 - Add bounded, server-persisted global chat history with explicit retention and access policy.

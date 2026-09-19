@@ -18,6 +18,7 @@ namespace DFMP.Runtime
         public static DFMPNetworkManager Manager { get; private set; }
         public static KcpTransport Transport { get; private set; }
         public static DFMPTimeState TimeState { get; private set; }
+        public static DFMPWorldSettings WorldSettings { get; private set; }
         public static ushort Port { get; private set; }
         public static string ServerName { get; set; } = "Tony's DFU RP";
         public static int MaxConnections { get; private set; } = 16;
@@ -51,6 +52,7 @@ namespace DFMP.Runtime
         static readonly Dictionary<int, float> lastPositionReportTimes = new Dictionary<int, float>();
         static readonly Dictionary<int, bool> movingLessThanHalfSpeedByConnectionId = new Dictionary<int, bool>();
         static readonly Dictionary<int, float> lastActionReportTimes = new Dictionary<int, float>();
+        static readonly Dictionary<int, float> lastRestHourTimes = new Dictionary<int, float>();
         static readonly HashSet<int> activePositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> rejectedPositionReportConnections = new HashSet<int>();
         static readonly HashSet<int> pendingAdminKickConnections = new HashSet<int>();
@@ -409,6 +411,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPCreateCharacterMessage>(OnCreateCharacter);
             NetworkServer.RegisterHandler<DFMPDeleteCharacterMessage>(OnDeleteCharacter);
             SpawnTimeState();
+            SpawnWorldSettings();
 
             if (enableDiscovery)
             {
@@ -703,6 +706,39 @@ namespace DFMP.Runtime
             NetworkServer.Spawn(timeGo, DFMPTimeState.AssetId);
 
             Debug.Log("[DFMP Time] Server spawned authoritative time state.");
+        }
+
+        private static void SpawnWorldSettings()
+        {
+            if (WorldSettings != null)
+                return;
+
+            GameObject settingsGo = new GameObject("DFMP_WorldSettings");
+            settingsGo.SetActive(false);
+            settingsGo.AddComponent<NetworkIdentity>();
+            WorldSettings = settingsGo.AddComponent<DFMPWorldSettings>();
+            UnityEngine.Object.DontDestroyOnLoad(settingsGo);
+            settingsGo.SetActive(true);
+            NetworkServer.Spawn(settingsGo, DFMPWorldSettings.AssetId);
+            SetRestPolicy(Config != null && Config.Rest != null ? Config.Rest.Policy : DFMPRestPolicies.Disabled);
+            Debug.Log("[DFMP Rest] Server spawned world settings.");
+        }
+
+        public static bool SetRestPolicy(string policy)
+        {
+            if (Config == null)
+                return false;
+
+            if (Config.Rest == null)
+                Config.Rest = new DFMPServerRestConfig();
+
+            Config.Rest.Policy = policy;
+            Config.Rest.Normalize();
+            if (WorldSettings != null)
+                WorldSettings.SetRestPolicy(Config.Rest.Policy);
+
+            Debug.Log($"[DFMP Rest] Server rest policy is {Config.Rest.Policy}.");
+            return true;
         }
 
         public static DFMPPlayerSessionState CreatePlayerSessionState(NetworkConnectionToClient conn)
@@ -2121,18 +2157,94 @@ namespace DFMP.Runtime
             DFMPRestRequestRejectionReason rejectionReason = DFMPRestProtocol.GetRejectionReason(
                 context,
                 request.RestModeName,
-                restPolicy);
+                restPolicy,
+                request.Kind);
+
+            if (DFMPRestProtocol.IsAccepted(rejectionReason) && request.Kind == DFMPRestRequestKind.HourElapsed)
+            {
+                float lastHourTime;
+                float elapsedSeconds = lastRestHourTimes.TryGetValue(conn.connectionId, out lastHourTime)
+                    ? Time.unscaledTime - lastHourTime
+                    : DFMPRestProtocol.MinimumRestHourIntervalSeconds;
+                if (DFMPRestProtocol.IsHourTickTooSoon(elapsedSeconds))
+                    rejectionReason = DFMPRestRequestRejectionReason.RateLimited;
+            }
+
             bool accepted = DFMPRestProtocol.IsAccepted(rejectionReason);
             if (accepted)
-                sessionState.SetResting(true);
+            {
+                if (request.Kind == DFMPRestRequestKind.Start)
+                    sessionState.SetResting(true);
+                else if (request.Kind == DFMPRestRequestKind.Stop)
+                {
+                    sessionState.SetResting(false);
+                    lastRestHourTimes.Remove(conn.connectionId);
+                }
+                else if (request.Kind == DFMPRestRequestKind.HourElapsed)
+                {
+                    lastRestHourTimes[conn.connectionId] = Time.unscaledTime;
+                    ApplyRestHour(conn, sessionState);
+                }
+            }
             else
-                Debug.LogWarning($"[DFMP Rest] Rejected rest request: connectionId={conn.connectionId}, mode={request.RestModeName}, reason={rejectionReason}.");
+            {
+                Debug.LogWarning($"[DFMP Rest] Rejected rest request: connectionId={conn.connectionId}, mode={request.RestModeName}, kind={request.Kind}, reason={rejectionReason}.");
+            }
 
             conn.Send(new DFMPRestResponse
             {
                 Accepted = accepted,
+                Kind = request.Kind,
                 RejectionReason = rejectionReason
             });
+        }
+
+        static void ApplyRestHour(NetworkConnectionToClient conn, DFMPPlayerSessionState sessionState)
+        {
+            DFMPVitalState vitals;
+            if (!vitalStates.TryGetValue(conn.connectionId, out vitals))
+                return;
+
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(conn.connectionId, out joinDecision) || joinDecision.CharacterRecord == null)
+                return;
+
+            DFMPCharacterRecord record = joinDecision.CharacterRecord;
+            DFCareer career;
+            string careerReason;
+            bool hasCareer = DFMPCareerCodec.TryDecode(record.CareerJson, out career, out careerReason);
+            DFMPWorldContextKey worldContext;
+            bool isInside = TryGetSessionWorldContext(conn.connectionId, out worldContext) &&
+                worldContext.Kind != DFMPWorldContextKind.Exterior;
+            uint classicMinutes = TimeState != null ? TimeState.ClassicMinutes : 0;
+            int medicalSkill = record.Skills != null && record.Skills.Length > 0 ? record.Skills[0] : 0;
+            int endurance = record.Attributes != null && record.Attributes.Length > (int)DFCareer.Stats.Endurance
+                ? record.Attributes[(int)DFCareer.Stats.Endurance]
+                : 50;
+
+            DFMPRestRecoveryResult recovery = DFMPRestRecoveryPolicy.ApplyHour(new DFMPRestHourRecoveryContext
+            {
+                Health = vitals.Health,
+                MaxHealth = vitals.MaxHealth,
+                Fatigue = vitals.Fatigue,
+                MaxFatigue = vitals.MaxFatigue,
+                SpellPoints = vitals.SpellPoints,
+                MaxSpellPoints = vitals.MaxSpellPoints,
+                MedicalSkill = medicalSkill,
+                Endurance = endurance,
+                NoSpellPointRegeneration = hasCareer && career.NoRegenSpellPoints,
+                RapidHealing = hasCareer ? career.RapidHealing : DFCareer.RapidHealingFlags.None,
+                IsDay = DFMPRestRecoveryPolicy.IsDayFromClassicMinutes(classicMinutes),
+                IsInside = isInside
+            });
+
+            vitals.ApplyRestRecovery(recovery.HealthRecovered, recovery.FatigueRecovered, recovery.SpellPointsRecovered);
+            vitalStates[conn.connectionId] = vitals;
+            DFMPCharacterPersistence.ApplyVitalState(record, vitals);
+            if (CharacterStore != null)
+                CharacterStore.Save(record);
+            SendVitalSnapshot(conn, vitals, sessionState != null && sessionState.IsDead);
+            Debug.Log($"[DFMP Rest] Applied rest hour: connectionId={conn.connectionId}, health+={recovery.HealthRecovered}, fatigue+={recovery.FatigueRecovered}, spellPoints+={recovery.SpellPointsRecovered}.");
         }
 
         private static void OnPlayerActionReport(NetworkConnectionToClient conn, DFMPPlayerActionReport report)
@@ -2431,6 +2543,7 @@ namespace DFMP.Runtime
             lastPositionReportTimes.Remove(connectionId);
             movingLessThanHalfSpeedByConnectionId.Remove(connectionId);
             lastActionReportTimes.Remove(connectionId);
+            lastRestHourTimes.Remove(connectionId);
             activePositionReportConnections.Remove(connectionId);
             rejectedPositionReportConnections.Remove(connectionId);
             pendingAdminKickConnections.Remove(connectionId);
@@ -2456,6 +2569,7 @@ namespace DFMP.Runtime
             Manager = null;
             Transport = null;
             TimeState = null;
+            WorldSettings = null;
             DungeonGeometryService = null;
             DungeonEnemyRosterService = null;
             playerSessionStates.Clear();
@@ -2473,6 +2587,7 @@ namespace DFMP.Runtime
             lastPositionReportTimes.Clear();
             movingLessThanHalfSpeedByConnectionId.Clear();
             lastActionReportTimes.Clear();
+            lastRestHourTimes.Clear();
             activePositionReportConnections.Clear();
             rejectedPositionReportConnections.Clear();
             pendingAdminKickConnections.Clear();

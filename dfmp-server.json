@@ -61,7 +61,7 @@
     "CommandsEnabled": true
   },
   "Rest": {
-    "Policy": "Disabled"
+    "Policy": "ServerManaged"
   },
   "StartingLocation": {
     "Mode": "LocationCenter",

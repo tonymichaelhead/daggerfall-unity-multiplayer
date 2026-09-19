@@ -35,7 +35,7 @@ namespace DFMP.Runtime
             if (identity == null || observer == null || !observer.isReady)
                 return false;
 
-            if (identity.GetComponent<DFMPTimeState>() != null)
+            if (identity.GetComponent<DFMPTimeState>() != null || identity.GetComponent<DFMPWorldSettings>() != null)
                 return true;
 
             DFMPWorldContextKey identityContext;

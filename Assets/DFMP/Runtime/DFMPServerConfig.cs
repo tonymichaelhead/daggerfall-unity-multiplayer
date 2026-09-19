@@ -150,10 +150,20 @@ namespace DFMP.Runtime
 
         public void Normalize()
         {
-            if (string.Equals(Policy, DFMPRestPolicies.ServerManaged, StringComparison.OrdinalIgnoreCase))
-                Policy = DFMPRestPolicies.ServerManaged;
-            else
-                Policy = DFMPRestPolicies.Disabled;
+            Policy = NormalizePolicy(Policy);
+        }
+
+        public static string NormalizePolicy(string policy)
+        {
+            if (string.Equals(policy, DFMPRestPolicies.ServerManaged, StringComparison.OrdinalIgnoreCase))
+                return DFMPRestPolicies.ServerManaged;
+
+            return DFMPRestPolicies.Disabled;
+        }
+
+        public static bool IsServerManaged(string policy)
+        {
+            return string.Equals(NormalizePolicy(policy), DFMPRestPolicies.ServerManaged, StringComparison.Ordinal);
         }
     }
 

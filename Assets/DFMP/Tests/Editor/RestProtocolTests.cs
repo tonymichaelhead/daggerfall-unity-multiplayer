@@ -1,3 +1,4 @@
+using DaggerfallConnect;
 using DFMP.Runtime;
 using NUnit.Framework;
 
@@ -68,14 +69,65 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void ServerManagedPolicy_IsReservedUntilRecoveryIsImplemented()
+        public void ServerManagedPolicy_AcceptsTimedAndFullRest()
         {
-            DFMPRestRequestRejectionReason reason = DFMPRestProtocol.GetRejectionReason(
-                CreateReadyContext(),
-                "TimedRest",
-                DFMPRestPolicies.ServerManaged);
+            DFMPRestRequestContext context = CreateReadyContext();
 
-            Assert.AreEqual(DFMPRestRequestRejectionReason.ServerManagedUnavailable, reason);
+            Assert.AreEqual(
+                DFMPRestRequestRejectionReason.None,
+                DFMPRestProtocol.GetRejectionReason(context, "TimedRest", DFMPRestPolicies.ServerManaged));
+            Assert.AreEqual(
+                DFMPRestRequestRejectionReason.None,
+                DFMPRestProtocol.GetRejectionReason(context, "FullRest", DFMPRestPolicies.ServerManaged));
+        }
+
+        [Test]
+        public void Loiter_IsAlwaysRejected()
+        {
+            DFMPRestRequestContext context = CreateReadyContext();
+
+            Assert.AreEqual(
+                DFMPRestRequestRejectionReason.LoiterDisabled,
+                DFMPRestProtocol.GetRejectionReason(context, "Loiter", DFMPRestPolicies.Disabled));
+            Assert.AreEqual(
+                DFMPRestRequestRejectionReason.LoiterDisabled,
+                DFMPRestProtocol.GetRejectionReason(context, "Loiter", DFMPRestPolicies.ServerManaged));
+        }
+
+        [Test]
+        public void HourElapsed_RequiresActiveRest()
+        {
+            DFMPRestRequestContext context = CreateReadyContext();
+            DFMPRestRequestRejectionReason notResting = DFMPRestProtocol.GetRejectionReason(
+                context,
+                "TimedRest",
+                DFMPRestPolicies.ServerManaged,
+                DFMPRestRequestKind.HourElapsed);
+            Assert.AreEqual(DFMPRestRequestRejectionReason.NotResting, notResting);
+
+            context.IsResting = true;
+            Assert.AreEqual(
+                DFMPRestRequestRejectionReason.None,
+                DFMPRestProtocol.GetRejectionReason(
+                    context,
+                    "FullRest",
+                    DFMPRestPolicies.ServerManaged,
+                    DFMPRestRequestKind.HourElapsed));
+        }
+
+        [Test]
+        public void Stop_ClearsRestWithoutPolicyCheck()
+        {
+            DFMPRestRequestContext context = CreateReadyContext();
+            context.IsResting = true;
+
+            Assert.AreEqual(
+                DFMPRestRequestRejectionReason.None,
+                DFMPRestProtocol.GetRejectionReason(
+                    context,
+                    "TimedRest",
+                    DFMPRestPolicies.Disabled,
+                    DFMPRestRequestKind.Stop));
         }
 
         [TestCase(true, true, true)]
@@ -89,64 +141,42 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void RecoveryUsesElapsedRealTimeAndCapsAtMaximums()
+        public void HourTickRateLimit_RejectsBursts()
         {
-            DFMPRestVitals vitals = new DFMPRestVitals
-            {
-                Health = 8,
-                MaxHealth = 10,
-                Fatigue = 4,
-                MaxFatigue = 10,
-                SpellPoints = 2,
-                MaxSpellPoints = 10,
-                NoSpellPointRegeneration = false
-            };
-
-            DFMPRestRecoveryResult result = DFMPRestRecoveryPolicy.Calculate(
-                vitals,
-                3,
-                6,
-                12,
-                DFMPRestRecoveryPolicy.SecondsPerRestHour,
-                1f);
-
-            Assert.AreEqual(2, result.HealthRecovered);
-            Assert.AreEqual(6, result.FatigueRecovered);
-            Assert.AreEqual(8, result.SpellPointsRecovered);
-            Assert.IsTrue(result.IsComplete);
+            Assert.IsTrue(DFMPRestProtocol.IsHourTickTooSoon(0.1f));
+            Assert.IsFalse(DFMPRestProtocol.IsHourTickTooSoon(0.5f));
+            Assert.IsFalse(DFMPRestProtocol.IsHourTickTooSoon(0.75f));
         }
 
         [Test]
-        public void RecoveryMultiplierScalesRatesWithoutAdvancingWorldTime()
+        public void VanillaRestHour_RecoveriesMatchFormulaAndCapAtMaximums()
         {
-            DFMPRestVitals vitals = new DFMPRestVitals
+            DFMPRestRecoveryResult result = DFMPRestRecoveryPolicy.ApplyHour(new DFMPRestHourRecoveryContext
             {
-                Health = 0,
-                MaxHealth = 20,
-                Fatigue = 0,
-                MaxFatigue = 20,
-                SpellPoints = 0,
-                MaxSpellPoints = 20
-            };
+                Health = 48,
+                MaxHealth = 50,
+                Fatigue = 14,
+                MaxFatigue = 16,
+                SpellPoints = 14,
+                MaxSpellPoints = 16,
+                MedicalSkill = 30,
+                Endurance = 50,
+                NoSpellPointRegeneration = false,
+                RapidHealing = DFCareer.RapidHealingFlags.None,
+                IsDay = false,
+                IsInside = true
+            });
 
-            DFMPRestRecoveryResult result = DFMPRestRecoveryPolicy.Calculate(
-                vitals,
-                4,
-                8,
-                10,
-                DFMPRestRecoveryPolicy.SecondsPerRestHour / 2f,
-                2f);
-
-            Assert.AreEqual(4, result.HealthRecovered);
-            Assert.AreEqual(8, result.FatigueRecovered);
-            Assert.AreEqual(10, result.SpellPointsRecovered);
-            Assert.IsFalse(result.IsComplete);
+            Assert.AreEqual(2, result.HealthRecovered);
+            Assert.AreEqual(2, result.FatigueRecovered);
+            Assert.AreEqual(2, result.SpellPointsRecovered);
+            Assert.IsTrue(result.IsComplete);
         }
 
         [Test]
         public void NoSpellPointRegenerationStillAllowsRestCompletion()
         {
-            DFMPRestVitals vitals = new DFMPRestVitals
+            DFMPRestRecoveryResult result = DFMPRestRecoveryPolicy.ApplyHour(new DFMPRestHourRecoveryContext
             {
                 Health = 10,
                 MaxHealth = 10,
@@ -154,19 +184,23 @@ namespace DFMP.Tests
                 MaxFatigue = 10,
                 SpellPoints = 0,
                 MaxSpellPoints = 20,
-                NoSpellPointRegeneration = true
-            };
-
-            DFMPRestRecoveryResult result = DFMPRestRecoveryPolicy.Calculate(
-                vitals,
-                1,
-                1,
-                1,
-                0f,
-                1f);
+                MedicalSkill = 1,
+                Endurance = 50,
+                NoSpellPointRegeneration = true,
+                RapidHealing = DFCareer.RapidHealingFlags.None,
+                IsDay = true,
+                IsInside = false
+            });
 
             Assert.AreEqual(0, result.SpellPointsRecovered);
             Assert.IsTrue(result.IsComplete);
+        }
+
+        [Test]
+        public void ClassicMinutes_ClassifyDayAndNight()
+        {
+            Assert.IsTrue(DFMPRestRecoveryPolicy.IsDayFromClassicMinutes(8 * 60));
+            Assert.IsFalse(DFMPRestRecoveryPolicy.IsDayFromClassicMinutes(20 * 60));
         }
 
         static DFMPRestRequestContext CreateReadyContext()

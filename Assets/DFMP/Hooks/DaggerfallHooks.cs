@@ -15,6 +15,8 @@ namespace DFMP.Hooks
         // public static Func<bool> IsHeadlessDedicatedServer;
         public static Func<object, bool> TryHandleFastTravel;
         public static Func<string, bool> TryHandleRestAdvance;
+        public static Func<bool> TryHandleRestWorldTimeTick;
+        public static Action OnRestHourElapsed;
         public static Func<string, int, bool> TryHandleTimeAdvance;
         public static Func<bool> TryHandleVampirismTransformation;
         public static Func<bool> TryHandlePlayerDeath;

@@ -1,3 +1,6 @@
+using DaggerfallConnect;
+using UnityEngine;
+
 namespace DFMP.Runtime
 {
     public struct DFMPRestVitals
@@ -11,6 +14,22 @@ namespace DFMP.Runtime
         public bool NoSpellPointRegeneration;
     }
 
+    public struct DFMPRestHourRecoveryContext
+    {
+        public int Health;
+        public int MaxHealth;
+        public int Fatigue;
+        public int MaxFatigue;
+        public int SpellPoints;
+        public int MaxSpellPoints;
+        public int MedicalSkill;
+        public int Endurance;
+        public bool NoSpellPointRegeneration;
+        public DFCareer.RapidHealingFlags RapidHealing;
+        public bool IsDay;
+        public bool IsInside;
+    }
+
     public struct DFMPRestRecoveryResult
     {
         public int HealthRecovered;
@@ -21,42 +40,88 @@ namespace DFMP.Runtime
 
     public static class DFMPRestRecoveryPolicy
     {
-        public const float SecondsPerRestHour = 3600f;
+        public const int MinutesPerClassicDay = 1440;
+        public const int DawnHour = 6;
+        public const int DuskHour = 18;
 
-        public static DFMPRestRecoveryResult Calculate(
-            DFMPRestVitals vitals,
-            int healthRecoveryPerHour,
-            int fatigueRecoveryPerHour,
-            int spellPointsRecoveryPerHour,
-            float elapsedRealSeconds,
-            float recoveryRateMultiplier)
+        public static bool IsDayFromClassicMinutes(uint classicMinutes)
         {
-            float boundedSeconds = elapsedRealSeconds < 0f ? 0f : elapsedRealSeconds;
-            float boundedMultiplier = recoveryRateMultiplier < 0f ? 0f : recoveryRateMultiplier;
-            float recoveryHours = boundedSeconds / SecondsPerRestHour * boundedMultiplier;
+            int hourOfDay = (int)((classicMinutes % MinutesPerClassicDay) / 60);
+            return hourOfDay >= DawnHour && hourOfDay < DuskHour;
+        }
 
+        public static int CalculateHealthRecoveryRate(
+            int medicalSkill,
+            int endurance,
+            int maxHealth,
+            DFCareer.RapidHealingFlags rapidHealing,
+            bool isDay,
+            bool isInside)
+        {
+            int medical = medicalSkill < 0 ? 0 : medicalSkill;
+            int addToMedical = 60;
+
+            if (rapidHealing == DFCareer.RapidHealingFlags.Always)
+                addToMedical = 100;
+            else if (isDay && !isInside)
+            {
+                if (rapidHealing == DFCareer.RapidHealingFlags.InLight)
+                    addToMedical = 100;
+            }
+            else if (rapidHealing == DFCareer.RapidHealingFlags.InDarkness)
+            {
+                addToMedical = 100;
+            }
+
+            medical += addToMedical;
+            int healingRateModifier = (int)Mathf.Floor((float)endurance / 10f) - 5;
+            return Mathf.Max((int)Mathf.Floor(healingRateModifier + medical * Mathf.Max(1, maxHealth) / 1000), 1);
+        }
+
+        public static int CalculateFatigueRecoveryRate(int maxFatigue)
+        {
+            return Mathf.Max((int)Mathf.Floor(Mathf.Max(1, maxFatigue) / 8), 1);
+        }
+
+        public static int CalculateSpellPointRecoveryRate(int maxSpellPoints, bool noSpellPointRegeneration)
+        {
+            if (noSpellPointRegeneration)
+                return 0;
+
+            return Mathf.Max((int)Mathf.Floor(Mathf.Max(0, maxSpellPoints) / 8), 1);
+        }
+
+        public static DFMPRestRecoveryResult ApplyHour(DFMPRestHourRecoveryContext context)
+        {
             int healthRecovered = GetBoundedRecovery(
-                vitals.Health,
-                vitals.MaxHealth,
-                healthRecoveryPerHour,
-                recoveryHours);
+                context.Health,
+                context.MaxHealth,
+                CalculateHealthRecoveryRate(
+                    context.MedicalSkill,
+                    context.Endurance,
+                    context.MaxHealth,
+                    context.RapidHealing,
+                    context.IsDay,
+                    context.IsInside));
             int fatigueRecovered = GetBoundedRecovery(
-                vitals.Fatigue,
-                vitals.MaxFatigue,
-                fatigueRecoveryPerHour,
-                recoveryHours);
-            int spellPointsRecovered = vitals.NoSpellPointRegeneration
-                ? 0
-                : GetBoundedRecovery(
-                    vitals.SpellPoints,
-                    vitals.MaxSpellPoints,
-                    spellPointsRecoveryPerHour,
-                    recoveryHours);
+                context.Fatigue,
+                context.MaxFatigue,
+                CalculateFatigueRecoveryRate(context.MaxFatigue));
+            int spellPointsRecovered = GetBoundedRecovery(
+                context.SpellPoints,
+                context.MaxSpellPoints,
+                CalculateSpellPointRecoveryRate(context.MaxSpellPoints, context.NoSpellPointRegeneration));
 
-            DFMPRestVitals recoveredVitals = vitals;
-            recoveredVitals.Health += healthRecovered;
-            recoveredVitals.Fatigue += fatigueRecovered;
-            recoveredVitals.SpellPoints += spellPointsRecovered;
+            DFMPRestVitals recoveredVitals = new DFMPRestVitals
+            {
+                Health = context.Health + healthRecovered,
+                MaxHealth = context.MaxHealth,
+                Fatigue = context.Fatigue + fatigueRecovered,
+                MaxFatigue = context.MaxFatigue,
+                SpellPoints = context.SpellPoints + spellPointsRecovered,
+                MaxSpellPoints = context.MaxSpellPoints,
+                NoSpellPointRegeneration = context.NoSpellPointRegeneration
+            };
 
             return new DFMPRestRecoveryResult
             {
@@ -74,17 +139,13 @@ namespace DFMP.Runtime
                    (vitals.NoSpellPointRegeneration || vitals.SpellPoints >= vitals.MaxSpellPoints);
         }
 
-        static int GetBoundedRecovery(int current, int maximum, int recoveryPerHour, float recoveryHours)
+        static int GetBoundedRecovery(int current, int maximum, int recoveryPerHour)
         {
-            if (maximum <= current || recoveryPerHour <= 0 || recoveryHours <= 0f)
+            if (maximum <= current || recoveryPerHour <= 0)
                 return 0;
 
             int available = maximum - current;
-            int recovered = (int)(recoveryPerHour * recoveryHours);
-            if (recovered < 0)
-                return 0;
-
-            return recovered > available ? available : recovered;
+            return recoveryPerHour > available ? available : recoveryPerHour;
         }
     }
 }

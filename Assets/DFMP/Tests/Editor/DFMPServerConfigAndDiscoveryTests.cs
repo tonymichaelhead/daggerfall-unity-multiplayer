@@ -141,6 +141,9 @@ namespace DFMP.Tests
             config.Normalize();
 
             Assert.AreEqual(DFMPRestPolicies.Disabled, config.Rest.Policy);
+            Assert.AreEqual(DFMPRestPolicies.ServerManaged, DFMPServerRestConfig.NormalizePolicy("ServerManaged"));
+            Assert.IsTrue(DFMPServerRestConfig.IsServerManaged("servermanaged"));
+            Assert.IsFalse(DFMPServerRestConfig.IsServerManaged("Disabled"));
         }
 
         [Test]

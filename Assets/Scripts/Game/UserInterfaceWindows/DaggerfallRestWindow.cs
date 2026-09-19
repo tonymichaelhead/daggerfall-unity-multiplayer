@@ -375,8 +375,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                 // Progress world time and tick quest machine
                 // This could cause enemies to be spawned
-                DaggerfallUnity.WorldTime.Now.RaiseTime(minutesPerTick * 60);
-                Questing.QuestMachine.Instance.Tick();
+                if (DFMP.Hooks.DaggerfallHooks.TryHandleRestWorldTimeTick == null || !DFMP.Hooks.DaggerfallHooks.TryHandleRestWorldTimeTick())
+                {
+                    DaggerfallUnity.WorldTime.Now.RaiseTime(minutesPerTick * 60);
+                    Questing.QuestMachine.Instance.Tick();
+                }
 
                 // Count a full hour
                 minutesOfHour += minutesPerTick;
@@ -415,6 +418,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (currentRestMode == RestModes.TimedRest)
             {
                 TickVitals();
+                if (DFMP.Hooks.DaggerfallHooks.OnRestHourElapsed != null)
+                    DFMP.Hooks.DaggerfallHooks.OnRestHourElapsed();
                 hoursRemaining--;
                 if (hoursRemaining < 1)
                     finished = true;
@@ -423,6 +428,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             {
                 if (TickVitals())
                     finished = true;
+                if (DFMP.Hooks.DaggerfallHooks.OnRestHourElapsed != null)
+                    DFMP.Hooks.DaggerfallHooks.OnRestHourElapsed();
             }
             else if (currentRestMode == RestModes.Loiter)
             {
