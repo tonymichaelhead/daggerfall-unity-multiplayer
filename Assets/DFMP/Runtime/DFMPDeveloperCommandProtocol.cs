@@ -55,6 +55,20 @@ namespace DFMP.Runtime
         public string Reason;
     }
 
+    public struct DFMPDeveloperTeleportRequest : NetworkMessage
+    {
+        public string RegionName;
+        public string LocationName;
+    }
+
+    public struct DFMPDeveloperTeleportResponse : NetworkMessage
+    {
+        public bool Accepted;
+        public string RegionName;
+        public string LocationName;
+        public string Reason;
+    }
+
     public struct DFMPDeveloperTeleportDungeonRequest : NetworkMessage
     {
         public string RegionName;

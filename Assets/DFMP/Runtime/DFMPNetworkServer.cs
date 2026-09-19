@@ -410,6 +410,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPAdminKickRequest>(OnAdminKickRequest);
             NetworkServer.RegisterHandler<DFMPAdminKickAcknowledgement>(OnAdminKickAcknowledgement);
             NetworkServer.RegisterHandler<DFMPDeveloperGodModeRequest>(OnDeveloperGodModeRequest);
+            NetworkServer.RegisterHandler<DFMPDeveloperTeleportRequest>(OnDeveloperTeleportRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperTeleportDungeonRequest>(OnDeveloperTeleportDungeonRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperInfectSelfRequest>(OnDeveloperInfectSelfRequest);
             NetworkServer.RegisterHandler<DFMPDeveloperAdvanceTimeRequest>(OnDeveloperAdvanceTimeRequest);
@@ -1503,6 +1504,45 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Developer] Godmode changed: connectionId={conn.connectionId}, enabled={request.Enabled}.");
         }
 
+        private static void OnDeveloperTeleportRequest(NetworkConnectionToClient conn, DFMPDeveloperTeleportRequest request)
+        {
+            if (!IsDeveloperCommandAuthorized(conn, "teleport"))
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            playerSessionStates.TryGetValue(conn.connectionId, out sessionState);
+            DFMPDeveloperCommandRejectionReason commandReason = DFMPDeveloperCommandPolicy.GetInfectSelfRejectionReason(new DFMPDeveloperCommandContext
+            {
+                CommandsEnabled = Config != null && Config.Developer != null && Config.Developer.CommandsEnabled,
+                HasSession = sessionState != null,
+                SpawnConfirmed = sessionState != null && sessionState.SpawnConfirmed
+            });
+            if (!DFMPDeveloperCommandPolicy.IsAccepted(commandReason))
+            {
+                conn.Send(new DFMPDeveloperTeleportResponse { Accepted = false, RegionName = request.RegionName, LocationName = request.LocationName, Reason = commandReason.ToString() });
+                return;
+            }
+
+            DFPosition mapPixel;
+            string resolveReason;
+            if (!TryResolveTravelMapPixel(request.RegionName, request.LocationName, out mapPixel, out resolveReason))
+            {
+                conn.Send(new DFMPDeveloperTeleportResponse { Accepted = false, RegionName = request.RegionName, LocationName = request.LocationName, Reason = resolveReason });
+                return;
+            }
+
+            bool accepted = TrySendFastTravelTransitionAssignment(conn, mapPixel.X, mapPixel.Y);
+            conn.Send(new DFMPDeveloperTeleportResponse
+            {
+                Accepted = accepted,
+                RegionName = request.RegionName,
+                LocationName = request.LocationName,
+                Reason = accepted ? string.Empty : "Transition assignment rejected"
+            });
+            if (accepted)
+                Debug.Log($"[DFMP Developer] Authorized location teleport: connectionId={conn.connectionId}, region='{request.RegionName}', location='{request.LocationName}', mapPixel={mapPixel.X}/{mapPixel.Y}.");
+        }
+
         private static void OnDeveloperTeleportDungeonRequest(NetworkConnectionToClient conn, DFMPDeveloperTeleportDungeonRequest request)
         {
             if (!IsDeveloperCommandAuthorized(conn, "teleport dungeon"))
@@ -1535,7 +1575,8 @@ namespace DFMP.Runtime
                 return;
             }
 
-            DFPosition mapPixel = MapsFile.LongitudeLatitudeToMapPixel(location.MapTableData.Longitude, location.MapTableData.Latitude);
+            // Match the V travel menu pixel for this location (MapId & 0xfffff), not lon/lat alone.
+            DFPosition mapPixel = MapsFile.GetPixelFromPixelID(location.MapTableData.MapId & 0x000fffff);
             int startingBlockIndex = 0;
             if (location.Dungeon.Blocks != null)
             {
@@ -1578,6 +1619,38 @@ namespace DFMP.Runtime
             });
             if (accepted)
                 Debug.Log($"[DFMP Developer] Authorized dungeon teleport: connectionId={conn.connectionId}, region='{request.RegionName}', location='{request.LocationName}'.");
+        }
+
+        /// <summary>
+        /// Resolves a named location to the same map pixel the V travel menu uses
+        /// (<see cref="MapsFile.GetPixelFromPixelID"/> on MapId &amp; 0xfffff).
+        /// </summary>
+        static bool TryResolveTravelMapPixel(string regionName, string locationName, out DFPosition mapPixel, out string reason)
+        {
+            mapPixel = new DFPosition();
+            reason = string.Empty;
+
+            if (DaggerfallUnity.Instance == null || DaggerfallUnity.Instance.ContentReader == null || DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
+            {
+                reason = "Location data unavailable";
+                return false;
+            }
+
+            DFLocation location = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetLocation(regionName, locationName);
+            if (!location.Loaded)
+            {
+                reason = "Location not found";
+                return false;
+            }
+
+            mapPixel = MapsFile.GetPixelFromPixelID(location.MapTableData.MapId & 0x000fffff);
+            if (!DFMPSpawnProtocol.IsValidMapPixel(mapPixel.X, mapPixel.Y))
+            {
+                reason = "Invalid map pixel";
+                return false;
+            }
+
+            return true;
         }
 
         private static void OnDeveloperAdvanceTimeRequest(NetworkConnectionToClient conn, DFMPDeveloperAdvanceTimeRequest request)

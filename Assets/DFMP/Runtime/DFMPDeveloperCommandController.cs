@@ -48,10 +48,16 @@ namespace DFMP.Runtime
                     "Toggle server-authorized invulnerability for this player.",
                     "dfmp_godmode <on|off>",
                     GodMode);
+                NetworkClient.RegisterHandler<DFMPDeveloperTeleportResponse>(OnTeleportResponse);
+                ConsoleCommandsDatabase.RegisterCommand(
+                    "dfmp_teleport",
+                    "Teleport this player to a named location using the same exterior destination as the V travel menu.",
+                    "dfmp_teleport <region> <location>",
+                    Teleport);
                 NetworkClient.RegisterHandler<DFMPDeveloperTeleportDungeonResponse>(OnTeleportDungeonResponse);
                 ConsoleCommandsDatabase.RegisterCommand(
                     "dfmp_teleport_dungeon",
-                    "Teleport this player to a named dungeon for testing.",
+                    "Teleport this player into a named dungeon interior for testing (not the V travel exterior).",
                     "dfmp_teleport_dungeon <region> <location>",
                     TeleportDungeon);
                 registered = true;
@@ -168,16 +174,39 @@ namespace DFMP.Runtime
                 Debug.LogWarning($"[DFMP Developer] Server rejected godmode: reason={response.Reason}.");
         }
 
-        static string TeleportDungeon(params string[] args)
+        static string Teleport(params string[] args)
         {
-            if (args == null || args.Length < 2 || string.IsNullOrWhiteSpace(args[0]))
-                return "Usage: dfmp_teleport_dungeon <region> <location>";
+            string locationName;
+            string usageError;
+            if (!TryParseRegionLocationArgs(args, "dfmp_teleport", out locationName, out usageError))
+                return usageError;
             if (!NetworkClient.isConnected || !NetworkClient.ready)
                 return "DFMP client is not connected and ready.";
 
-            string locationName = string.Join(" ", args, 1, args.Length - 1).Trim('"');
-            if (string.IsNullOrWhiteSpace(locationName))
-                return "Usage: dfmp_teleport_dungeon <region> <location>";
+            NetworkClient.Send(new DFMPDeveloperTeleportRequest
+            {
+                RegionName = args[0],
+                LocationName = locationName
+            });
+            return $"Requested location teleport: region='{args[0]}', location='{locationName}'.";
+        }
+
+        static void OnTeleportResponse(DFMPDeveloperTeleportResponse response)
+        {
+            if (response.Accepted)
+                Debug.Log($"[DFMP Developer] Location teleport accepted: region='{response.RegionName}', location='{response.LocationName}'.");
+            else
+                Debug.LogWarning($"[DFMP Developer] Location teleport rejected: region='{response.RegionName}', location='{response.LocationName}', reason={response.Reason}.");
+        }
+
+        static string TeleportDungeon(params string[] args)
+        {
+            string locationName;
+            string usageError;
+            if (!TryParseRegionLocationArgs(args, "dfmp_teleport_dungeon", out locationName, out usageError))
+                return usageError;
+            if (!NetworkClient.isConnected || !NetworkClient.ready)
+                return "DFMP client is not connected and ready.";
 
             NetworkClient.Send(new DFMPDeveloperTeleportDungeonRequest
             {
@@ -193,6 +222,21 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Developer] Dungeon teleport accepted: region='{response.RegionName}', location='{response.LocationName}'.");
             else
                 Debug.LogWarning($"[DFMP Developer] Dungeon teleport rejected: region='{response.RegionName}', location='{response.LocationName}', reason={response.Reason}.");
+        }
+
+        static bool TryParseRegionLocationArgs(string[] args, string commandName, out string locationName, out string usageError)
+        {
+            locationName = null;
+            usageError = $"Usage: {commandName} <region> <location>";
+            if (args == null || args.Length < 2 || string.IsNullOrWhiteSpace(args[0]))
+                return false;
+
+            locationName = string.Join(" ", args, 1, args.Length - 1).Trim('"');
+            if (string.IsNullOrWhiteSpace(locationName))
+                return false;
+
+            usageError = null;
+            return true;
         }
     }
 }

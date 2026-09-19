@@ -85,6 +85,16 @@ This toggles server-side invulnerability for the requesting connection. While en
 
 Godmode is an ephemeral developer test flag. It is cleared on disconnect, disabled unless developer commands are enabled, and is not an administrator permission or production gameplay feature. Admin-menu access is deferred to the future admin action surface.
 
+## `dfmp_teleport`
+
+Run this in the connected DFMP client's DFU console while developer commands are enabled:
+
+```text
+dfmp_teleport Daggerfall "Privateer's Hold"
+```
+
+The server resolves the region and location name to the same map pixel the V travel menu uses (`MapId & 0xfffff`), then sends the normal server-authoritative fast-travel transition. You land at the exterior destination (first start marker), not inside a dungeon. This works even when the location is not revealed on the local travel map.
+
 ## `dfmp_teleport_dungeon`
 
 Run this in the connected DFMP client's DFU console while developer commands are enabled:
@@ -93,9 +103,11 @@ Run this in the connected DFMP client's DFU console while developer commands are
 dfmp_teleport_dungeon Daggerfall "Privateer's Hold"
 ```
 
-The server resolves the region and location name, verifies that the location has a dungeon, and sends the normal server-authoritative dungeon-entry assignment. This works even when the location is not revealed on the local fast-travel map. The command is developer-only and intended for testing; it does not grant general teleport or administrator permissions.
+The server resolves the region and location name, verifies that the location has a dungeon, and sends the normal server-authoritative dungeon-entry assignment into the interior. Use `dfmp_teleport` when you want the V-menu exterior destination instead. The command is developer-only and intended for testing; it does not grant general teleport or administrator permissions.
 
-The command is intentionally developer-only and bounded. It accepts only a target connection ID and damage amount for this smoke-test path. Future server actions should use the same validated service boundary:
+## Future server actions
+
+Future world-control actions should use the same validated service boundary:
 
 - R2 scripts call server actions rather than mutating player objects directly.
 - R3 admin/GM commands send authorized server requests and use the same action implementation.
