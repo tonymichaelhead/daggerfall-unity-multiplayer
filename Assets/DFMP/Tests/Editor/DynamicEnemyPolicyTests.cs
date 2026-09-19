@@ -605,6 +605,39 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemyStrike_RequiresLiveRangeAndSight()
+        {
+            Assert.IsFalse(DFMPDynamicEnemyStrikePolicy.CanStrike(
+                true,
+                true,
+                false,
+                Vector3.zero,
+                new Vector3(1f, 0f, 0f),
+                2.25f));
+            Assert.IsFalse(DFMPDynamicEnemyStrikePolicy.CanStrike(
+                true,
+                true,
+                true,
+                Vector3.zero,
+                new Vector3(10f, 0f, 0f),
+                2.25f));
+            Assert.IsFalse(DFMPDynamicEnemyStrikePolicy.CanStrike(
+                true,
+                false,
+                true,
+                Vector3.zero,
+                new Vector3(1f, 0f, 0f),
+                2.25f));
+            Assert.IsTrue(DFMPDynamicEnemyStrikePolicy.CanStrike(
+                true,
+                true,
+                true,
+                Vector3.zero,
+                new Vector3(1f, 0f, 0f),
+                2.25f));
+        }
+
+        [Test]
         public void GiveUpTimer_RefreshesWhileDetectedAndDecaysAtClassicInterval()
         {
             int timer = 0;
@@ -1578,6 +1611,132 @@ namespace DFMP.Tests
             }
             finally
             {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonRosterService_AiTick_DoesNotAttackWhenLiveTargetLeavesMeleeRange()
+        {
+            GameObject serviceObject = new GameObject("DFMP_RosterServicePhantomMeleeTest");
+            GameObject sessionObject = new GameObject("DFMP_RosterServicePhantomMeleeSession");
+            try
+            {
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                int attackCount = 0;
+                service.SetServerEnemyDamageApplierForTesting((appliedEnemyId, appliedTargetConnectionId, appliedAmount) =>
+                {
+                    attackCount++;
+                    return true;
+                });
+
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "ai-phantom-melee-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 10f,
+                    AttackCooldownSeconds = 1.5f,
+                    AttackDamage = 7,
+                    RequireLineOfSight = false
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(69, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext();
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(69, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("ai-phantom-melee-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 enemyPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, enemyPosition + new Vector3(1f, 0f, 0f));
+
+                service.ProcessAiTick(10f, 0.1f);
+                Assert.AreEqual(1, attackCount);
+
+                session.SetDungeonLocalPosition(true, enemyPosition + new Vector3(10f, 0f, 0f));
+                service.ProcessAiTick(12f, 0.1f);
+
+                Assert.AreEqual(1, attackCount);
+                Assert.AreEqual(69, GetRecord(service, enemyId).TargetConnectionId);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonRosterService_AiTick_DoesNotAttackWithoutLineOfSightInMeleeRange()
+        {
+            GameObject geometryObject = new GameObject("DFMP_RosterServiceMeleeLosGeometry");
+            GameObject serviceObject = new GameObject("DFMP_RosterServiceMeleeLosRoster");
+            GameObject sessionObject = new GameObject("DFMP_RosterServiceMeleeLosSession");
+            try
+            {
+                var geometry = geometryObject.AddComponent<DFMPDungeonGeometryService>();
+                geometry.Initialize();
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                int attackCount = 0;
+                service.SetServerEnemyDamageApplierForTesting((appliedEnemyId, appliedTargetConnectionId, appliedAmount) =>
+                {
+                    attackCount++;
+                    return true;
+                });
+                service.SetDungeonGeometryServiceForTesting(geometry);
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "ai-melee-los-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 10f,
+                    AttackCooldownSeconds = 1.5f,
+                    AttackDamage = 7,
+                    RequireLineOfSight = true
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(70, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "melee-los");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(70, session, dungeon, "test"));
+
+                DFMPDynamicEnemyRecord[] roster;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryCreateRoster(DFMPDungeonRosterPolicy.CreateServerWorldSeed("ai-melee-los-seed"), dungeon, 1, out roster));
+                string enemyId = roster[0].Identity.EnemyId;
+                Vector3 enemyPosition = roster[0].Descriptor.DungeonLocalPosition;
+                session.SetDungeonLocalPosition(true, enemyPosition + new Vector3(1.5f, 0f, 0f));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(geometry.TryGetRoot(scope, out root));
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = enemyPosition + new Vector3(0.75f, 1f, 0f);
+                wall.transform.localScale = new Vector3(0.25f, 3f, 3f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(geometry.TryMarkGeometryAvailableForTesting(scope));
+
+                service.ProcessAiTick(10f, 0.1f);
+                service.ProcessAiTick(11.6f, 0.1f);
+
+                Assert.AreEqual(0, attackCount);
+                Assert.AreEqual(enemyId, GetRecord(service, enemyId).Identity.EnemyId);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(geometryObject);
                 UnityObject.DestroyImmediate(serviceObject);
                 UnityObject.DestroyImmediate(sessionObject);
                 DFMPNetworkServer.Stop();

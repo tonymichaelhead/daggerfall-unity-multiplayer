@@ -213,6 +213,22 @@ namespace DFMP.Runtime
         }
     }
 
+    /// <summary>
+    /// Native EnemyAttack.MeleeDamage analogue: strike the live target, not last-known destination.
+    /// </summary>
+    public static class DFMPDynamicEnemyStrikePolicy
+    {
+        public static bool CanStrike(bool hasTarget, bool canAct, bool targetInSight, Vector3 enemyPosition, Vector3 liveTargetPosition, float attackRange)
+        {
+            if (!hasTarget || !canAct || !targetInSight)
+                return false;
+
+            Vector3 offset = liveTargetPosition - enemyPosition;
+            offset.y = 0f;
+            return offset.magnitude <= Mathf.Max(0f, attackRange);
+        }
+    }
+
     public static class DFMPDynamicEnemyAiPolicy
     {
         public static DFMPDynamicEnemyAiDecision Evaluate(DFMPDynamicEnemyAiInput input)

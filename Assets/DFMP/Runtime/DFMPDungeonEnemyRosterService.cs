@@ -20,7 +20,9 @@ namespace DFMP.Runtime
         readonly Dictionary<string, int> lastLoggedTargetConnectionIdsByEnemyId = new Dictionary<string, int>();
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
+        readonly Dictionary<string, float> lastStrikeRejectLogTimesByEnemyId = new Dictionary<string, float>();
         readonly HashSet<DFMPDungeonGeometryScopeKey> missingLineOfSightGeometryWarnings = new HashSet<DFMPDungeonGeometryScopeKey>();
+        const float StrikeRejectLogIntervalSeconds = 2f;
         ulong serverWorldSeed;
         int dungeonRosterSize;
         float despawnDelaySeconds;
@@ -175,6 +177,7 @@ namespace DFMP.Runtime
         {
             pendingDespawnTimes.Clear();
             lastAttackTimesByEnemyId.Clear();
+            lastStrikeRejectLogTimesByEnemyId.Clear();
             sensesByEnemyId.Clear();
             blockedMovementTicksByEnemyId.Clear();
             stuckRecoveryTimesByEnemyId.Clear();
@@ -277,9 +280,53 @@ namespace DFMP.Runtime
                 if (registry.TryUpdateAiState(true, record.Identity.EnemyId, descriptor, decision.TargetConnectionId, isMoving, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
                     UpdateStateProjection(updatedRecord);
 
-                if (decision.HasTarget && decision.InAttackRange && senses.CanAct && GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime) < 0)
-                    TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, attackProfile.Kind, currentTime);
+                if (decision.HasTarget && senses.CanAct && GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime) < 0)
+                {
+                    Vector3 liveTargetPosition;
+                    bool hasLiveTarget = TryGetLiveTargetPosition(decision.TargetConnectionId, out liveTargetPosition);
+                    bool targetInSightForStrike = hasLiveTarget &&
+                        DFMPDynamicEnemySensesPolicy.IsWithinSightRange(descriptor.DungeonLocalPosition, liveTargetPosition, sightModifier) &&
+                        DFMPDynamicEnemySensesPolicy.IsWithinFieldOfView(descriptor.DungeonLocalPosition, descriptor.FacingYaw, liveTargetPosition) &&
+                        (!requireLineOfSight || HasDungeonLineOfSight(context, descriptor.DungeonLocalPosition, liveTargetPosition));
+                    bool canStrike = hasLiveTarget &&
+                        DFMPDynamicEnemyStrikePolicy.CanStrike(
+                            decision.HasTarget,
+                            senses.CanAct,
+                            targetInSightForStrike,
+                            descriptor.DungeonLocalPosition,
+                            liveTargetPosition,
+                            attackProfile.Range);
+                    if (canStrike)
+                        TryAttackTarget(record.Identity.EnemyId, decision.TargetConnectionId, attackProfile.Kind, currentTime);
+                    else if (decision.InAttackRange)
+                        LogStrikeRejected(record.Identity.EnemyId, decision.TargetConnectionId, targetInSightForStrike, descriptor.DungeonLocalPosition, liveTargetPosition, destination, currentTime);
+                }
             }
+        }
+
+        static bool TryGetLiveTargetPosition(int targetConnectionId, out Vector3 liveTargetPosition)
+        {
+            liveTargetPosition = Vector3.zero;
+            DFMPPlayerSessionState sessionState;
+            if (!DFMPNetworkServer.TryGetPlayerSessionState(targetConnectionId, out sessionState) || sessionState == null || !sessionState.HasDungeonLocalPosition)
+                return false;
+
+            liveTargetPosition = sessionState.DungeonLocalPosition;
+            return true;
+        }
+
+        void LogStrikeRejected(string enemyId, int targetConnectionId, bool targetInSight, Vector3 enemyPosition, Vector3 liveTargetPosition, Vector3 lastKnownPosition, float currentTime)
+        {
+            float lastLogTime;
+            if (lastStrikeRejectLogTimesByEnemyId.TryGetValue(enemyId, out lastLogTime) && currentTime - lastLogTime < StrikeRejectLogIntervalSeconds)
+                return;
+
+            lastStrikeRejectLogTimesByEnemyId[enemyId] = currentTime;
+            Vector3 liveOffset = liveTargetPosition - enemyPosition;
+            liveOffset.y = 0f;
+            Vector3 lastKnownOffset = lastKnownPosition - enemyPosition;
+            lastKnownOffset.y = 0f;
+            Debug.Log($"[DFMP Enemy] Attack withheld: enemyId={enemyId}, target={targetConnectionId}, targetInSight={targetInSight}, liveDistance={liveOffset.magnitude:0.###}, lastKnownDistance={lastKnownOffset.magnitude:0.###}.");
         }
 
         DFMPDynamicEnemySensesState GetOrCreateSensesState(string enemyId)
@@ -760,6 +807,7 @@ namespace DFMP.Runtime
                 return;
 
             lastAttackTimesByEnemyId.Remove(enemyId);
+            lastStrikeRejectLogTimesByEnemyId.Remove(enemyId);
             blockedMovementTicksByEnemyId.Remove(enemyId);
             stuckRecoveryTimesByEnemyId.Remove(enemyId);
             stuckTargetConnectionIdsByEnemyId.Remove(enemyId);

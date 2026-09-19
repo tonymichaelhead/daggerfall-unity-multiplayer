@@ -62,6 +62,7 @@ namespace DFMP.Runtime
 
         readonly Dictionary<DFMPDungeonGeometryScopeKey, HostedDungeonGeometry> hostedGeometryByScope = new Dictionary<DFMPDungeonGeometryScopeKey, HostedDungeonGeometry>();
         readonly Dictionary<int, DFMPDungeonGeometryScopeKey> scopeByConnectionId = new Dictionary<int, DFMPDungeonGeometryScopeKey>();
+        readonly HashSet<ulong> missingActionDoorWarnings = new HashSet<ulong>();
         bool isSubscribed;
         float nextUngroundedLogTime;
 
@@ -155,6 +156,49 @@ namespace DFMP.Runtime
             Vector3 toWorldPosition = DungeonLocalToHostedWorldPosition(hostedGeometry.Root.transform, toDungeonLocalPosition + Vector3.up);
             hasLineOfSight = !HasHostedGeometryBlocker(hostedGeometry.Root.transform, fromWorldPosition, toWorldPosition);
             return true;
+        }
+
+        public bool TryApplyActionDoor(DFMPWorldContextKey context, ulong loadID, bool isOpen)
+        {
+            if (loadID == 0)
+                return false;
+
+            DFMPDungeonGeometryScopeKey scope;
+            if (!TryCreateScope(context, out scope))
+                return false;
+
+            HostedDungeonGeometry hostedGeometry;
+            if (!hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) || hostedGeometry == null || hostedGeometry.Root == null)
+                return false;
+
+            DaggerfallActionDoor[] doors = hostedGeometry.Root.GetComponentsInChildren<DaggerfallActionDoor>(true);
+            for (int index = 0; index < doors.Length; index++)
+            {
+                DaggerfallActionDoor door = doors[index];
+                if (door == null || door.LoadID != loadID)
+                    continue;
+
+                door.PlaySounds = false;
+                door.SetOpen(isOpen, true);
+                ApplyHostedActionDoorCollider(door, isOpen);
+                return true;
+            }
+
+            if (missingActionDoorWarnings.Add(loadID))
+                Debug.LogWarning($"[DFMP Dungeon Geometry] Hosted action door not found: loadID={loadID}, scope={scope}.");
+
+            return false;
+        }
+
+        static void ApplyHostedActionDoorCollider(DaggerfallActionDoor door, bool isOpen)
+        {
+            if (door == null)
+                return;
+
+            door.CurrentState = isOpen ? ActionState.End : ActionState.Start;
+            BoxCollider boxCollider = door.GetComponent<BoxCollider>();
+            if (boxCollider != null && boxCollider.enabled)
+                boxCollider.isTrigger = isOpen;
         }
 
         public bool TryResolveMovement(DFMPWorldContextKey context, Vector3 fromDungeonLocalPosition, Vector3 desiredDungeonLocalPosition, float radius, float height, out Vector3 resolvedDungeonLocalPosition, out bool blocked)
@@ -580,6 +624,7 @@ namespace DFMP.Runtime
 
             hostedGeometryByScope.Clear();
             scopeByConnectionId.Clear();
+            missingActionDoorWarnings.Clear();
         }
     }
 }

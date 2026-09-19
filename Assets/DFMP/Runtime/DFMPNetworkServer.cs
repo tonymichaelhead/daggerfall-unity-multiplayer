@@ -1204,6 +1204,8 @@ namespace DFMP.Runtime
             if (!worldOccupancy.TryGetContext(conn.connectionId, out senderContext))
                 return;
 
+            bool appliedHosted = DungeonGeometryService != null && DungeonGeometryService.TryApplyActionDoor(senderContext, message.LoadID, message.IsOpen);
+
             int[] coLocated = GetConnectionsInInterestScope(senderContext);
             int relayedCount = 0;
             for (int i = 0; i < coLocated.Length; i++)
@@ -1220,7 +1222,7 @@ namespace DFMP.Runtime
                 }
             }
 
-            Debug.Log($"[DFMP World] Relayed action door sync: sender={conn.connectionId}, loadID={message.LoadID}, isOpen={message.IsOpen}, context={senderContext}, recipients={relayedCount}.");
+            Debug.Log($"[DFMP World] Relayed action door sync: sender={conn.connectionId}, loadID={message.LoadID}, isOpen={message.IsOpen}, context={senderContext}, recipients={relayedCount}, appliedHosted={appliedHosted}.");
         }
 
         private static void OnVampirismTransformationRequest(NetworkConnectionToClient conn, DFMPVampirismTransformationRequest request)

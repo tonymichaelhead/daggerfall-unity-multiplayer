@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using DFMP.Runtime;
+using DaggerfallWorkshop;
 using Mirror;
 using UnityEngine;
 
@@ -420,6 +421,53 @@ namespace DFMP.Tests
                 bool hasLineOfSight;
                 Assert.IsTrue(service.TryHasLineOfSight(dungeon, Vector3.zero, new Vector3(0f, 0f, 4f), out hasLineOfSight));
                 Assert.IsFalse(hasLineOfSight);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_AppliesHostedActionDoorByLoadId()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryActionDoorTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryActionDoorSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "action-door");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(118, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                GameObject doorGo = new GameObject("DFMP_HostedActionDoor");
+                doorGo.transform.SetParent(root.transform, false);
+                doorGo.transform.localPosition = new Vector3(0f, 1f, 2f);
+                doorGo.AddComponent<AudioSource>();
+                BoxCollider doorCollider = doorGo.AddComponent<BoxCollider>();
+                doorCollider.size = new Vector3(1f, 2f, 0.25f);
+                DaggerfallActionDoor door = doorGo.AddComponent<DaggerfallActionDoor>();
+                door.LoadID = 29540811UL;
+                door.PlaySounds = false;
+                Physics.SyncTransforms();
+
+                Assert.IsFalse(service.TryApplyActionDoor(dungeon, 1UL, true));
+                Assert.IsTrue(service.TryApplyActionDoor(dungeon, 29540811UL, true));
+                Assert.IsTrue(door.IsOpen);
+                Assert.IsTrue(doorCollider.isTrigger);
+
+                Assert.IsTrue(service.TryApplyActionDoor(dungeon, 29540811UL, false));
+                Assert.IsTrue(door.IsClosed);
+                Assert.IsFalse(doorCollider.isTrigger);
             }
             finally
             {
