@@ -2,6 +2,7 @@ using System.IO;
 using NUnit.Framework;
 using DaggerfallWorkshop.Game.Serialization;
 using DFMP.Runtime;
+using UnityEngine;
 
 namespace DFMP.Tests
 {
@@ -260,6 +261,84 @@ namespace DFMP.Tests
             Assert.AreEqual("Daggerfall", restored.Context.LocationId);
             Assert.AreEqual(12345, restored.Context.BuildingKey);
             Assert.AreEqual("shared", restored.Context.InstanceId);
+        }
+
+        [Test]
+        public void CharacterRecord_RoundTripsInteriorReopenPayload()
+        {
+            var original = DFMPCharacterRecord.CreateNew("account-reopen", "world-b", "Reopener");
+            original.HasInteriorLocalPosition = true;
+            original.InteriorLocalX = 3.25f;
+            original.InteriorLocalY = 0.5f;
+            original.InteriorLocalZ = -7.5f;
+            original.ExteriorDoors = new[]
+            {
+                new DFMPStaticDoorRecord
+                {
+                    BuildingKey = 4242,
+                    BlockIndex = 1,
+                    RecordIndex = 2,
+                    DoorIndex = 0,
+                    CentreX = 1f,
+                    CentreY = 2f,
+                    CentreZ = 3f
+                }
+            };
+
+            var restored = DFMPCharacterRecord.FromJson(original.ToJson(), "account-reopen", "world-b");
+
+            Assert.AreEqual(DFMPCharacterRecord.CurrentSchemaVersion, restored.SchemaVersion);
+            Assert.IsTrue(restored.HasInteriorLocalPosition);
+            Assert.AreEqual(3.25f, restored.InteriorLocalX);
+            Assert.AreEqual(0.5f, restored.InteriorLocalY);
+            Assert.AreEqual(-7.5f, restored.InteriorLocalZ);
+            Assert.NotNull(restored.ExteriorDoors);
+            Assert.AreEqual(1, restored.ExteriorDoors.Length);
+            Assert.AreEqual(4242, restored.ExteriorDoors[0].BuildingKey);
+            Assert.AreEqual(1, restored.ExteriorDoors[0].BlockIndex);
+            Assert.AreEqual(2, restored.ExteriorDoors[0].RecordIndex);
+            Assert.AreEqual(1f, restored.ExteriorDoors[0].CentreX);
+        }
+
+        [Test]
+        public void CharacterPersistence_ApplySessionStateCopiesInteriorReopenPayload()
+        {
+            var record = DFMPCharacterRecord.CreateNew("account-session", "world-b", "Session");
+            var sessionGo = new GameObject("DFMP_SessionState_InteriorPersist");
+            try
+            {
+                sessionGo.AddComponent<Mirror.NetworkIdentity>();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(9, 6792821, 0f, 9374554);
+                session.SetDisplayName("Session");
+                session.SetDungeonLocalPosition(true, new Vector3(4f, 1f, -2f));
+                session.SetExteriorDoors(new[]
+                {
+                    new DFMPStaticDoorRecord { BuildingKey = 99, DoorIndex = 1 }
+                });
+
+                var context = new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.BuildingInterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    BuildingKey = 99,
+                    LocationId = "Daggerfall"
+                };
+
+                DFMPCharacterPersistence.ApplySessionState(record, session, context);
+
+                Assert.IsTrue(record.HasInteriorLocalPosition);
+                Assert.AreEqual(4f, record.InteriorLocalX);
+                Assert.AreEqual(1f, record.InteriorLocalY);
+                Assert.AreEqual(-2f, record.InteriorLocalZ);
+                Assert.AreEqual(1, record.ExteriorDoors.Length);
+                Assert.AreEqual(99, record.ExteriorDoors[0].BuildingKey);
+            }
+            finally
+            {
+                Object.DestroyImmediate(sessionGo);
+            }
         }
 
         [Test]

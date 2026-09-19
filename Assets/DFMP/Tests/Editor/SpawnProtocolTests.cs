@@ -25,9 +25,10 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void TransitionReportPolicy_RequestsImmediateContextOnlyForDungeonEntry()
+        public void TransitionReportPolicy_RequestsImmediateContextForDungeonEntryAndReconnect()
         {
             Assert.IsTrue(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.DungeonEntry));
+            Assert.IsTrue(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.Reconnect));
             Assert.IsFalse(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.DungeonExit));
             Assert.IsFalse(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.Door));
             Assert.IsFalse(DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind.DeathRespawn));
@@ -243,6 +244,47 @@ namespace DFMP.Tests
             Assert.AreEqual(context.LocationId, report.LocationId);
             Assert.AreEqual(context.DungeonBlockIndex, report.DungeonBlockIndex);
             Assert.AreEqual(context.DungeonBlockName, report.DungeonBlockName);
+        }
+
+        [Test]
+        public void TransitionAssignment_CarriesInteriorReopenPayload()
+        {
+            var door = new DaggerfallWorkshop.StaticDoor
+            {
+                buildingKey = 55,
+                blockIndex = 2,
+                recordIndex = 3,
+                doorIndex = 1
+            };
+
+            var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(
+                9,
+                3,
+                DFMPTransitionKind.Reconnect,
+                new DFMPWorldPosition { WorldX = 6792821, WorldY = 0f, WorldZ = 9374554 },
+                new DFMPWorldContextKey
+                {
+                    Kind = DFMPWorldContextKind.BuildingInterior,
+                    MapPixelX = 207,
+                    MapPixelY = 213,
+                    BuildingKey = 55,
+                    LocationId = "Daggerfall"
+                },
+                null,
+                -1,
+                true,
+                new Vector3(2f, 0.5f, -1f),
+                true,
+                door);
+
+            Assert.IsTrue(assignment.HasInteriorLocalPosition);
+            Assert.AreEqual(2f, assignment.InteriorLocalX);
+            Assert.AreEqual(0.5f, assignment.InteriorLocalY);
+            Assert.AreEqual(-1f, assignment.InteriorLocalZ);
+            Assert.IsTrue(assignment.HasExteriorDoor);
+            Assert.AreEqual(55, assignment.ExteriorDoor.BuildingKey);
+            Assert.AreEqual(2, assignment.ExteriorDoor.BlockIndex);
+            Assert.AreEqual(DFMPWorldContextKind.BuildingInterior, assignment.ContextKind);
         }
 
         [Test]
@@ -678,16 +720,22 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void JoinSpawn_FlattensDungeonLogoutToExteriorAtPersistedCoordinates()
+        public void JoinSpawn_PreservesDungeonLogoutWhenReopenPayloadIsValid()
         {
             var record = DFMPCharacterRecord.CreateNew("account-dungeon", "world-a", "Delver");
             record.WorldX = 6792821;
             record.WorldZ = 9374554;
+            record.HasInteriorLocalPosition = true;
+            record.InteriorLocalX = 12f;
+            record.InteriorLocalY = 1f;
+            record.InteriorLocalZ = -4f;
             record.Context = new DFMPWorldContextRecord
             {
                 Kind = "Dungeon",
                 MapPixelX = 207,
                 MapPixelY = 213,
+                RegionIndex = 17,
+                LocationIndex = 0,
                 LocationId = "Privateer's Hold"
             };
 
@@ -698,9 +746,89 @@ namespace DFMP.Tests
             Assert.IsTrue(usedPersistedPosition);
             Assert.AreEqual(6792821, resolution.Position.WorldX);
             Assert.AreEqual(9374554, resolution.Position.WorldZ);
-            Assert.AreEqual(DFMPWorldContextKind.Exterior, resolution.Context.Kind);
+            Assert.AreEqual(DFMPWorldContextKind.Dungeon, resolution.Context.Kind);
             Assert.AreEqual("Privateer's Hold", resolution.Context.LocationId);
+            Assert.AreEqual(207, resolution.Context.MapPixelX);
+            Assert.AreEqual(213, resolution.Context.MapPixelY);
+        }
+
+        [Test]
+        public void JoinSpawn_FlattensDungeonLogoutWithoutLocationIdentity()
+        {
+            var record = DFMPCharacterRecord.CreateNew("account-dungeon-fallback", "world-a", "Delver");
+            record.WorldX = 6792821;
+            record.WorldZ = 9374554;
+            record.Context = new DFMPWorldContextRecord
+            {
+                Kind = "Dungeon",
+                MapPixelX = 207,
+                MapPixelY = 213
+            };
+
+            DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveJoinSpawn(record, null, out resolution, out usedPersistedPosition, out reason), reason);
+            Assert.IsTrue(usedPersistedPosition);
+            Assert.AreEqual(DFMPWorldContextKind.Exterior, resolution.Context.Kind);
             Assert.IsTrue(DFMPSpawnProtocol.IsValidMapPixel(resolution.Context.MapPixelX, resolution.Context.MapPixelY));
+        }
+
+        [Test]
+        public void JoinSpawn_PreservesBuildingInteriorWhenExteriorDoorIsPersisted()
+        {
+            var record = DFMPCharacterRecord.CreateNew("account-building", "world-a", "Shopper");
+            record.WorldX = 6792821;
+            record.WorldZ = 9374554;
+            record.HasInteriorLocalPosition = true;
+            record.InteriorLocalX = 1.5f;
+            record.InteriorLocalY = 0.2f;
+            record.InteriorLocalZ = 2f;
+            record.Context = new DFMPWorldContextRecord
+            {
+                Kind = "BuildingInterior",
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 17,
+                LocationIndex = 0,
+                LocationId = "Daggerfall",
+                BuildingKey = 12345
+            };
+            record.ExteriorDoors = new[]
+            {
+                new DFMPStaticDoorRecord { BuildingKey = 12345 }
+            };
+
+            DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveJoinSpawn(record, null, out resolution, out usedPersistedPosition, out reason), reason);
+            Assert.IsTrue(usedPersistedPosition);
+            Assert.AreEqual(DFMPWorldContextKind.BuildingInterior, resolution.Context.Kind);
+            Assert.AreEqual(12345, resolution.Context.BuildingKey);
+        }
+
+        [Test]
+        public void JoinSpawn_FlattensBuildingInteriorWithoutExteriorDoors()
+        {
+            var record = DFMPCharacterRecord.CreateNew("account-building-fallback", "world-a", "Shopper");
+            record.WorldX = 6792821;
+            record.WorldZ = 9374554;
+            record.Context = new DFMPWorldContextRecord
+            {
+                Kind = "BuildingInterior",
+                MapPixelX = 207,
+                MapPixelY = 213,
+                BuildingKey = 12345,
+                LocationId = "Daggerfall"
+            };
+
+            DFMPStartingLocationResolution resolution;
+            bool usedPersistedPosition;
+            string reason;
+            Assert.IsTrue(DFMPSpawnProtocol.TryResolveJoinSpawn(record, null, out resolution, out usedPersistedPosition, out reason), reason);
+            Assert.IsTrue(usedPersistedPosition);
+            Assert.AreEqual(DFMPWorldContextKind.Exterior, resolution.Context.Kind);
         }
 
         [Test]

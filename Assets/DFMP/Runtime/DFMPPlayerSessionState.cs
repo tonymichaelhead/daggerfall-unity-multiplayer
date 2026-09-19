@@ -73,6 +73,9 @@ namespace DFMP.Runtime
         [SyncVar]
         uint actionSequence;
 
+        // Server-only reopen payload for building interiors; not replicated.
+        DFMPStaticDoorRecord[] exteriorDoors = new DFMPStaticDoorRecord[0];
+
         public int ConnectionId
         {
             get { return connectionId; }
@@ -173,12 +176,40 @@ namespace DFMP.Runtime
             get { return actionSequence; }
         }
 
+        public DFMPStaticDoorRecord[] ExteriorDoors
+        {
+            get { return exteriorDoors ?? new DFMPStaticDoorRecord[0]; }
+        }
+
         public void Initialize(int ownerConnectionId, int initialWorldX, float initialWorldY, int initialWorldZ)
         {
             connectionId = ownerConnectionId;
             worldX = initialWorldX;
             worldY = initialWorldY;
             worldZ = initialWorldZ;
+        }
+
+        public void SetExteriorDoors(DFMPStaticDoorRecord[] doors)
+        {
+            if (doors == null || doors.Length == 0)
+            {
+                exteriorDoors = new DFMPStaticDoorRecord[0];
+                return;
+            }
+
+            exteriorDoors = new DFMPStaticDoorRecord[doors.Length];
+            for (int index = 0; index < doors.Length; index++)
+            {
+                if (doors[index] == null)
+                    continue;
+
+                exteriorDoors[index] = DFMPStaticDoorRecord.FromStaticDoor(doors[index].ToStaticDoor());
+            }
+        }
+
+        public void ClearExteriorDoors()
+        {
+            exteriorDoors = new DFMPStaticDoorRecord[0];
         }
 
         public void ConfirmSpawn()

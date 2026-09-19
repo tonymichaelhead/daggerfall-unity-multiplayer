@@ -38,7 +38,8 @@ namespace DFMP.Runtime
     {
         public static bool ShouldReportWorldContextImmediatelyAfterAcknowledgement(DFMPTransitionKind transitionKind)
         {
-            return transitionKind == DFMPTransitionKind.DungeonEntry;
+            return transitionKind == DFMPTransitionKind.DungeonEntry ||
+                transitionKind == DFMPTransitionKind.Reconnect;
         }
     }
 
@@ -62,6 +63,141 @@ namespace DFMP.Runtime
         public int DungeonBlockIndex;
         public string DungeonBlockName;
         public string InstanceId;
+        public bool HasInteriorLocalPosition;
+        public float InteriorLocalX;
+        public float InteriorLocalY;
+        public float InteriorLocalZ;
+        public bool HasExteriorDoor;
+        public DFMPNetworkStaticDoor ExteriorDoor;
+    }
+
+    /// <summary>
+    /// Wire-format StaticDoor for Mirror messages (blittable fields only).
+    /// </summary>
+    public struct DFMPNetworkStaticDoor
+    {
+        public int BuildingKey;
+        public float OwnerPosX;
+        public float OwnerPosY;
+        public float OwnerPosZ;
+        public float OwnerRotX;
+        public float OwnerRotY;
+        public float OwnerRotZ;
+        public float OwnerRotW;
+        public float M00;
+        public float M01;
+        public float M02;
+        public float M03;
+        public float M10;
+        public float M11;
+        public float M12;
+        public float M13;
+        public float M20;
+        public float M21;
+        public float M22;
+        public float M23;
+        public float M30;
+        public float M31;
+        public float M32;
+        public float M33;
+        public int DoorType;
+        public int BlockIndex;
+        public int RecordIndex;
+        public int DoorIndex;
+        public float CentreX;
+        public float CentreY;
+        public float CentreZ;
+        public float SizeX;
+        public float SizeY;
+        public float SizeZ;
+        public float NormalX;
+        public float NormalY;
+        public float NormalZ;
+
+        public static DFMPNetworkStaticDoor FromStaticDoor(StaticDoor door)
+        {
+            Matrix4x4 matrix = door.buildingMatrix;
+            return new DFMPNetworkStaticDoor
+            {
+                BuildingKey = door.buildingKey,
+                OwnerPosX = door.ownerPosition.x,
+                OwnerPosY = door.ownerPosition.y,
+                OwnerPosZ = door.ownerPosition.z,
+                OwnerRotX = door.ownerRotation.x,
+                OwnerRotY = door.ownerRotation.y,
+                OwnerRotZ = door.ownerRotation.z,
+                OwnerRotW = door.ownerRotation.w,
+                M00 = matrix.m00,
+                M01 = matrix.m01,
+                M02 = matrix.m02,
+                M03 = matrix.m03,
+                M10 = matrix.m10,
+                M11 = matrix.m11,
+                M12 = matrix.m12,
+                M13 = matrix.m13,
+                M20 = matrix.m20,
+                M21 = matrix.m21,
+                M22 = matrix.m22,
+                M23 = matrix.m23,
+                M30 = matrix.m30,
+                M31 = matrix.m31,
+                M32 = matrix.m32,
+                M33 = matrix.m33,
+                DoorType = (int)door.doorType,
+                BlockIndex = door.blockIndex,
+                RecordIndex = door.recordIndex,
+                DoorIndex = door.doorIndex,
+                CentreX = door.centre.x,
+                CentreY = door.centre.y,
+                CentreZ = door.centre.z,
+                SizeX = door.size.x,
+                SizeY = door.size.y,
+                SizeZ = door.size.z,
+                NormalX = door.normal.x,
+                NormalY = door.normal.y,
+                NormalZ = door.normal.z
+            };
+        }
+
+        public StaticDoor ToStaticDoor()
+        {
+            var matrix = new Matrix4x4();
+            matrix.m00 = M00;
+            matrix.m01 = M01;
+            matrix.m02 = M02;
+            matrix.m03 = M03;
+            matrix.m10 = M10;
+            matrix.m11 = M11;
+            matrix.m12 = M12;
+            matrix.m13 = M13;
+            matrix.m20 = M20;
+            matrix.m21 = M21;
+            matrix.m22 = M22;
+            matrix.m23 = M23;
+            matrix.m30 = M30;
+            matrix.m31 = M31;
+            matrix.m32 = M32;
+            matrix.m33 = M33;
+            return new StaticDoor
+            {
+                buildingKey = BuildingKey,
+                ownerPosition = new Vector3(OwnerPosX, OwnerPosY, OwnerPosZ),
+                ownerRotation = new Quaternion(OwnerRotX, OwnerRotY, OwnerRotZ, OwnerRotW),
+                buildingMatrix = matrix,
+                doorType = (DoorTypes)DoorType,
+                blockIndex = BlockIndex,
+                recordIndex = RecordIndex,
+                doorIndex = DoorIndex,
+                centre = new Vector3(CentreX, CentreY, CentreZ),
+                size = new Vector3(SizeX, SizeY, SizeZ),
+                normal = new Vector3(NormalX, NormalY, NormalZ)
+            };
+        }
+
+        public DFMPStaticDoorRecord ToRecord()
+        {
+            return DFMPStaticDoorRecord.FromStaticDoor(ToStaticDoor());
+        }
     }
 
     public struct DFMPTransitionAcknowledgement : Mirror.NetworkMessage
@@ -89,6 +225,8 @@ namespace DFMP.Runtime
         public string LocationId;
         public int BuildingKey;
         public int BuildingType;
+        public bool HasExteriorDoor;
+        public DFMPNetworkStaticDoor ExteriorDoor;
     }
 
     public struct DFMPDungeonTransitionRequest : Mirror.NetworkMessage
@@ -462,11 +600,12 @@ namespace DFMP.Runtime
                 WorldZ = record.WorldZ
             };
 
-            DFMPWorldContextKey context = record.Context != null
-                ? record.Context.ToKey()
-                : default(DFMPWorldContextKey);
+            DFMPWorldContextKey context;
+            bool canReopenInterior;
+            DFMPInteriorReopenProtocol.TryGetPersistedReopenContext(record, out context, out canReopenInterior);
 
-            if (context.Kind != DFMPWorldContextKind.Exterior || !IsValidMapPixel(context.MapPixelX, context.MapPixelY))
+            if (!canReopenInterior &&
+                (context.Kind != DFMPWorldContextKind.Exterior || !IsValidMapPixel(context.MapPixelX, context.MapPixelY)))
             {
                 DFPosition mapPixel = MapsFile.WorldCoordToMapPixel(record.WorldX, record.WorldZ);
                 context = new DFMPWorldContextKey
@@ -536,6 +675,33 @@ namespace DFMP.Runtime
 
         public static DFMPTransitionAssignment CreateTransitionAssignment(int assignmentId, int connectionId, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName, int buildingType)
         {
+            return CreateTransitionAssignment(
+                assignmentId,
+                connectionId,
+                kind,
+                position,
+                context,
+                startMarkerName,
+                buildingType,
+                false,
+                Vector3.zero,
+                false,
+                default(StaticDoor));
+        }
+
+        public static DFMPTransitionAssignment CreateTransitionAssignment(
+            int assignmentId,
+            int connectionId,
+            DFMPTransitionKind kind,
+            DFMPWorldPosition position,
+            DFMPWorldContextKey context,
+            string startMarkerName,
+            int buildingType,
+            bool hasInteriorLocalPosition,
+            Vector3 interiorLocalPosition,
+            bool hasExteriorDoor,
+            StaticDoor exteriorDoor)
+        {
             return new DFMPTransitionAssignment
             {
                 AssignmentId = assignmentId,
@@ -555,7 +721,13 @@ namespace DFMP.Runtime
                 BuildingType = buildingType,
                 DungeonBlockIndex = context.DungeonBlockIndex,
                 DungeonBlockName = context.DungeonBlockName ?? string.Empty,
-                InstanceId = context.InstanceId ?? string.Empty
+                InstanceId = context.InstanceId ?? string.Empty,
+                HasInteriorLocalPosition = hasInteriorLocalPosition,
+                InteriorLocalX = interiorLocalPosition.x,
+                InteriorLocalY = interiorLocalPosition.y,
+                InteriorLocalZ = interiorLocalPosition.z,
+                HasExteriorDoor = hasExteriorDoor,
+                ExteriorDoor = hasExteriorDoor ? DFMPNetworkStaticDoor.FromStaticDoor(exteriorDoor) : default(DFMPNetworkStaticDoor)
             };
         }
 

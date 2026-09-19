@@ -158,10 +158,35 @@ namespace DFMP.Runtime
             record.WorldContext = record.Context.Kind;
             record.MapPixelX = record.Context.MapPixelX;
             record.MapPixelY = record.Context.MapPixelY;
+            record.HasInteriorLocalPosition = sessionState.HasDungeonLocalPosition;
+            record.InteriorLocalX = sessionState.DungeonLocalPosition.x;
+            record.InteriorLocalY = sessionState.DungeonLocalPosition.y;
+            record.InteriorLocalZ = sessionState.DungeonLocalPosition.z;
+            if (context.Kind == DFMPWorldContextKind.BuildingInterior)
+                record.ExteriorDoors = CopyExteriorDoors(sessionState.ExteriorDoors);
+            else
+                record.ExteriorDoors = new DFMPStaticDoorRecord[0];
             record.Race = DFMPPositionProtocol.GetPlayerRace(sessionState.Race);
             record.Gender = DFMPPositionProtocol.GetDisplayGender(sessionState.Gender);
             record.OutfitVariant = DFMPPositionProtocol.GetOutfitVariant(sessionState.OutfitVariant);
             record.FaceVariant = DFMPPositionProtocol.GetFaceVariant(sessionState.FaceVariant);
+        }
+
+        static DFMPStaticDoorRecord[] CopyExteriorDoors(DFMPStaticDoorRecord[] doors)
+        {
+            if (doors == null || doors.Length == 0)
+                return new DFMPStaticDoorRecord[0];
+
+            var copy = new DFMPStaticDoorRecord[doors.Length];
+            for (int index = 0; index < doors.Length; index++)
+            {
+                if (doors[index] == null)
+                    continue;
+
+                copy[index] = DFMPStaticDoorRecord.FromStaticDoor(doors[index].ToStaticDoor());
+            }
+
+            return copy;
         }
 
         public static void ApplyInnRespawnAnchor(DFMPCharacterRecord record, DFMPWorldPosition position, DFMPWorldContextKey context)

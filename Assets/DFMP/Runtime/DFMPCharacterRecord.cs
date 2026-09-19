@@ -6,7 +6,7 @@ namespace DFMP.Runtime
     [Serializable]
     public class DFMPCharacterRecord
     {
-        public const int CurrentSchemaVersion = 6;
+        public const int CurrentSchemaVersion = 7;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public string AccountId = string.Empty;
@@ -23,6 +23,11 @@ namespace DFMP.Runtime
         public string WorldContext = "Exterior";
         public DFMPWorldContextRecord Context = new DFMPWorldContextRecord();
         public DFMPRespawnAnchorRecord RespawnAnchor = new DFMPRespawnAnchorRecord();
+        public bool HasInteriorLocalPosition;
+        public float InteriorLocalX;
+        public float InteriorLocalY;
+        public float InteriorLocalZ;
+        public DFMPStaticDoorRecord[] ExteriorDoors = new DFMPStaticDoorRecord[0];
 
         public int Health = 1;
         public int MaxHealth = 1;
@@ -66,6 +71,20 @@ namespace DFMP.Runtime
             if (RespawnAnchor == null)
                 RespawnAnchor = new DFMPRespawnAnchorRecord();
             RespawnAnchor.Normalize();
+            ExteriorDoors = ExteriorDoors ?? new DFMPStaticDoorRecord[0];
+            for (int index = 0; index < ExteriorDoors.Length; index++)
+            {
+                if (ExteriorDoors[index] != null)
+                    ExteriorDoors[index].Normalize();
+            }
+
+            if (!HasInteriorLocalPosition)
+            {
+                InteriorLocalX = 0f;
+                InteriorLocalY = 0f;
+                InteriorLocalZ = 0f;
+            }
+
             Level = Mathf.Max(1, Level);
             MaxHealth = Mathf.Max(1, MaxHealth);
             Health = Mathf.Clamp(Health, 0, MaxHealth);

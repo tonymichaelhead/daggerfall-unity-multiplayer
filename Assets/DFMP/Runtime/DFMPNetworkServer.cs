@@ -157,6 +157,14 @@ namespace DFMP.Runtime
             DFMPWorldContextKey context;
             DFMPWorldContextProtocol.TryCreateKey(report, out context);
             SetSessionWorldContext(connectionId, sessionState, context, "client-report");
+            if (sessionState != null)
+            {
+                if (context.Kind == DFMPWorldContextKind.BuildingInterior && report.HasExteriorDoor)
+                    sessionState.SetExteriorDoors(new[] { report.ExteriorDoor.ToRecord() });
+                else if (context.Kind != DFMPWorldContextKind.BuildingInterior)
+                    sessionState.ClearExteriorDoors();
+            }
+
             return true;
         }
 
@@ -770,7 +778,19 @@ namespace DFMP.Runtime
 
             sessionState.Initialize(conn.connectionId, worldX, 0f, worldZ);
             if (savedJoinDecision != null && savedJoinDecision.CharacterRecord != null)
+            {
                 vitalStates[conn.connectionId] = CreateVitalState(savedJoinDecision.CharacterRecord);
+                DFMPCharacterRecord spawnRecord = savedJoinDecision.CharacterRecord;
+                if (spawnRecord.HasInteriorLocalPosition)
+                {
+                    sessionState.SetDungeonLocalPosition(
+                        true,
+                        new Vector3(spawnRecord.InteriorLocalX, spawnRecord.InteriorLocalY, spawnRecord.InteriorLocalZ));
+                }
+
+                if (initialContext.Kind == DFMPWorldContextKind.BuildingInterior)
+                    sessionState.SetExteriorDoors(spawnRecord.ExteriorDoors);
+            }
             SetSessionWorldContext(conn.connectionId, sessionState, initialContext, "initial-spawn");
             if (!string.IsNullOrWhiteSpace(startMarkerName))
                 startMarkerAssignments[conn.connectionId] = startMarkerName;
@@ -819,8 +839,24 @@ namespace DFMP.Runtime
                 return false;
 
             DFMPWorldContextKey context;
-            if (!worldOccupancy.TryGetContext(conn.connectionId, out context) || context.Kind != DFMPWorldContextKind.Exterior)
+            if (!worldOccupancy.TryGetContext(conn.connectionId, out context))
                 return false;
+
+            if (context.Kind != DFMPWorldContextKind.Exterior &&
+                context.Kind != DFMPWorldContextKind.BuildingInterior &&
+                context.Kind != DFMPWorldContextKind.Dungeon)
+                return false;
+
+            bool hasInteriorLocal = sessionState.HasDungeonLocalPosition;
+            Vector3 interiorLocal = DFMPInteriorReopenProtocol.GetInteriorLocalPosition(sessionState);
+            bool hasExteriorDoor = false;
+            StaticDoor exteriorDoor = default(StaticDoor);
+            if (context.Kind == DFMPWorldContextKind.BuildingInterior)
+            {
+                hasExteriorDoor = DFMPInteriorReopenProtocol.TryGetPrimaryExteriorDoor(sessionState, out exteriorDoor);
+                if (!hasExteriorDoor)
+                    return false;
+            }
 
             return TrySendTransitionAssignment(
                 conn,
@@ -831,10 +867,41 @@ namespace DFMP.Runtime
                     WorldY = sessionState.WorldY,
                     WorldZ = sessionState.WorldZ
                 },
-                context);
+                context,
+                null,
+                -1,
+                hasInteriorLocal,
+                interiorLocal,
+                hasExteriorDoor,
+                exteriorDoor);
         }
 
         public static bool TrySendTransitionAssignment(NetworkConnectionToClient conn, DFMPTransitionKind kind, DFMPWorldPosition position, DFMPWorldContextKey context, string startMarkerName = null, int buildingType = -1)
+        {
+            return TrySendTransitionAssignment(
+                conn,
+                kind,
+                position,
+                context,
+                startMarkerName,
+                buildingType,
+                false,
+                Vector3.zero,
+                false,
+                default(StaticDoor));
+        }
+
+        public static bool TrySendTransitionAssignment(
+            NetworkConnectionToClient conn,
+            DFMPTransitionKind kind,
+            DFMPWorldPosition position,
+            DFMPWorldContextKey context,
+            string startMarkerName,
+            int buildingType,
+            bool hasInteriorLocalPosition,
+            Vector3 interiorLocalPosition,
+            bool hasExteriorDoor,
+            StaticDoor exteriorDoor)
         {
             if (conn == null || !CanAssignContext(kind, context.Kind))
                 return false;
@@ -843,7 +910,18 @@ namespace DFMP.Runtime
             if (playerSessionStates.TryGetValue(conn.connectionId, out sessionState) && sessionState != null)
                 sessionState.SetResting(false);
 
-            var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(nextTransitionAssignmentId++, conn.connectionId, kind, position, context, startMarkerName, buildingType);
+            var assignment = DFMPSpawnProtocol.CreateTransitionAssignment(
+                nextTransitionAssignmentId++,
+                conn.connectionId,
+                kind,
+                position,
+                context,
+                startMarkerName,
+                buildingType,
+                hasInteriorLocalPosition,
+                interiorLocalPosition,
+                hasExteriorDoor,
+                exteriorDoor);
             DFMPTransitionAssignmentState assignmentState;
             if (!transitionAssignmentStates.TryGetValue(conn.connectionId, out assignmentState))
             {
@@ -864,7 +942,12 @@ namespace DFMP.Runtime
                 return true;
             if (kind == DFMPTransitionKind.Door && contextKind == DFMPWorldContextKind.BuildingInterior)
                 return true;
-            return kind == DFMPTransitionKind.DungeonEntry && contextKind == DFMPWorldContextKind.Dungeon;
+            if (kind == DFMPTransitionKind.DungeonEntry && contextKind == DFMPWorldContextKind.Dungeon)
+                return true;
+            if (kind == DFMPTransitionKind.Reconnect &&
+                (contextKind == DFMPWorldContextKind.BuildingInterior || contextKind == DFMPWorldContextKind.Dungeon))
+                return true;
+            return false;
         }
 
         public static bool TrySendFastTravelTransitionAssignment(NetworkConnectionToClient conn, int mapPixelX, int mapPixelY)
@@ -901,6 +984,17 @@ namespace DFMP.Runtime
                 return false;
 
             DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDoorTransitionAssignedContext(request);
+            if (request.EnterInterior)
+            {
+                if (request.HasExteriorDoor)
+                    sessionState.SetExteriorDoors(new[] { request.ExteriorDoor.ToRecord() });
+            }
+            else
+            {
+                sessionState.ClearExteriorDoors();
+                sessionState.SetDungeonLocalPosition(false, Vector3.zero);
+            }
+
             return TrySendTransitionAssignment(
                 conn,
                 DFMPTransitionKind.Door,
@@ -930,6 +1024,12 @@ namespace DFMP.Runtime
                 return false;
 
             DFMPWorldContextKey assignedContext = DFMPSpawnProtocol.GetDungeonTransitionAssignedContext(request);
+            if (!request.EnterDungeon)
+            {
+                sessionState.ClearExteriorDoors();
+                sessionState.SetDungeonLocalPosition(false, Vector3.zero);
+            }
+
             return TrySendTransitionAssignment(
                 conn,
                 request.EnterDungeon ? DFMPTransitionKind.DungeonEntry : DFMPTransitionKind.DungeonExit,

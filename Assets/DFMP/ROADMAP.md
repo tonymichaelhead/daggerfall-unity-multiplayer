@@ -260,7 +260,8 @@ Everything the server needs to know where players are before it can own entities
 
   - Exterior, building-interior, and dungeon contexts are persisted per character and tracked in server occupancy.
   - Door entry and exit, dungeon entry and exit, fast travel, save load, reconnect, vampirism transformation, and death respawn use server-issued transition assignments with validated acknowledgements.
-  - Saved tavern anchors are recorded on confirmed inn entry. M6 intentionally falls back to the configured exterior starting location during death respawn rather than attempting an invalid interior teleport; server-issued saved-interior reopening is owned by P-WORLD.
+  - Saved tavern anchors are recorded on confirmed inn entry. M6 intentionally falls back to the configured exterior starting location during death respawn rather than attempting an invalid interior teleport; server-issued saved-interior reopening for **death respawn** remains owned by P-WORLD.
+  - **Reconnect interior restore (post-M6 follow-up):** logging off inside a building or dungeon persists interior-local pose and building exterior-door reopen data (character schema v7). Returning players receive a `Reconnect` transition that reopens the interior via native `StartBuildingInterior` / `StartDungeonInterior` and snaps to the saved pose. Records missing reopen payload still fall back to exterior at the saved world coordinates.
   - Death handling is server-owned and no-wipe: duplicate or pending reports are rejected, pre-spawn deaths are not intercepted on the client, stale acknowledgements are rejected, and a pending death respawn is finalized before disconnect cleanup.
   - Vampirism is a live-session transformation only. Persistence across reconnect, restart, and character restore remains explicitly deferred to Phase 2. Lycanthropy remains fully deferred.
   - **`Rest.Policy = ServerManaged` is delivered.** Timed rest and rest-until-healed run as vanilla DFU rest without advancing shared world time. Loiter remains disabled. Policy is replicated at runtime via `DFMPWorldSettings` and `DFMPNetworkServer.SetRestPolicy` so an R3 admin/GM menu can toggle it later. Random rest-time encounter spawns and the admin-menu widget remain out of scope.
@@ -736,7 +737,7 @@ Status: Future.
 
 - Shared quest progression for parties, building on the personal quest model rather than replacing it.
 - Shared and persistent world state options: doors, containers, loot mode selection, and a shared economy with server-owned shop inventories and prices.
-- Reopen saved building interiors through validated server-issued door assignments for death-respawn anchors, retaining the exterior fallback when reopening is impossible.
+- Reopen saved building interiors through validated server-issued door assignments for **death-respawn** anchors, retaining the exterior fallback when reopening is impossible. (Reconnect interior restore for buildings and dungeons was delivered as a Phase 1 follow-up to M6.)
 - Optional citizen and ambient NPC synchronization, only if it proves to matter in practice.
 - Server-owned weather and seasonal events beyond the Phase 1 time and weather baseline.
 

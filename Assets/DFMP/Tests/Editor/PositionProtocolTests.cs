@@ -41,6 +41,16 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void ControllerCentreY_InvertsControllerFeetY()
+        {
+            const float sceneY = 11.08f;
+            float feetY = DFMPPositionProtocol.GetControllerFeetY(sceneY, 0.2f, 1.8f, 0.08f);
+
+            Assert.AreEqual(sceneY, DFMPPositionProtocol.GetControllerCentreY(feetY, 0.2f, 1.8f, 0.08f), 0.0001f);
+            Assert.AreEqual(10f + 1.9f, DFMPPositionProtocol.GetControllerCentreY(10f, 0f, 3.6f, 0.1f), 0.0001f);
+        }
+
+        [Test]
         public void SceneHeightOffset_IsRelativeAndBounded()
         {
             Assert.AreEqual(10f, DFMPPositionProtocol.GetControllerFeetY(11.08f, 0f, 2f, 0.08f), 0.0001f);

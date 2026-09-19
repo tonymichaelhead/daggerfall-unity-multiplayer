@@ -92,17 +92,30 @@ namespace DFMP.Runtime
             float controllerSkinWidth = playerController != null ? playerController.skinWidth : 0f;
             PlayerEnterExit playerEnterExit = GameManager.Instance != null ? GameManager.Instance.PlayerEnterExit : null;
             bool isInsideDungeon = playerEnterExit != null && playerEnterExit.IsPlayerInsideDungeon && playerEnterExit.Dungeon != null;
-            Vector3 dungeonLocalPosition = isInsideDungeon
-                ? playerEnterExit.transform.position - playerEnterExit.Dungeon.transform.position
-                : Vector3.zero;
+            bool isInsideBuilding = playerEnterExit != null && playerEnterExit.IsPlayerInsideBuilding && playerEnterExit.Interior != null;
+            Vector3 interiorLocalPosition = Vector3.zero;
+            bool hasInteriorLocalPosition = false;
             if (isInsideDungeon)
             {
-                dungeonLocalPosition.y = DFMPPositionProtocol.GetControllerFeetY(
+                hasInteriorLocalPosition = true;
+                interiorLocalPosition = playerEnterExit.transform.position - playerEnterExit.Dungeon.transform.position;
+                interiorLocalPosition.y = DFMPPositionProtocol.GetControllerFeetY(
                     playerScenePosition.y,
                     controllerCenterY,
                     controllerHeight,
                     controllerSkinWidth) - playerEnterExit.Dungeon.transform.position.y;
             }
+            else if (isInsideBuilding)
+            {
+                hasInteriorLocalPosition = true;
+                interiorLocalPosition = playerEnterExit.transform.position - playerEnterExit.Interior.transform.position;
+                interiorLocalPosition.y = DFMPPositionProtocol.GetControllerFeetY(
+                    playerScenePosition.y,
+                    controllerCenterY,
+                    controllerHeight,
+                    controllerSkinWidth) - playerEnterExit.Interior.transform.position.y;
+            }
+
             NetworkClient.Send(new DFMPPlayerPositionReport
             {
                 WorldX = streamingWorld.LocalPlayerGPS.WorldX,
@@ -115,10 +128,10 @@ namespace DFMP.Runtime
                     controllerCenterY,
                         controllerHeight,
                         controllerSkinWidth),
-                HasDungeonLocalPosition = isInsideDungeon,
-                DungeonLocalX = dungeonLocalPosition.x,
-                DungeonLocalY = dungeonLocalPosition.y,
-                DungeonLocalZ = dungeonLocalPosition.z
+                HasDungeonLocalPosition = hasInteriorLocalPosition,
+                DungeonLocalX = interiorLocalPosition.x,
+                DungeonLocalY = interiorLocalPosition.y,
+                DungeonLocalZ = interiorLocalPosition.z
             }, Channels.Unreliable);
         }
 
@@ -360,6 +373,13 @@ namespace DFMP.Runtime
             {
                 report.Kind = DFMPWorldContextKind.BuildingInterior;
                 report.BuildingKey = playerEnterExit.BuildingDiscoveryData.buildingKey;
+                StaticDoor[] exteriorDoors = playerEnterExit.ExteriorDoors;
+                if (exteriorDoors != null && exteriorDoors.Length > 0)
+                {
+                    report.HasExteriorDoor = true;
+                    report.ExteriorDoor = DFMPNetworkStaticDoor.FromStaticDoor(exteriorDoors[0]);
+                }
+
                 return true;
             }
 

@@ -59,6 +59,8 @@ namespace DFMP.Runtime
         bool sharedTestSpawnApplied;
         bool transitionApplied;
         bool doorHookBypass;
+        bool reconnectInteriorOpened;
+        bool reconnectHudCovered;
         bool hasPendingDoorTransition;
         bool pendingDoorEnterInterior;
         bool pendingDoorDoFade;
@@ -158,7 +160,16 @@ namespace DFMP.Runtime
         public static void Reset()
         {
             if (instance != null)
+            {
+                if (instance.reconnectHudCovered &&
+                    DaggerfallUI.Instance != null &&
+                    DaggerfallUI.Instance.FadeBehaviour != null)
+                {
+                    DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack(0.1f);
+                }
+
                 Destroy(instance.gameObject);
+            }
 
             instance = null;
             LocalConnectionId = -1;
@@ -194,6 +205,8 @@ namespace DFMP.Runtime
             if (assignment.ConnectionId >= 0)
                 LocalConnectionId = assignment.ConnectionId;
             transitionApplied = false;
+            reconnectInteriorOpened = false;
+            reconnectHudCovered = false;
             SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Transition] Client received transition assignment: assignmentId={assignment.AssignmentId}, kind={assignment.Kind}, mapPixel={assignment.MapPixelX}/{assignment.MapPixelY}.");
         }
@@ -212,7 +225,7 @@ namespace DFMP.Runtime
 
             StaticDoor door = (StaticDoor)doorObject;
             DFMPDoorTransitionRequest request;
-            if (!TryBuildDoorTransitionRequest(playerEnterExit, door.buildingKey, true, out request))
+            if (!TryBuildDoorTransitionRequest(playerEnterExit, door.buildingKey, true, door, true, out request))
                 return false;
 
             pendingDoorPlayerEnterExit = playerEnterExit;
@@ -239,7 +252,7 @@ namespace DFMP.Runtime
                 return false;
 
             DFMPDoorTransitionRequest request;
-            if (!TryBuildDoorTransitionRequest(playerEnterExit, playerEnterExit.BuildingDiscoveryData.buildingKey, false, out request))
+            if (!TryBuildDoorTransitionRequest(playerEnterExit, playerEnterExit.BuildingDiscoveryData.buildingKey, false, default(StaticDoor), false, out request))
                 return false;
 
             pendingDoorPlayerEnterExit = playerEnterExit;
@@ -314,7 +327,7 @@ namespace DFMP.Runtime
             return true;
         }
 
-        bool TryBuildDoorTransitionRequest(PlayerEnterExit playerEnterExit, int buildingKey, bool enterInterior, out DFMPDoorTransitionRequest request)
+        bool TryBuildDoorTransitionRequest(PlayerEnterExit playerEnterExit, int buildingKey, bool enterInterior, StaticDoor exteriorDoor, bool hasExteriorDoor, out DFMPDoorTransitionRequest request)
         {
             request = new DFMPDoorTransitionRequest();
             if (playerEnterExit == null || buildingKey <= 0 || GameManager.Instance == null || GameManager.Instance.PlayerGPS == null)
@@ -334,7 +347,11 @@ namespace DFMP.Runtime
                 LocationIndex = playerGPS.CurrentLocationIndex,
                 LocationId = playerGPS.CurrentLocation.Name,
                 BuildingKey = buildingKey,
-                BuildingType = enterInterior ? (int)playerEnterExit.BuildingType : -1
+                BuildingType = enterInterior ? (int)playerEnterExit.BuildingType : -1,
+                HasExteriorDoor = enterInterior && hasExteriorDoor,
+                ExteriorDoor = enterInterior && hasExteriorDoor
+                    ? DFMPNetworkStaticDoor.FromStaticDoor(exteriorDoor)
+                    : default(DFMPNetworkStaticDoor)
             };
             return true;
         }
@@ -392,6 +409,8 @@ namespace DFMP.Runtime
             {
                 transitionState.Requeue();
                 transitionApplied = false;
+                reconnectInteriorOpened = false;
+                // Keep HUD covered across requeue so a mid-reconnect reload cannot flash exterior.
                 Debug.Log($"[DFMP Transition] Client reapplied pending transition assignment after {reason}: assignmentId={transitionState.Assignment.AssignmentId}, kind={transitionState.Assignment.Kind}, mapPixel={transitionState.Assignment.MapPixelX}/{transitionState.Assignment.MapPixelY}.");
             }
         }
@@ -526,6 +545,14 @@ namespace DFMP.Runtime
                 return;
             }
 
+            if (transitionState.Assignment.Kind == DFMPTransitionKind.Reconnect &&
+                (transitionState.Assignment.ContextKind == DFMPWorldContextKind.BuildingInterior ||
+                 transitionState.Assignment.ContextKind == DFMPWorldContextKind.Dungeon))
+            {
+                UpdateInteriorReconnectTransitionAssignment(streamingWorld);
+                return;
+            }
+
             if (transitionState.TryRequestTeleport())
             {
                 fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
@@ -595,6 +622,281 @@ namespace DFMP.Runtime
             NetworkClient.Send(acknowledgement);
             SuppressPositionReportsBriefly();
             Debug.Log($"[DFMP Transition] Client acknowledged assigned transition: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");
+        }
+
+        void UpdateInteriorReconnectTransitionAssignment(StreamingWorld streamingWorld)
+        {
+            DFMPTransitionAssignment assignment = transitionState.Assignment;
+
+            if (transitionState.TryRequestTeleport())
+            {
+                fixedSpawnWaitDeadline = Time.realtimeSinceStartup + FixedSpawnLocationWaitSeconds;
+                transitionApplied = false;
+                reconnectInteriorOpened = false;
+                SuppressPositionReportsBriefly();
+                CoverReconnectHud();
+
+                if (GameManager.HasInstance)
+                {
+                    PlayerEnterExit existingEnterExit = GameManager.Instance.PlayerEnterExit;
+                    if (existingEnterExit != null && existingEnterExit.IsPlayerInside)
+                        existingEnterExit.EnableExteriorParent(cleanup: true);
+                }
+
+                // Match native Respawner: map-pixel teleport with no exterior start-marker placement,
+                // then reopen the interior under a black HUD so the player never sees the exterior.
+                if (streamingWorld.LocalPlayerGPS != null)
+                {
+                    streamingWorld.LocalPlayerGPS.WorldX = assignment.WorldX;
+                    streamingWorld.LocalPlayerGPS.WorldZ = assignment.WorldZ;
+                }
+
+                streamingWorld.TeleportToCoordinates(
+                    assignment.MapPixelX,
+                    assignment.MapPixelY,
+                    StreamingWorld.RepositionMethods.None);
+                Debug.Log($"[DFMP Transition] Client relocating for interior reconnect: assignmentId={assignment.AssignmentId}, kind={assignment.ContextKind}, mapPixel={assignment.MapPixelX}/{assignment.MapPixelY}.");
+                return;
+            }
+
+            if (!reconnectInteriorOpened)
+            {
+                // Do not wait for exterior streaming to finish — native StartDungeonInterior /
+                // StartBuildingInterior only need the map pixel and location data. Waiting on
+                // IsRepositioningPlayer is what left the exterior visible for half a second.
+                if (streamingWorld.LocalPlayerGPS == null ||
+                    streamingWorld.LocalPlayerGPS.CurrentMapPixel.X != assignment.MapPixelX ||
+                    streamingWorld.LocalPlayerGPS.CurrentMapPixel.Y != assignment.MapPixelY)
+                {
+                    if (Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
+                        return;
+
+                    Debug.LogWarning($"[DFMP Transition] Interior reconnect relocate timed out: assignmentId={assignment.AssignmentId}.");
+                    transitionApplied = true;
+                    reconnectInteriorOpened = true;
+                    RevealReconnectHud();
+                    return;
+                }
+
+                if (!TryOpenAssignedInterior(assignment))
+                {
+                    if (Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
+                        return;
+
+                    Debug.LogWarning($"[DFMP Transition] Interior reconnect reopen failed: assignmentId={assignment.AssignmentId}, kind={assignment.ContextKind}.");
+                    transitionApplied = true;
+                    reconnectInteriorOpened = true;
+                    RevealReconnectHud();
+                    return;
+                }
+
+                if (assignment.HasInteriorLocalPosition)
+                    ApplyInteriorLocalPose(assignment);
+
+                reconnectInteriorOpened = true;
+                transitionApplied = true;
+                SuppressPositionReportsBriefly();
+                RevealReconnectHud();
+                Debug.Log($"[DFMP Transition] Client reopened interior on reconnect: assignmentId={assignment.AssignmentId}, kind={assignment.ContextKind}.");
+                return;
+            }
+
+            if (!transitionApplied)
+                return;
+
+            if (!IsAssignedInteriorReady(assignment) && Time.realtimeSinceStartup < fixedSpawnWaitDeadline)
+                return;
+
+            var acknowledgement = new DFMPTransitionAcknowledgement
+            {
+                AssignmentId = assignment.AssignmentId,
+                WorldX = streamingWorld.LocalPlayerGPS.WorldX,
+                WorldY = 0f,
+                WorldZ = streamingWorld.LocalPlayerGPS.WorldZ,
+                Context = DFMPSpawnProtocol.GetAssignedContextReport(assignment)
+            };
+
+            if (!transitionState.TryAcknowledge(acknowledgement, false))
+                return;
+
+            NetworkClient.Send(acknowledgement);
+            hasImmediateWorldContextReport = DFMPTransitionReportPolicy.ShouldReportWorldContextImmediatelyAfterAcknowledgement(assignment.Kind);
+            SuppressPositionReportsBriefly();
+            RevealReconnectHud();
+            Debug.Log($"[DFMP Transition] Client acknowledged interior reconnect: assignmentId={acknowledgement.AssignmentId}, world={acknowledgement.WorldX}/0/{acknowledgement.WorldZ}.");
+        }
+
+        void CoverReconnectHud()
+        {
+            if (reconnectHudCovered)
+                return;
+
+            if (DaggerfallUI.Instance != null && DaggerfallUI.Instance.FadeBehaviour != null)
+            {
+                DaggerfallUI.Instance.FadeBehaviour.SmashHUDToBlack();
+                reconnectHudCovered = true;
+            }
+        }
+
+        void RevealReconnectHud()
+        {
+            if (!reconnectHudCovered)
+                return;
+
+            if (DaggerfallUI.Instance != null && DaggerfallUI.Instance.FadeBehaviour != null)
+                DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack(0.7f);
+
+            reconnectHudCovered = false;
+        }
+
+        bool TryOpenAssignedInterior(DFMPTransitionAssignment assignment)
+        {
+            if (!GameManager.HasInstance || GameManager.Instance.PlayerEnterExit == null)
+                return false;
+
+            DFLocation location;
+            if (!TryResolveAssignedLocation(assignment, out location))
+                return false;
+
+            PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
+            doorHookBypass = true;
+            try
+            {
+                if (assignment.ContextKind == DFMPWorldContextKind.BuildingInterior)
+                {
+                    if (!assignment.HasExteriorDoor)
+                        return false;
+
+                    playerEnterExit.StartBuildingInterior(location, assignment.ExteriorDoor.ToStaticDoor(), true);
+                    return playerEnterExit.IsPlayerInsideBuilding;
+                }
+
+                if (assignment.ContextKind == DFMPWorldContextKind.Dungeon)
+                {
+                    playerEnterExit.StartDungeonInterior(location, preferEnterMarker: true, importEnemies: false);
+                    return playerEnterExit.IsPlayerInsideDungeon;
+                }
+            }
+            finally
+            {
+                doorHookBypass = false;
+            }
+
+            return false;
+        }
+
+        bool TryResolveAssignedLocation(DFMPTransitionAssignment assignment, out DFLocation location)
+        {
+            location = default(DFLocation);
+            if (DaggerfallUnity.Instance == null ||
+                DaggerfallUnity.Instance.ContentReader == null ||
+                DaggerfallUnity.Instance.ContentReader.MapFileReader == null)
+                return false;
+
+            MapsFile mapFileReader = DaggerfallUnity.Instance.ContentReader.MapFileReader;
+            if (assignment.RegionIndex >= 0 && assignment.LocationIndex >= 0)
+            {
+                location = mapFileReader.GetLocation(assignment.RegionIndex, assignment.LocationIndex);
+                if (location.Loaded)
+                    return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(assignment.LocationId))
+                return false;
+
+            if (assignment.RegionIndex >= 0)
+            {
+                string regionName = mapFileReader.GetRegionName(assignment.RegionIndex);
+                if (!string.IsNullOrWhiteSpace(regionName))
+                {
+                    location = mapFileReader.GetLocation(regionName, assignment.LocationId);
+                    if (location.Loaded)
+                        return true;
+                }
+            }
+
+            for (int region = 0; region < mapFileReader.RegionCount; region++)
+            {
+                string regionName = mapFileReader.GetRegionName(region);
+                if (string.IsNullOrWhiteSpace(regionName))
+                    continue;
+
+                location = mapFileReader.GetLocation(regionName, assignment.LocationId);
+                if (location.Loaded)
+                    return true;
+            }
+
+            return false;
+        }
+
+        void ApplyInteriorLocalPose(DFMPTransitionAssignment assignment)
+        {
+            if (!GameManager.HasInstance || GameManager.Instance.PlayerEnterExit == null)
+                return;
+
+            PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
+            Vector3 localPosition = new Vector3(assignment.InteriorLocalX, assignment.InteriorLocalY, assignment.InteriorLocalZ);
+            if (!DFMPInteriorReopenProtocol.IsValidInteriorLocalPosition(localPosition))
+            {
+                Debug.LogWarning($"[DFMP Transition] Ignored invalid interior pose on reconnect: assignmentId={assignment.AssignmentId}, local={localPosition}.");
+                return;
+            }
+
+            Transform parent = null;
+            if (assignment.ContextKind == DFMPWorldContextKind.Dungeon && playerEnterExit.Dungeon != null)
+                parent = playerEnterExit.Dungeon.transform;
+            else if (assignment.ContextKind == DFMPWorldContextKind.BuildingInterior && playerEnterExit.Interior != null)
+                parent = playerEnterExit.Interior.transform;
+
+            if (parent == null)
+                return;
+
+            CharacterController controller = GameManager.Instance.PlayerController;
+            float controllerHeight = controller != null ? controller.height : PlayerHeightChanger.controllerStandingHeight;
+            float controllerCenterY = controller != null ? controller.center.y : 0f;
+            float controllerSkinWidth = controller != null ? controller.skinWidth : 0f;
+
+            // The persisted pose is the controller's feet; DFU keeps the player transform at capsule centre.
+            Vector3 worldPosition = parent.position + localPosition;
+            worldPosition.y = DFMPPositionProtocol.GetControllerCentreY(
+                parent.position.y + localPosition.y,
+                controllerCenterY,
+                controllerHeight,
+                controllerSkinWidth);
+
+            playerEnterExit.transform.position = worldPosition;
+            SnapPlayerToInteriorGround(playerEnterExit.transform, controllerHeight);
+        }
+
+        /// <summary>
+        /// Mirrors the ground snap DFU applies in <c>PlayerEnterExit.SetStanding</c> after an interior relocation.
+        /// </summary>
+        static void SnapPlayerToInteriorGround(Transform playerTransform, float controllerHeight)
+        {
+            RaycastHit hit;
+            var ray = new Ray(playerTransform.position, Vector3.down);
+            if (!Physics.Raycast(ray, out hit, PlayerHeightChanger.controllerStandingHeight * 2f))
+                return;
+
+            if (GameManager.HasInstance && GameManager.Instance.AcrobatMotor != null)
+                GameManager.Instance.AcrobatMotor.ClearFallingDamage();
+
+            Vector3 groundedPosition = hit.point;
+            groundedPosition.y += controllerHeight / 2f + 0.25f;
+            playerTransform.position = groundedPosition;
+        }
+
+        bool IsAssignedInteriorReady(DFMPTransitionAssignment assignment)
+        {
+            if (!GameManager.HasInstance || GameManager.Instance.PlayerEnterExit == null)
+                return false;
+
+            PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
+            if (assignment.ContextKind == DFMPWorldContextKind.BuildingInterior)
+                return playerEnterExit.IsPlayerInsideBuilding;
+            if (assignment.ContextKind == DFMPWorldContextKind.Dungeon)
+                return playerEnterExit.IsPlayerInsideDungeon;
+            return true;
         }
 
         bool ApplyVampirismTransformation()

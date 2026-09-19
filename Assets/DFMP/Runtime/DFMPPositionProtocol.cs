@@ -66,6 +66,8 @@ namespace DFMP.Runtime
         public int DungeonBlockIndex;
         public string DungeonBlockName;
         public string InstanceId;
+        public bool HasExteriorDoor;
+        public DFMPNetworkStaticDoor ExteriorDoor;
     }
 
     public enum DFMPPositionRejectionReason
@@ -173,6 +175,11 @@ namespace DFMP.Runtime
         public static float GetControllerFeetY(float sceneY, float controllerCenterY, float controllerHeight, float controllerSkinWidth)
         {
             return sceneY + controllerCenterY - controllerHeight * 0.5f - Mathf.Max(0f, controllerSkinWidth);
+        }
+
+        public static float GetControllerCentreY(float feetY, float controllerCenterY, float controllerHeight, float controllerSkinWidth)
+        {
+            return feetY - controllerCenterY + controllerHeight * 0.5f + Mathf.Max(0f, controllerSkinWidth);
         }
 
         public static bool IsValidWorldPosition(DFMPPlayerPositionReport report)
