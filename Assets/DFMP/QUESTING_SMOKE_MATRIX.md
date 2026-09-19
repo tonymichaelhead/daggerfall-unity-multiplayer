@@ -25,7 +25,10 @@ for the `[DFMP Quest Metrics]` sample at the end of each slice.
 4. Verify every recorded value, quest item UID/symbol, and current branch is
    unchanged. Complete the quest and verify rewards persist after a second
    reconnect.
-5. Join the Fighters Guild (or equivalent), change nothing else, Exit immediately
+5. Log out inside a guild hall, reconnect into that interior, and accept a quest
+   from the questor. Verify the journal gains the quest, the questor stops
+   offering new work, and the client log shows no `Terminating quest runtime`.
+6. Join the Fighters Guild (or equivalent), change nothing else, Exit immediately
    from the pause menu, reconnect, and confirm membership at rank 0 with faction
    reputation intact. Repeat once by closing the client window after changing
    gold, equipment, or health.

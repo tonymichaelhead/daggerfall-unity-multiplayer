@@ -780,7 +780,15 @@ namespace DFMP.Runtime
                         return false;
 
                     playerEnterExit.StartBuildingInterior(location, exteriorDoor, true);
-                    return playerEnterExit.IsPlayerInsideBuilding;
+                    if (!playerEnterExit.IsPlayerInsideBuilding)
+                        return false;
+
+                    // StartBuildingInterior passes a null door owner, so the native enumeration of
+                    // building doors is skipped. Native save loads cover this by restoring the saved
+                    // door array before respawning; quest place checks and the exit path both throw
+                    // or misbehave when the player is inside a building with no exterior door.
+                    playerEnterExit.ExteriorDoors = new[] { exteriorDoor };
+                    return true;
                 }
 
                 if (assignment.ContextKind == DFMPWorldContextKind.Dungeon)

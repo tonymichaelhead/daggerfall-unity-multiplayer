@@ -102,7 +102,7 @@ The quest envelope now also captures:
 | `UnsetTask` | Personal-local | Drops one or more tasks. | Q | Ready. |
 | `ChangeReputeWith` | Personal-local | Changes personal faction/NPC reputation. | Q + F | Ready. |
 | `ReputeExceedsDo` | Personal-local | Tests personal reputation and starts a task. | Q + F | Ready. |
-| `RevealLocation` | Personal-local | Discovers a travel-map location and optionally adds a notebook note. | Q + N + P1 | Ready; discovered locations persist in the quest envelope. |
+| `RevealLocation` | Personal-local | Discovers a travel-map location, discovers a named local building on the city automap when the place has a building key, and optionally adds a notebook note. | Q + N + P1 | Ready; travel-map locations and named buildings persist in the quest envelope `DiscoveryJson`. |
 | `RestrainFoe` | Owner-scoped quest-enemy command | Calls `Foe.SetRestrained()`. | Q + P6 | Ready: logical restraint plus owner-scoped server command. |
 | `MakePermanent` | Personal-local | Converts a quest item into a permanent inventory item. | Q + R item identity | Ready. |
 | `HaveItem` | Personal-local | Tests owner inventory for a quest item. | Q + R item identity | Ready. |

@@ -719,10 +719,10 @@ namespace DaggerfallWorkshop.Game.Questing
         public void StartQuest(Quest quest)
         {
             quest.Start();
-            
+
+            quests.Add(quest.UID, quest);
+
             GameManager.Instance.TalkManager.AddQuestTopicWithInfoAndRumors(quest);
-            
-            quests.Add(quest.UID, quest);            
 
             RaiseOnQuestStartedEvent(quest);
 

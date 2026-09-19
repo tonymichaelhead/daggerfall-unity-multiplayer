@@ -38,6 +38,7 @@ namespace DFMP.Hooks
         public static Func<bool> IsStartInDungeonEnabled;
         public static Action<ulong, bool> OnActionDoorToggled;
         public static Action OnGuildMembershipChanged;
+        public static Action<object> OnQuestLocationRevealed;
         public static Func<bool> TryHandleExitGame;
         public static Func<object, object, object, object, bool> TryHandlePlacedQuestFoe;
         public static Func<object, object, Vector3, int, int, bool> TryHandleDynamicQuestFoePlacement;

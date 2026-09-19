@@ -75,6 +75,10 @@ into Layer 1. Move it back into `Assets/DFMP/` rather than accepting it.
 | QUEST-SCENE-002 | `Assets/Scripts/Game/Questing/Actions/SpawnCityGuards.cs` | `Update()` before `SpawnCityGuards()` | Consume local unsynchronized guard spawns until a server-owned guard provider exists. | 2026-09-19 |
 | DFMP-PERSIST-GUILD-001 | `Assets/Scripts/Game/Guilds/GuildManager.cs` | `AddMembership()` / `RemoveMembership()` after membership mutation | Notify DFMP so guild join/leave can flush quest-adjacent character state immediately rather than waiting for the 60s autosave. | 2026-09-19 |
 | DFMP-PERSIST-EXIT-001 | `Assets/Scripts/Game/DaggerfallUI.cs` | `dfuiExitGame` before vanilla `Application.Quit` | Allow DFMP to flush persistable character state and delay quit until the reliable payload can land. | 2026-09-19 |
+| QUEST-REVEAL-001 | `Assets/Scripts/Game/Questing/Actions/RevealLocation.cs` | `Update()` after native `DiscoverLocation()` | Notify DFMP so a named local building can be discovered on the city automap and the quest envelope can flush immediately. | 2026-09-19 |
+| QUEST-START-001 | `Assets/Scripts/Game/Questing/QuestMachine.cs` | `StartQuest(Quest)` before `AddQuestTopicWithInfoAndRumors()` | Register the quest UID before TalkManager topics so residence undiscover and dialog reveal can resolve the live quest. | 2026-09-19 |
+| QUEST-START-002 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallQuestPopupWindow.cs` | `OfferQuest_OnButtonClick()` Yes path | Start the quest before expanding AcceptQuest text so `_house_` dialog reveal can find `dictQuestInfo`. | 2026-09-19 |
+| QUEST-START-003 | `Assets/Scripts/Game/UserInterfaceWindows/DaggerfallDaedraSummonedWindow.cs` | Accept-key path before `HandleAnswer(AcceptQuest)` | Same start-before-accept-text order as guild quest popups. | 2026-09-19 |
 
 ---
 

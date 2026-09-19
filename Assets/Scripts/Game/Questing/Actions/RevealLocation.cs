@@ -57,6 +57,8 @@ namespace DaggerfallWorkshop.Game.Questing
 
             // Discover location
             GameManager.Instance.PlayerGPS.DiscoverLocation(place.SiteDetails.regionName, place.SiteDetails.locationName);
+            if (DFMP.Hooks.DaggerfallHooks.OnQuestLocationRevealed != null)
+                DFMP.Hooks.DaggerfallHooks.OnQuestLocationRevealed(place);
 
             if (readMap)
                 GameManager.Instance.PlayerEntity.Notebook.AddNote(

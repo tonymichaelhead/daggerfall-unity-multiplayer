@@ -116,8 +116,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 HotkeySequence.KeyModifiers keyModifiers = HotkeySequence.GetKeyboardKeyModifiers();
                 if (DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.Yes).IsUpWith(keyModifiers))
                 {
-                    HandleAnswer(QuestMachine.QuestMessages.AcceptQuest);
                     QuestMachine.Instance.StartQuest(daedraQuest);
+                    HandleAnswer(QuestMachine.QuestMessages.AcceptQuest);
                 }
                 else if (DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.No).IsUpWith(keyModifiers))
                 {

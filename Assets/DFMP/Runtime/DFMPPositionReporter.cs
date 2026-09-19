@@ -37,6 +37,7 @@ namespace DFMP.Runtime
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = TryHandlePlayerWeaponHit;
             DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled = OnActionDoorToggled;
             DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged = RequestQuestSave;
+            DFMP.Hooks.DaggerfallHooks.OnQuestLocationRevealed = DFMPQuestLocationReveal.HandleRevealedPlace;
             DFMP.Hooks.DaggerfallHooks.TryHandleExitGame = TryHandleExitGame;
         }
 
@@ -49,6 +50,7 @@ namespace DFMP.Runtime
             DFMP.Hooks.DaggerfallHooks.TryHandlePlayerWeaponHit = null;
             DFMP.Hooks.DaggerfallHooks.OnActionDoorToggled = null;
             DFMP.Hooks.DaggerfallHooks.OnGuildMembershipChanged = null;
+            DFMP.Hooks.DaggerfallHooks.OnQuestLocationRevealed = null;
             DFMP.Hooks.DaggerfallHooks.TryHandleExitGame = null;
             nextDamageRequestId = 1;
             nextDamageSequence = 1;

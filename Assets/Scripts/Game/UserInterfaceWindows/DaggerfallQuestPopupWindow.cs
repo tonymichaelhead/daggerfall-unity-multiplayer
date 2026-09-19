@@ -130,10 +130,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             if (messageBoxButton == DaggerfallMessageBox.MessageBoxButtons.Yes)
             {
-                // Show accept message, add quest
+                // Register the quest before expanding accept text so talk-topic reveal can find it.
                 sender.CloseWindow();
-                ShowQuestPopupMessage(offeredQuest, (int)QuestMachine.QuestMessages.AcceptQuest);
                 QuestMachine.Instance.StartQuest(offeredQuest);
+                ShowQuestPopupMessage(offeredQuest, (int)QuestMachine.QuestMessages.AcceptQuest);
             }
             else
             {
