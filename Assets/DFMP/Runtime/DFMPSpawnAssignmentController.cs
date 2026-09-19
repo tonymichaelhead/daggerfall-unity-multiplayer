@@ -8,6 +8,7 @@ using DaggerfallWorkshop.Game.MagicAndEffects;
 using DaggerfallWorkshop.Game.MagicAndEffects.MagicEffects;
 using DaggerfallWorkshop.Game.Serialization;
 using DaggerfallWorkshop.Game.Utility;
+using DaggerfallWorkshop.Utility;
 using DFMP.Hooks;
 using Mirror;
 using UnityEngine;
@@ -767,7 +768,11 @@ namespace DFMP.Runtime
                     if (!assignment.HasExteriorDoor)
                         return false;
 
-                    playerEnterExit.StartBuildingInterior(location, assignment.ExteriorDoor.ToStaticDoor(), true);
+                    StaticDoor exteriorDoor = assignment.ExteriorDoor.ToStaticDoor();
+                    if (!TryPrepareBuildingDiscoveryForReopen(exteriorDoor.buildingKey))
+                        return false;
+
+                    playerEnterExit.StartBuildingInterior(location, exteriorDoor, true);
                     return playerEnterExit.IsPlayerInsideBuilding;
                 }
 
@@ -783,6 +788,36 @@ namespace DFMP.Runtime
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Native door entry sets discovery + open-shop/tavern flags before layout.
+        /// Without those, <c>DaggerfallInterior.AddPeople</c> treats the building as closed and disables NPCs.
+        /// </summary>
+        static bool TryPrepareBuildingDiscoveryForReopen(int buildingKey)
+        {
+            if (buildingKey <= 0 || !GameManager.HasInstance || GameManager.Instance.PlayerGPS == null || GameManager.Instance.PlayerEnterExit == null)
+                return false;
+
+            PlayerGPS playerGPS = GameManager.Instance.PlayerGPS;
+            if (!playerGPS.CurrentLocation.Loaded)
+                return false;
+
+            playerGPS.DiscoverBuilding(buildingKey);
+
+            PlayerGPS.DiscoveredBuilding discoveredBuilding;
+            if (!playerGPS.GetAnyBuilding(buildingKey, out discoveredBuilding) || discoveredBuilding.buildingKey <= 0)
+            {
+                Debug.LogWarning($"[DFMP Transition] Interior reconnect could not resolve building discovery data: buildingKey={buildingKey}.");
+                return false;
+            }
+
+            PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
+            playerEnterExit.BuildingDiscoveryData = discoveredBuilding;
+            playerEnterExit.IsPlayerInsideOpenShop = RMBLayout.IsShop(discoveredBuilding.buildingType) && PlayerActivate.IsBuildingOpen(discoveredBuilding.buildingType);
+            playerEnterExit.IsPlayerInsideTavern = RMBLayout.IsTavern(discoveredBuilding.buildingType);
+            playerEnterExit.IsPlayerInsideResidence = RMBLayout.IsResidence(discoveredBuilding.buildingType);
+            return true;
         }
 
         bool TryResolveAssignedLocation(DFMPTransitionAssignment assignment, out DFLocation location)
