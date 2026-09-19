@@ -19,6 +19,7 @@ namespace DFMP.Hooks
         public static Action OnRestHourElapsed;
         public static Func<string, int, bool> TryHandleTimeAdvance;
         public static Func<bool> TryHandleVampirismTransformation;
+        public static Func<object, bool> ShouldSuppressQuestClockExpiry;
         public static Func<bool> TryHandlePlayerDeath;
         public static Func<object, bool> TryHandlePlayerMissileHit;
         public static Func<object, object, object, bool, bool, bool> TryHandlePlayerWeaponHit;
@@ -32,5 +33,7 @@ namespace DFMP.Hooks
         // When bound and false, DFU hides Start In Dungeon and never uses it for new-character startup.
         public static Func<bool> IsStartInDungeonEnabled;
         public static Action<ulong, bool> OnActionDoorToggled;
+        public static Func<object, object, object, object, bool> TryHandlePlacedQuestFoe;
+        public static Func<object, object, Vector3, int, int, bool> TryHandleDynamicQuestFoePlacement;
     }
 }

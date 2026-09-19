@@ -115,6 +115,23 @@ namespace DFMP.Runtime
         public string LootTableKey;
     }
 
+    public class DFMPQuestObjectiveLifecycleEvent
+    {
+        public string ObjectiveId;
+        public string OwnerCharacterId;
+        public int OwnerConnectionId;
+        public DFMPQuestObjectiveLifecycle Lifecycle;
+        public string Reason;
+    }
+
+    public class DFMPQuestCreditDeliveredEvent
+    {
+        public string ObjectiveId;
+        public int OwnerConnectionId;
+        public ulong ResultId;
+        public int KillCount;
+    }
+
     public sealed class DFMPEventBus
     {
         public static DFMPEventBus Instance { get; } = new DFMPEventBus();
@@ -132,6 +149,8 @@ namespace DFMP.Runtime
         public event Action<DFMPEnemySpawnedEvent> EnemySpawned;
         public event Action<DFMPEnemyDiedEvent> EnemyDied;
         public event Action<DFMPLootGeneratedEvent> LootGenerated;
+        public event Action<DFMPQuestObjectiveLifecycleEvent> QuestObjectiveLifecycleChanged;
+        public event Action<DFMPQuestCreditDeliveredEvent> QuestCreditDelivered;
 
         public void PublishPlayerConnected(DFMPPlayerConnectedEvent e)
         {
@@ -259,6 +278,26 @@ namespace DFMP.Runtime
                 return;
 
             var handler = LootGenerated;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishQuestObjectiveLifecycleChanged(DFMPQuestObjectiveLifecycleEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = QuestObjectiveLifecycleChanged;
+            if (handler != null)
+                handler(e);
+        }
+
+        public void PublishQuestCreditDelivered(DFMPQuestCreditDeliveredEvent e)
+        {
+            if (e == null)
+                return;
+
+            var handler = QuestCreditDelivered;
             if (handler != null)
                 handler(e);
         }

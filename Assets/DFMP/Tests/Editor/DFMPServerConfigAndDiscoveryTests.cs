@@ -38,10 +38,59 @@ namespace DFMP.Tests
             Assert.AreEqual(12f, config.Enemies.MagicAttackRange);
             Assert.AreEqual(6f, config.Enemies.PlayerMeleeDamageRange);
             Assert.AreEqual(25f, config.Enemies.PlayerRangedDamageRange);
+            Assert.NotNull(config.Quests);
+            Assert.AreEqual(DFMPQuestModes.ClientOwned, config.Quests.Mode);
+            Assert.IsFalse(config.Quests.FailureDeadlinesEnabled);
+            Assert.AreEqual(30f, config.Quests.EnemyActivationRadius);
+            Assert.AreEqual(45f, config.Quests.EnemyDespawnRadius);
+            Assert.AreEqual(10f, config.Quests.EnemyDespawnGraceSeconds);
+            Assert.AreEqual(DFMPServerQuestConfig.DefaultMaximumRegistrationsPerMinute, config.Quests.MaximumRegistrationsPerMinute);
+            Assert.IsTrue(config.Quests.ShowEnemyOwnerCue);
             Assert.NotNull(config.Identity);
             Assert.IsTrue(config.Identity.CharacterSelectEnabled);
             Assert.AreEqual(DFMPServerIdentityConfig.DefaultMaxCharactersPerAccount, config.Identity.MaxCharactersPerAccount);
             Assert.IsTrue(config.Identity.AllowCharacterDelete);
+        }
+
+        [Test]
+        public void ServerConfig_NormalizesQuestSettings_AndRejectsReservedSharedMode()
+        {
+            var config = new DFMPServerConfig
+            {
+                Quests = new DFMPServerQuestConfig
+                {
+                    Mode = "shared",
+                    EnemyActivationRadius = 40f,
+                    EnemyDespawnRadius = 20f,
+                    EnemyDespawnGraceSeconds = -1f,
+                    MaximumObjectivesPerCharacter = 0,
+                    MaximumFoesPerObjective = 99,
+                    MaximumRegistrationsPerMinute = 0,
+                    MaximumPayloadBytes = 1,
+                    AutosaveIntervalSeconds = 1f
+                }
+            };
+
+            config.Normalize();
+
+            Assert.AreEqual(DFMPQuestModes.Shared, config.Quests.Mode);
+            Assert.AreEqual(40f, config.Quests.EnemyActivationRadius);
+            Assert.Greater(config.Quests.EnemyDespawnRadius, config.Quests.EnemyActivationRadius);
+            Assert.AreEqual(DFMPServerQuestConfig.DefaultDespawnGraceSeconds, config.Quests.EnemyDespawnGraceSeconds);
+            Assert.AreEqual(DFMPServerQuestConfig.DefaultMaximumObjectivesPerCharacter, config.Quests.MaximumObjectivesPerCharacter);
+            Assert.AreEqual(DFMPServerQuestConfig.DefaultMaximumFoesPerObjective, config.Quests.MaximumFoesPerObjective);
+            Assert.AreEqual(DFMPServerQuestConfig.DefaultMaximumRegistrationsPerMinute, config.Quests.MaximumRegistrationsPerMinute);
+            Assert.AreEqual(DFMPServerQuestConfig.DefaultMaximumPayloadBytes, config.Quests.MaximumPayloadBytes);
+            Assert.AreEqual(DFMPServerQuestConfig.DefaultAutosaveIntervalSeconds, config.Quests.AutosaveIntervalSeconds);
+
+            string reason;
+            Assert.IsFalse(config.Quests.TryValidateImplementedMode(out reason));
+            Assert.IsNotEmpty(reason);
+
+            config.Quests.Mode = "invalid";
+            config.Normalize();
+            Assert.AreEqual(DFMPQuestModes.ClientOwned, config.Quests.Mode);
+            Assert.IsTrue(config.Quests.TryValidateImplementedMode(out reason));
         }
 
         [Test]

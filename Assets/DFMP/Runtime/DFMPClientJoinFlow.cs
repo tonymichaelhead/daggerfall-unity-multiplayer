@@ -92,6 +92,8 @@ namespace DFMP.Runtime
 
         DFMPCharacterSnapshotMessage pendingSnapshot;
         bool hasPendingSnapshot;
+        string pendingQuestTransferId;
+        string pendingQuestPayload;
         bool introQuestSuppressionStarted;
         string pendingConnectionNotice;
         string pendingKickNotice;
@@ -136,7 +138,9 @@ namespace DFMP.Runtime
             TryShowConnectionNotice();
 
             StartGameBehaviour startGameBehaviour = FindObjectOfType<StartGameBehaviour>();
-            if (!hasPendingSnapshot || ServerIdentityApplied || startGameBehaviour == null ||
+            if (!hasPendingSnapshot || ServerIdentityApplied ||
+                !IsQuestPayloadReady(pendingSnapshot, pendingQuestTransferId, pendingQuestPayload) ||
+                startGameBehaviour == null ||
                 startGameBehaviour.LastStartMethod != StartGameBehaviour.StartMethods.NewCharacter ||
                 GameManager.Instance == null || GameManager.Instance.PlayerEntity == null)
                 return;
@@ -195,6 +199,8 @@ namespace DFMP.Runtime
             pendingKickNotice = null;
             shouldShowKickNotice = false;
             joinChatPublished = false;
+            pendingQuestTransferId = null;
+            pendingQuestPayload = null;
             hasPendingRoster = false;
             CloseCharacterSelectWindow(true);
             Flow.MarkConnecting();
@@ -376,6 +382,31 @@ namespace DFMP.Runtime
             Flow.ApplyCharacterSnapshot(snapshot);
             pendingSnapshot = snapshot;
             hasPendingSnapshot = true;
+            if (!snapshot.HasQuestState ||
+                !string.Equals(pendingQuestTransferId, snapshot.QuestTransferId, System.StringComparison.Ordinal))
+            {
+                pendingQuestTransferId = null;
+                pendingQuestPayload = null;
+            }
+        }
+
+        public void ApplyQuestStatePayload(string transferId, string payload)
+        {
+            if (string.IsNullOrEmpty(transferId) || string.IsNullOrEmpty(payload))
+                return;
+
+            pendingQuestTransferId = transferId;
+            pendingQuestPayload = payload;
+        }
+
+        public static bool IsQuestPayloadReady(
+            DFMPCharacterSnapshotMessage snapshot,
+            string transferId,
+            string payload)
+        {
+            return !snapshot.HasQuestState ||
+                (!string.IsNullOrEmpty(payload) &&
+                 string.Equals(snapshot.QuestTransferId, transferId, System.StringComparison.Ordinal));
         }
 
         public bool ShouldReportLocalIdentity()
@@ -408,10 +439,28 @@ namespace DFMP.Runtime
                 playerEntity.Skills.SetPermanentSkillValue(index, (short)Mathf.Clamp(snapshot.Skills[index], 0, 100));
             playerEntity.GoldPieces = snapshot.Gold;
             ApplyProgression(playerEntity, snapshot.StartingLevelUpSkillSum);
+            bool questStateRestored = !snapshot.HasQuestState;
+            if (snapshot.HasQuestState)
+            {
+                DFMPQuestStateEnvelope questState;
+                string questReason;
+                if (DFMPQuestStateCodec.TryDecode(pendingQuestPayload, out questState, out questReason) &&
+                    DFMPQuestStateCodec.TryRestore(questState, out questReason))
+                {
+                    questStateRestored = true;
+                    Debug.Log($"[DFMP Join] Restored quest state before inventory: quests={QuestMachine.Instance.QuestCount}, siteLinks={QuestMachine.Instance.SiteLinkCount}.");
+                }
+                else
+                {
+                    Debug.LogWarning($"[DFMP Join] Quest state restore failed; quest-linked inventory will not be restored: reason={questReason}.");
+                }
+            }
+
             DFMPCharacterItemRecord[] inventory;
             DFMPCharacterEquipmentRecord[] equipment;
             string inventoryReason = string.Empty;
-            if (!string.IsNullOrWhiteSpace(snapshot.InventoryJson) &&
+            if (questStateRestored &&
+                !string.IsNullOrWhiteSpace(snapshot.InventoryJson) &&
                 DFMPInventorySnapshotCodec.TryDecode(snapshot.InventoryJson, out inventory, out equipment, out inventoryReason))
             {
                 // Clear first so starting equipment cannot keep referencing items the deserialize wipes out.
@@ -433,12 +482,14 @@ namespace DFMP.Runtime
                 if (DaggerfallUI.Instance != null && DaggerfallUI.Instance.PaperDollRenderer != null)
                     DaggerfallUI.Instance.PaperDollRenderer.Refresh();
             }
-            else if (!string.IsNullOrWhiteSpace(snapshot.InventoryJson))
+            else if (questStateRestored && !string.IsNullOrWhiteSpace(snapshot.InventoryJson))
             {
                 Debug.LogWarning($"[DFMP Join] Inventory snapshot rejected during restore: reason={inventoryReason}.");
             }
             ServerIdentityApplied = true;
             hasPendingSnapshot = false;
+            pendingQuestTransferId = null;
+            pendingQuestPayload = null;
             Flow.MarkInGame();
             Debug.Log($"[DFMP Join] Applied server character snapshot: name='{snapshot.CharacterName}', race={snapshot.Race}, gender={snapshot.Gender}, face={snapshot.FaceVariant}, level={snapshot.Level}, health={snapshot.Health}/{snapshot.MaxHealth}, spellPoints={snapshot.SpellPoints}/{snapshot.MaxSpellPoints}, fatigue={snapshot.Fatigue}/{snapshot.MaxFatigue}, startingSkillSum={playerEntity.StartingLevelUpSkillSum}, currentSkillSum={playerEntity.CurrentLevelUpSkillSum}.");
         }

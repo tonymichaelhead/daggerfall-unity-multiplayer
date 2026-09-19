@@ -55,6 +55,19 @@
     "PlayerRangedDamageRange": 25.0,
     "RequireLineOfSight": true
   },
+  "Quests": {
+    "Mode": "ClientOwned",
+    "FailureDeadlinesEnabled": false,
+    "EnemyActivationRadius": 30.0,
+    "EnemyDespawnRadius": 45.0,
+    "EnemyDespawnGraceSeconds": 10.0,
+    "MaximumObjectivesPerCharacter": 64,
+    "MaximumFoesPerObjective": 8,
+    "MaximumRegistrationsPerMinute": 120,
+    "MaximumPayloadBytes": 4194304,
+    "AutosaveIntervalSeconds": 60.0,
+    "ShowEnemyOwnerCue": true
+  },
   "Developer": {
     "CommandsEnabled": true
   },

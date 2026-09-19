@@ -14,6 +14,7 @@ namespace DFMP.Runtime
         public static string Address { get; private set; } = "127.0.0.1";
         public static ushort Port { get; private set; }
         public static string AccountId { get; private set; }
+        static readonly DFMPQuestPayloadAssembler questPayloadAssembler = new DFMPQuestPayloadAssembler();
 
         public static event Action<DFMPAdminRosterResponse> AdminRosterReceived;
         public static event Action<DFMPCharacterRosterMessage> CharacterRosterReceived;
@@ -92,6 +93,7 @@ namespace DFMP.Runtime
             NetworkClient.RegisterHandler<DFMPCharacterRosterMessage>(OnCharacterRosterReceived);
             NetworkClient.RegisterHandler<DFMPCharacterActionResultMessage>(OnCharacterActionResultReceived);
             NetworkClient.RegisterHandler<DFMPCharacterSnapshotMessage>(OnCharacterSnapshotReceived);
+            NetworkClient.RegisterHandler<DFMPQuestPayloadChunkMessage>(OnQuestPayloadChunkReceived);
             NetworkClient.RegisterHandler<DFMPVitalSnapshot>(OnVitalSnapshotReceived);
             NetworkClient.RegisterHandler<DFMPRestResponse>(OnRestResponseReceived);
             NetworkClient.RegisterHandler<DFMPActionDoorSyncMessage>(OnActionDoorSyncReceived);
@@ -273,6 +275,65 @@ namespace DFMP.Runtime
             }
         }
 
+        static void OnQuestPayloadChunkReceived(DFMPQuestPayloadChunkMessage message)
+        {
+            DFMPClientJoinFlowController controller = DFMPClientJoinFlowController.Instance;
+            if (controller == null || controller.Flow == null ||
+                !controller.Flow.LastCharacterSnapshot.HasQuestState ||
+                !string.Equals(
+                    controller.Flow.LastCharacterSnapshot.QuestTransferId,
+                    message.TransferId,
+                    StringComparison.Ordinal) ||
+                controller.Flow.LastCharacterSnapshot.QuestPayloadBytes != message.TotalBytes ||
+                !string.Equals(
+                    controller.Flow.LastCharacterSnapshot.QuestPayloadChecksum,
+                    message.Checksum,
+                    StringComparison.Ordinal))
+            {
+                Debug.LogWarning("[DFMP Quest] Rejected quest payload chunk not described by the pending character snapshot.");
+                questPayloadAssembler.Reset();
+                return;
+            }
+
+            string payload;
+            string reason;
+            if (!questPayloadAssembler.TryAdd(message, out payload, out reason))
+            {
+                Debug.LogWarning($"[DFMP Quest] Rejected quest payload chunk: reason={reason}.");
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(payload))
+            {
+                controller.ApplyQuestStatePayload(message.TransferId, payload);
+                Debug.Log($"[DFMP Quest] Received complete quest payload: bytes={message.TotalBytes}, chunks={message.ChunkCount}.");
+            }
+        }
+
+        public static bool SendQuestState(DFMPQuestStateEnvelope envelope, out string checksum)
+        {
+            checksum = string.Empty;
+            string reason;
+            if (!NetworkClient.isConnected || envelope == null ||
+                !DFMPQuestStateCodec.TryValidate(envelope, out reason))
+                return false;
+
+            DFMPQuestPayloadChunkMessage[] chunks;
+            if (!DFMPQuestPayloadProtocol.TryCreateChunks(
+                DFMPQuestStateCodec.Encode(envelope),
+                out chunks,
+                out reason))
+            {
+                Debug.LogWarning($"[DFMP Quest] Quest state was not sent: reason={reason}.");
+                return false;
+            }
+
+            checksum = chunks[0].Checksum;
+            for (int index = 0; index < chunks.Length; index++)
+                NetworkClient.Send(chunks[index]);
+            return true;
+        }
+
         static void OnVitalSnapshotReceived(DFMPVitalSnapshot message)
         {
             if (!DFMPCombatProtocol.IsValidVitalSnapshot(message) ||
@@ -321,6 +382,7 @@ namespace DFMP.Runtime
 
         public static void Stop()
         {
+            questPayloadAssembler.Reset();
             DFMPNetworkManager networkManager = Manager;
             if (networkManager != null && networkManager.isNetworkActive)
                 networkManager.StopClient();

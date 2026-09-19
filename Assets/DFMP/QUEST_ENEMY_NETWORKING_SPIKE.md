@@ -2,9 +2,9 @@
 
 ## Status
 
-Deferred investigation. Phase 1 keeps quest-spawned enemies client-local along with the rest of each character's personal quest simulation.
+Decision complete. Phase 1 implements client-owned quest machines with owner-scoped, server-owned quest enemies.
 
-This document records the problem space and candidate designs so a later spike can make an evidence-based decision without reopening the entire discussion. It is not an implementation specification.
+Candidate B is the accepted physical-enemy model, with explicit ownership presentation and bounded proximity activation. Candidate C remains the migration path for the future `Shared` quest mode.
 
 ## Context
 
@@ -14,38 +14,34 @@ Quest enemies are the difficult boundary. They are physical actors that players 
 
 The initial idea was to register each quest foe as an owner-tagged server enemy. That is implementable, but it creates ambiguous and potentially misleading encounters when several players have similar objectives in one location. A player can kill the visually identical enemy belonging to someone else, advance no personal objective, and receive no clear explanation. Independent owner-tagged spawns can also crowd a fixed quest location, especially at higher population.
 
-For reliability and understandable behavior, MVP accepts reduced co-op fidelity and leaves all quest enemies client-local. They are visible and combat-relevant only to the character whose quest created them. Ordinary dungeon enemies remain server-owned under M8.
+The accepted design keeps native quest graphs personal but moves every physical quest enemy onto the existing server-owned enemy stack. This permits assistance without synchronizing arbitrary quest scripts.
 
 ## MVP Decision
 
 - Every client runs its own native quest machine.
-- All quest resources remain client-local, including placed foes and dynamic `CreateFoe` encounters.
-- Quest enemies are not registered with, spawned by, replicated through, or credited by the server.
-- Other players cannot see, damage, tank, or help kill another character's quest enemies.
-- Quest enemies can damage only the character whose local quest created them. They can never target or damage another player.
-- The owner client reports local quest-enemy damage through a dedicated M7 PvE intent. The server still owns and applies the character's health change, but treats the unverifiable local enemy source as an explicit beta trust exception and enforces strict numeric bounds, rate limits, source-session ownership, and an owner-only target.
-- Quest-enemy death, kill credit, carried quest loot, and all other quest effects remain local to the owning character.
+- Quest NPCs, dialogue, journal, rewards, and placed quest objects remain client-local and owner-only.
+- Marker-bound `PlaceFoe` and dynamic `CreateFoe` encounters register owner-scoped objectives with a server-owned quest enemy provider.
+- Only the objective owner can activate an encounter. The default activation envelope is exact authoritative context plus 30 metres; alive despawn uses 45 metres and a 10-second grace period.
+- Every observer in the context can see, damage, tank, and kill an active quest enemy. The enemy can attack any valid nearby player through the normal M7/M8 authority path.
+- Confirmed death grants one idempotent result to the objective owner regardless of killer. No other character's quest advances.
+- A subtle focus/near-range owner cue disambiguates duplicate owner-scoped enemies.
+- Despawned-alive generations retain health, injury state, position, and queued quest effects. Re-entry recreates the same generation.
+- Foe-carried quest items appear only in the owner's personal corpse loot and retain their quest UID and resource symbol.
 - Canceling or completing a quest follows native local cleanup behavior.
-- The limitation is accepted for the private beta and should be documented for testers.
-- Quest patterns proven incompatible with this boundary may be placed on a narrow beta blacklist rather than receiving one-off networking behavior.
-- Server-owned quest enemies and shared quest progression remain deferred until this spike is completed.
+- Objective ID, encounter generation ID, and network enemy ID are separate concepts so future shared mode can coalesce physical encounters without changing personal quest machines.
+- `Quests.Mode = Shared` is reserved but rejected at startup until objective-equivalence rules are implemented.
 
-This decision favors a coherent limitation over a partially shared system whose ownership is invisible to players.
+This decision favors cooperative combat and explicit ownership over invisible client-local enemies.
 
-## MVP Compatibility And Trust Boundary
+## Compatibility And Trust Boundary
 
-The local quest PvE damage path is deliberately narrower than general client-reported damage:
+Quest enemy combat uses the same authoritative server path as other dynamic enemies:
 
-- The submitting session is also the only legal damage target.
-- The intent cannot name or affect another player, a server-owned enemy, or a world entity.
-- The server clamps damage to configured per-hit bounds and rejects reports that exceed rate or cooldown limits.
-- The intent passes through the same server damage application chokepoint as other damage, so death, persistence, and event publication remain server-owned.
-- The server records the source category as local quest PvE for diagnostics and later abuse analysis.
-- The beta accepts that a modified owner client can fabricate this damage source. This exception does not grant the client authority to set health directly.
-
-The client must keep local quest combat isolated from shared combat. A local quest enemy cannot select another player as a target, collide with or obstruct another player's simulation, damage a server-owned enemy, or generate shared loot and kill events. Its death and carried items are resolved only by the owning quest machine.
-
-The tester setup note must state that quest combat is personal: party members do not see the enemy, cannot assist with it, and may observe the owner reacting to an entity absent from their client. If a quest action cannot remain inside this boundary reliably, beta may blacklist that specific pattern or quest. Blacklisting is a compatibility fallback, not a general quest curation system.
+- Client objective registrations are untrusted inputs. The server validates owner session, context, foe type, spawn count, position, sequence, rate, and configured bounds.
+- Player-to-foe and foe-to-player damage pass through the M7 chokepoint.
+- Objective results are sequenced, persisted, acknowledged, and idempotent across reconnect and restart.
+- Server authority over combat does not imply server execution of the quest graph. The owner client applies validated result commands to its native `Foe` resource.
+- Built-in unsupported action patterns are defects to resolve, not candidates for a silent blacklist.
 
 ## What Still Must Persist
 

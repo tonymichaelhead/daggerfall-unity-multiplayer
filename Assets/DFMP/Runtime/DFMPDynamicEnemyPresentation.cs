@@ -4,6 +4,7 @@ using DaggerfallConnect.Utility;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Game.Entity;
+using DaggerfallWorkshop.Game.Items;
 using DaggerfallWorkshop.Utility;
 using Mirror;
 using UnityEngine;
@@ -12,6 +13,26 @@ namespace DFMP.Runtime
 {
     public static class DFMPDynamicEnemyPresentation
     {
+        public const float QuestOwnerCueDistance = 12f;
+        public const float QuestOwnerCueMinimumViewDot = 0.96f;
+
+        public static bool ShouldShowQuestOwnerCue(
+            bool isQuestEnemy,
+            string ownerDisplayName,
+            Vector3 cameraPosition,
+            Vector3 cameraForward,
+            Vector3 enemyPosition)
+        {
+            if (!isQuestEnemy || string.IsNullOrWhiteSpace(ownerDisplayName))
+                return false;
+
+            Vector3 offset = enemyPosition - cameraPosition;
+            if (offset.sqrMagnitude > QuestOwnerCueDistance * QuestOwnerCueDistance ||
+                offset.sqrMagnitude < 0.0001f)
+                return false;
+
+            return Vector3.Dot(cameraForward.normalized, offset.normalized) >= QuestOwnerCueMinimumViewDot;
+        }
         public const float MaximumVisibleDistance = 150f;
         public const float PositionSmoothingSpeed = 12f;
 
@@ -72,7 +93,7 @@ namespace DFMP.Runtime
             bool isPlayerInsideDungeon,
             DFMPWorldContextKey playerContext)
         {
-            if (state == null || !isPlayerInsideDungeon)
+            if (state == null || (!isPlayerInsideDungeon && !state.IsQuestEnemy))
                 return false;
 
             if (state.LifecycleState != DFMPDynamicEnemyLifecycleState.SpawnedAlive)
@@ -90,7 +111,7 @@ namespace DFMP.Runtime
             bool isPlayerInsideDungeon,
             DFMPWorldContextKey playerContext)
         {
-            if (state == null || !isPlayerInsideDungeon)
+            if (state == null || (!isPlayerInsideDungeon && !state.IsQuestEnemy))
                 return false;
 
             if (state.LifecycleState != DFMPDynamicEnemyLifecycleState.Dead)
@@ -221,6 +242,7 @@ namespace DFMP.Runtime
         readonly Dictionary<int, Vector3> lastGroundedMeleePositionByStateId = new Dictionary<int, Vector3>();
         readonly Dictionary<int, GameObject> corpses = new Dictionary<int, GameObject>();
         readonly Dictionary<int, bool> corpseVisibilityByStateId = new Dictionary<int, bool>();
+        readonly HashSet<int> questLootAppliedStateIds = new HashSet<int>();
 
         public static void EnsureInstance()
         {
@@ -259,6 +281,7 @@ namespace DFMP.Runtime
             proxyVisibilityByStateId.Clear();
             lastGroundedMeleePositionByStateId.Clear();
             corpseVisibilityByStateId.Clear();
+            questLootAppliedStateIds.Clear();
             if (instance == this)
                 instance = null;
         }
@@ -319,9 +342,11 @@ namespace DFMP.Runtime
                     if (appearance != null)
                         appearance.ApplyIfChanged(state.MobileType, state.Gender, state.Reaction, state.IsMoving, state.AttackSequence, state.AttackKind);
 
-                    Vector3 targetPosition = DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
-                        playerEnterExit.Dungeon.transform.position,
-                        state.DungeonLocalPosition);
+                    Vector3 targetPosition = ResolveScenePosition(
+                        state,
+                        playerContext,
+                        streamingWorld,
+                        playerEnterExit);
 
                     if (!proxy.activeSelf)
                         proxy.transform.position = targetPosition;
@@ -329,6 +354,7 @@ namespace DFMP.Runtime
                         proxy.transform.position = DFMPDynamicEnemyPresentation.InterpolatePosition(proxy.transform.position, targetPosition, Time.unscaledDeltaTime);
 
                     proxy.transform.rotation = Quaternion.Euler(0f, state.FacingYaw, 0f);
+                    UpdateQuestOwnerCue(proxy, state);
 
                     if (state.MobileType != (int)MobileTypes.GiantBat && state.MobileType != (int)MobileTypes.Harpy)
                         LogGroundedMeleePositionChange(stateId, state, proxy, targetPosition);
@@ -369,12 +395,17 @@ namespace DFMP.Runtime
                 bool isCorpseEligible = DFMPDynamicEnemyPresentation.IsCorpseEligible(state, isInsideDungeon, playerContext);
                 if (isCorpseEligible)
                 {
-                    GameObject corpse = GetOrCreateCorpse(stateId, state, playerEnterExit.Dungeon.transform);
+                    Transform contextRoot = GetContextRoot(playerContext, streamingWorld, playerEnterExit);
+                    Vector3 targetPosition = GetCorpseScenePosition(
+                        stateId,
+                        state,
+                        playerContext,
+                        streamingWorld,
+                        playerEnterExit);
+                    targetPosition = DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(contextRoot, targetPosition);
+                    GameObject corpse = GetOrCreateCorpse(stateId, state, contextRoot, targetPosition);
                     if (corpse != null)
                     {
-                        Vector3 targetPosition = GetCorpseScenePosition(stateId, state, playerEnterExit.Dungeon.transform);
-                        targetPosition = DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(playerEnterExit.Dungeon.transform, targetPosition);
-
                         bool isVisible = DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(
                             playerEnterExit.transform.position,
                             targetPosition);
@@ -427,17 +458,90 @@ namespace DFMP.Runtime
             return proxy;
         }
 
-        GameObject GetOrCreateCorpse(int stateId, DFMPDynamicEnemyState state, Transform dungeonTransform)
+        static Transform GetContextRoot(
+            DFMPWorldContextKey context,
+            StreamingWorld streamingWorld,
+            PlayerEnterExit playerEnterExit)
+        {
+            if (context.Kind == DFMPWorldContextKind.Dungeon && playerEnterExit != null && playerEnterExit.Dungeon != null)
+                return playerEnterExit.Dungeon.transform;
+            if (context.Kind == DFMPWorldContextKind.BuildingInterior && playerEnterExit != null && playerEnterExit.Interior != null)
+                return playerEnterExit.Interior.transform;
+            return streamingWorld != null && streamingWorld.CurrentPlayerLocationObject != null
+                ? streamingWorld.CurrentPlayerLocationObject.transform
+                : null;
+        }
+
+        static Vector3 ResolveScenePosition(
+            DFMPDynamicEnemyState state,
+            DFMPWorldContextKey context,
+            StreamingWorld streamingWorld,
+            PlayerEnterExit playerEnterExit)
+        {
+            Transform root = GetContextRoot(context, streamingWorld, playerEnterExit);
+            if (context.Kind != DFMPWorldContextKind.Exterior)
+                return root != null
+                    ? DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(root.position, state.DungeonLocalPosition)
+                    : state.DungeonLocalPosition;
+
+            Vector3 localPlayerPosition = streamingWorld.LocalPlayerGPS.transform.position;
+            Vector3 scenePosition = DFMPRemotePlayerPresentation.WorldToScenePosition(
+                streamingWorld.LocalPlayerGPS,
+                localPlayerPosition,
+                Mathf.RoundToInt(state.DungeonLocalPosition.x),
+                Mathf.RoundToInt(state.DungeonLocalPosition.z));
+            return DFMPRemotePlayerPresentation.GroundScenePosition(streamingWorld, scenePosition);
+        }
+
+        void UpdateQuestOwnerCue(GameObject proxy, DFMPDynamicEnemyState state)
+        {
+            Transform cueTransform = proxy.transform.Find("QuestOwnerCue");
+            if (cueTransform == null)
+            {
+                GameObject cueObject = new GameObject("QuestOwnerCue");
+                cueObject.transform.SetParent(proxy.transform, false);
+                cueObject.transform.localPosition = new Vector3(0f, 2.2f, 0f);
+                TextMesh text = cueObject.AddComponent<TextMesh>();
+                text.anchor = TextAnchor.MiddleCenter;
+                text.alignment = TextAlignment.Center;
+                text.fontSize = 32;
+                text.characterSize = 0.03f;
+                text.color = new Color(1f, 0.85f, 0.35f, 1f);
+                cueTransform = cueObject.transform;
+            }
+
+            Camera camera = GameManager.Instance != null ? GameManager.Instance.MainCamera : null;
+            bool visible = camera != null &&
+                DFMPWorldSettings.CurrentShowQuestEnemyOwnerCue &&
+                DFMPDynamicEnemyPresentation.ShouldShowQuestOwnerCue(
+                    state.IsQuestEnemy,
+                    state.QuestOwnerDisplayName,
+                    camera.transform.position,
+                    camera.transform.forward,
+                    proxy.transform.position);
+            cueTransform.gameObject.SetActive(visible);
+            if (!visible)
+                return;
+
+            TextMesh cueText = cueTransform.GetComponent<TextMesh>();
+            cueText.text = state.QuestOwnerDisplayName + "'s quest";
+            cueTransform.rotation = DFMPRemotePlayerPresentation.GetLabelBillboardRotation(
+                cueTransform.position,
+                camera.transform.position);
+        }
+
+        GameObject GetOrCreateCorpse(
+            int stateId,
+            DFMPDynamicEnemyState state,
+            Transform contextRoot,
+            Vector3 targetPosition)
         {
             GameObject corpse;
             if (corpses.TryGetValue(stateId, out corpse) && corpse != null)
                 return corpse;
 
-            Vector3 targetPosition = GetCorpseScenePosition(stateId, state, dungeonTransform);
-            targetPosition = DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(dungeonTransform, targetPosition);
-
             DaggerfallLoot loot;
-            if (DFMPDynamicEnemyPresentation.TryCreateCorpseLootContainer(state.MobileType, targetPosition, dungeonTransform, out loot) && loot != null)
+            if (DFMPDynamicEnemyPresentation.TryCreateCorpseLootContainer(state.MobileType, targetPosition, contextRoot, out loot) && loot != null)
             {
                 corpse = loot.gameObject;
             }
@@ -445,24 +549,66 @@ namespace DFMP.Runtime
             {
                 corpse = new GameObject($"DFMP_DynamicEnemyCorpse_{state.EnemyId}");
                 corpse.transform.position = targetPosition;
-                corpse.transform.SetParent(dungeonTransform, true);
+                corpse.transform.SetParent(contextRoot, true);
             }
 
             Object.DontDestroyOnLoad(corpse);
             corpses[stateId] = corpse;
+            AddOwnerQuestLoot(stateId, state, corpse);
             Debug.Log($"[DFMP Enemy] Created client corpse loot proxy: stateId={stateId}, enemyId={state.EnemyId}, mobileType={state.MobileType}, dungeonLocalPosition={state.DungeonLocalPosition}.");
             return corpse;
         }
 
-        Vector3 GetCorpseScenePosition(int stateId, DFMPDynamicEnemyState state, Transform dungeonTransform)
+        void AddOwnerQuestLoot(int stateId, DFMPDynamicEnemyState state, GameObject corpse)
+        {
+            if (state == null ||
+                corpse == null ||
+                !state.IsQuestEnemy ||
+                state.QuestOwnerConnectionId != DFMPSpawnAssignmentController.LocalConnectionId ||
+                string.IsNullOrWhiteSpace(state.QuestLootJson) ||
+                !questLootAppliedStateIds.Add(stateId))
+                return;
+
+            DaggerfallLoot loot = corpse.GetComponent<DaggerfallLoot>();
+            if (loot == null)
+                return;
+
+            DFMPCharacterItemRecord[] items;
+            DFMPCharacterEquipmentRecord[] equipment;
+            string reason;
+            if (!DFMPInventorySnapshotCodec.TryDecode(
+                state.QuestLootJson,
+                out items,
+                out equipment,
+                out reason))
+            {
+                Debug.LogWarning($"[DFMP Quest] Rejected owner quest loot: enemyId={state.EnemyId}, reason={reason}.");
+                return;
+            }
+
+            var questItems = new ItemCollection();
+            questItems.DeserializeItems(DFMPCharacterPersistence.RestoreItems(items));
+            for (int index = 0; index < questItems.Count; index++)
+            {
+                DaggerfallUnityItem item = questItems.GetItem(index);
+                if (item == null || !item.IsQuestItem)
+                    continue;
+                loot.Items.AddItem(item);
+            }
+        }
+
+        Vector3 GetCorpseScenePosition(
+            int stateId,
+            DFMPDynamicEnemyState state,
+            DFMPWorldContextKey context,
+            StreamingWorld streamingWorld,
+            PlayerEnterExit playerEnterExit)
         {
             GameObject proxy;
             if (proxies.TryGetValue(stateId, out proxy) && proxy != null)
                 return proxy.transform.position;
 
-            return DFMPDynamicEnemyPresentation.DungeonLocalToScenePosition(
-                dungeonTransform.position,
-                state.DungeonLocalPosition);
+            return ResolveScenePosition(state, context, streamingWorld, playerEnterExit);
         }
 
         void HideAllPresentations()
@@ -529,6 +675,7 @@ namespace DFMP.Runtime
 
                 corpses.Remove(staleKey);
                 corpseVisibilityByStateId.Remove(staleKey);
+                questLootAppliedStateIds.Remove(staleKey);
                 Debug.Log($"[DFMP Enemy] Client removed corpse: staleStateId={staleKey}.");
             }
         }

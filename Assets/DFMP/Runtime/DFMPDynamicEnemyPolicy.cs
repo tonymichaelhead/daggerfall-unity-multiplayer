@@ -13,6 +13,7 @@ namespace DFMP.Runtime
         Dungeon,
         Wilderness,
         CityNight,
+        Quest,
         Mod
     }
 
@@ -140,6 +141,10 @@ namespace DFMP.Runtime
         public DFMPDynamicEnemyIdentity Identity;
         public DFMPDynamicEnemyLifecycleState LifecycleState;
         public DFMPDynamicEnemyDescriptor Descriptor;
+        public int QuestOwnerConnectionId;
+        public string QuestOwnerDisplayName;
+        public string QuestObjectiveId;
+        public string QuestLootJson;
         public int Health;
         public int MaxHealth;
         public int TargetConnectionId;

@@ -51,6 +51,10 @@ namespace DFMP.Runtime
             IsDedicatedServer = true;
 
             fileConfig.Normalize();
+            string questConfigReason;
+            if (!fileConfig.Quests.TryValidateImplementedMode(out questConfigReason))
+                throw new InvalidOperationException(questConfigReason);
+
             DFMPChatProtocol.ConfigureFromConfig(fileConfig);
 
             // Command-line args take precedence over config file values if explicitly set

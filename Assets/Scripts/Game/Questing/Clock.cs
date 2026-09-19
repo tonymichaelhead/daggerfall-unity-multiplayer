@@ -289,7 +289,9 @@ namespace DaggerfallWorkshop.Game.Questing
             // Check if time is up
             if (remainingTimeInSeconds <= 0)
             {
-                TriggerTask();
+                if (DFMP.Hooks.DaggerfallHooks.ShouldSuppressQuestClockExpiry == null ||
+                    !DFMP.Hooks.DaggerfallHooks.ShouldSuppressQuestClockExpiry(this))
+                    TriggerTask();
                 clockEnabled = false;
                 clockFinished = true;
                 remainingTimeInSeconds = 0;

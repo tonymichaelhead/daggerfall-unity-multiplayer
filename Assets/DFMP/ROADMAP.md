@@ -528,17 +528,19 @@ Verification:
 
 ### Quest Policy for Phase 1
 
-Quests remain **personal per player** rather than shared or disabled. Full quest-state synchronization is explicitly out of scope; the reference fork's approach demonstrated that it does not decompose cleanly.
+Quest progression is **client-owned per character**. Each client runs one native quest machine, while the server persists that machine and owns physical quest enemies. Full quest-graph replication is out of scope and is not required for other players to assist with quest combat.
 
-- Each client runs its own quest state machine. Quest NPCs, items, dialogue, journal, and quest-spawned enemies are client-local, so two players may independently hold the same quest from the same NPC.
-- Quest enemies are not replicated or server-owned in Phase 1. Other players cannot see or help fight them. This is an intentional MVP limitation: owner-tagged enemies can multiply at shared markers and make it unclear which visually identical target advances which character's quest.
-- Quest enemies can damage only the character whose local quest created them. Their attacks enter M7 through the explicitly beta-trusted local quest PvE path, where the server applies bounded and rate-limited damage to that same character. They can never target or damage another player.
-- Quest-enemy deaths, kill credit, carried quest loot, and other quest effects remain local to the owning character. Party members cannot assist with or receive effects from that combat.
-- Active quest progress and quest-item identity still persist server-side per character because multiplayer suppresses DFU's native save/load flow.
-- Quest deadlines are suppressed by default for beta. The server disables quest timeout actions rather than editing upstream quest scripts, keeping the change configurable and rebasable.
-- Configuration exposes a quest mode of `personal` or `disabled`, plus a flag for deadline enforcement. Shared quests and server-owned quest enemies are reserved for later milestones.
-- Quest patterns proven incompatible with this boundary may be placed on a narrow beta blacklist rather than receiving quest-specific networking work. The tester setup note must explain that quest combat is personal and cannot be assisted by other players.
-- The alternatives, lifecycle questions, persistence requirements, and spike acceptance criteria are recorded in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
+- `Quests.Mode` reserves two architecture modes: `ClientOwned` and future `Shared`. `ClientOwned` is the only implemented mode; a server configured for `Shared` fails startup explicitly.
+- Quest dialogue, journal, branching, placed NPCs, placed objects, rewards, and faction effects remain personal. Placed quest objects are visible and interactive only for their owner, preventing another player from stealing an objective.
+- Quest-machine state, SiteLinks, quest-adjacent character state, and complete quest-item identity persist in the server's per-character record. Restore ordering is quest machine first, then quest-linked inventory and world resources.
+- Quest failure deadlines are disabled by default, while clocks required for quest sequencing continue to run. Built-in clock expiry paths require explicit classification; blanket clock suppression is not acceptable because it can stall the main quest.
+- Every quest foe is owner-scoped and server-owned. Only the owner can activate it, but every nearby observer can see, fight, and be attacked by it. Death advances only the owning objective regardless of who dealt damage or the killing blow.
+- Marker-bound and dynamic quest foes use the M8 provider-agnostic enemy registry, M6 context interest, and M7 damage chokepoint. A subtle owner cue disambiguates otherwise identical owner-scoped foes.
+- Activation defaults to exact authoritative context plus 30 metres from the objective. Despawn begins outside 45 metres or after leaving context, with a 10-second grace period. Despawn preserves the live logical generation and health so crossing the boundary cannot heal the foe.
+- A foe-carried quest item appears only in the owner's personal corpse loot and retains its quest UID and resource symbol. Non-owners cannot take or consume it.
+- Objective, encounter generation, and network enemy IDs remain separate. Future `Shared` mode can coalesce equivalent personal objectives without replacing personal quest machines.
+- Built-in quest actions that touch server authority, including teleport, shared time, guards, and scene-wide enemy commands, require an explicit compatibility classification and validated server route. Full-game progression does not permit a silent quest blacklist.
+- The owner-scoped lifecycle and future shared migration path are specified in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
 
 ## Phase 2 Milestones: Public Release
 
@@ -751,11 +753,11 @@ Status: Future.
 
 ### P-QUEST-FOES: Quest Enemy Networking Spike
 
-Status: Future.
+Status: Superseded by the Phase 1 client-owned quest milestone.
 
-Investigate whether quest enemies can become server-owned without synchronizing complete quest machines or creating confusing objective ownership. The preferred hypothesis is a location-scoped shared encounter with personal objective subscriptions: a nearby unsatisfied owner activates one server enemy, anyone may fight it, nearby subscribed owners receive credit, and absent owners activate a later generation when they arrive. Start from the client-local Phase 1 baseline and use spike evidence to validate this model or choose an owner-scoped or hybrid alternative by quest action type.
+The owner-scoped server-enemy model is now the implementation baseline. Future work here is limited to `Shared` mode: prove objective equivalence and optionally coalesce equivalent owner-scoped encounters while retaining personal quest machines, personal rewards, and idempotent per-character credit.
 
-The spike scope, candidate designs, required experiments, and decision criteria are maintained in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
+The accepted owner-scoped model and remaining shared-mode questions are maintained in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
 
 ### P-SCALE: Scale, Storage, and Trust
 

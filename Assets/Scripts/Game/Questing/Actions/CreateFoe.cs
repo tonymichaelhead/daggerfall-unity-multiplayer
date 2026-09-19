@@ -322,6 +322,25 @@ namespace DaggerfallWorkshop.Game.Questing
             if (colliders.Length > 0)
                 return;
 
+            Foe pendingFoe = ParentQuest.GetFoe(foeSymbol);
+            if (DFMP.Hooks.DaggerfallHooks.TryHandleDynamicQuestFoePlacement != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandleDynamicQuestFoePlacement(
+                    this,
+                    pendingFoe,
+                    testPoint,
+                    spawnCounter,
+                    pendingFoesSpawned))
+            {
+                UnityEngine.Object.Destroy(pendingFoeGameObjects[pendingFoesSpawned]);
+                if (msgMessageID != -1)
+                {
+                    ParentQuest.ShowMessagePopup(msgMessageID, oncePerQuest:true);
+                    msgMessageID = -1;
+                }
+                pendingFoesSpawned++;
+                return;
+            }
+
             // This looks like a good spawn position
             pendingFoeGameObjects[pendingFoesSpawned].transform.position = testPoint;
             FinalizeFoe(pendingFoeGameObjects[pendingFoesSpawned]);

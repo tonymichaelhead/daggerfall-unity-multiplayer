@@ -2,6 +2,7 @@ using System;
 using DaggerfallConnect;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game.Items;
+using DaggerfallWorkshop.Game.Questing;
 using DaggerfallWorkshop.Game.Serialization;
 using UnityEngine;
 
@@ -34,6 +35,8 @@ namespace DFMP.Runtime
         public int PackedFlags;
         public int PackedTypeData;
         public bool IsQuestItem;
+        public ulong QuestUid;
+        public string QuestItemSymbol = string.Empty;
         public int TrappedSoulType;
         public int PoisonType;
         public int PotionRecipe;
@@ -72,6 +75,8 @@ namespace DFMP.Runtime
                 PackedFlags = data.value2,
                 PackedTypeData = data.hits3,
                 IsQuestItem = data.isQuestItem,
+                QuestUid = data.questUID,
+                QuestItemSymbol = data.questItemSymbol != null ? data.questItemSymbol.Original : string.Empty,
                 TrappedSoulType = (int)data.trappedSoulType,
                 PoisonType = (int)data.poisonType,
                 PotionRecipe = data.potionRecipe,
@@ -113,6 +118,8 @@ namespace DFMP.Runtime
                 value2 = PackedFlags,
                 hits3 = PackedTypeData,
                 isQuestItem = IsQuestItem,
+                questUID = QuestUid,
+                questItemSymbol = string.IsNullOrEmpty(QuestItemSymbol) ? null : new Symbol(QuestItemSymbol),
                 trappedSoulType = (MobileTypes)TrappedSoulType,
                 poisonType = (Poisons)PoisonType,
                 potionRecipe = PotionRecipe,
@@ -130,6 +137,12 @@ namespace DFMP.Runtime
             EnchantmentPoints = Mathf.Max(0, EnchantmentPoints);
             ClassName = ClassName ?? string.Empty;
             ShortName = ShortName ?? string.Empty;
+            QuestItemSymbol = QuestItemSymbol ?? string.Empty;
+            if (!IsQuestItem)
+            {
+                QuestUid = 0;
+                QuestItemSymbol = string.Empty;
+            }
             LegacyMagic = LegacyMagic ?? new int[0];
             // DFU reads legacyMagic as type/param pairs, so an odd tail would desync every enchantment.
             if (LegacyMagic.Length % 2 != 0)

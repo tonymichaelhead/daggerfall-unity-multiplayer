@@ -1070,6 +1070,10 @@ namespace DaggerfallWorkshop.Utility
         /// </summary>
         static void AddQuestFoe(SiteTypes siteType, Quest quest, QuestMarker marker, Foe foe, Transform parent)
         {
+            if (DFMP.Hooks.DaggerfallHooks.TryHandlePlacedQuestFoe != null &&
+                DFMP.Hooks.DaggerfallHooks.TryHandlePlacedQuestFoe(siteType, quest, marker, foe))
+                return;
+
             // Do not add foe during load process as enemy object may no longer be in starting state
             // Allow the load process to restore enemy state to whatever it was at time of save
             if (SaveLoadManager.Instance.LoadInProgress)

@@ -52,6 +52,18 @@ namespace DFMP.Runtime
         [SyncVar]
         int attackKind;
 
+        [SyncVar]
+        int questOwnerConnectionId = -1;
+
+        [SyncVar]
+        string questOwnerDisplayName = string.Empty;
+
+        [SyncVar]
+        string questObjectiveId = string.Empty;
+
+        [SyncVar]
+        string questLootJson = string.Empty;
+
         public DFMPDynamicEnemyProviderKind ProviderKind { get { return (DFMPDynamicEnemyProviderKind)providerKind; } }
         public string EncounterId { get { return encounterId; } }
         public int RosterIndex { get { return rosterIndex; } }
@@ -67,6 +79,11 @@ namespace DFMP.Runtime
         public bool IsMoving { get { return isMoving; } }
         public int AttackSequence { get { return attackSequence; } }
         public DFMPDynamicEnemyAttackKind AttackKind { get { return (DFMPDynamicEnemyAttackKind)attackKind; } }
+        public int QuestOwnerConnectionId { get { return questOwnerConnectionId; } }
+        public string QuestOwnerDisplayName { get { return questOwnerDisplayName; } }
+        public string QuestObjectiveId { get { return questObjectiveId; } }
+        public string QuestLootJson { get { return questLootJson; } }
+        public bool IsQuestEnemy { get { return ProviderKind == DFMPDynamicEnemyProviderKind.Quest && !string.IsNullOrEmpty(questObjectiveId); } }
         public DFMPDynamicEnemyDescriptor Descriptor { get { return new DFMPDynamicEnemyDescriptor { DungeonLocalPosition = dungeonLocalPosition, FacingYaw = facingYaw, MobileType = mobileType, Gender = gender, Reaction = reaction, ClassicSpawnDistanceType = classicSpawnDistanceType }; } }
 
         public void SetLifecycleState(DFMPDynamicEnemyLifecycleState state)
@@ -114,6 +131,10 @@ namespace DFMP.Runtime
             isMoving = record.IsMoving;
             attackSequence = 0;
             attackKind = (int)DFMPDynamicEnemyAttackKind.Melee;
+            questOwnerConnectionId = record.QuestOwnerConnectionId;
+            questOwnerDisplayName = record.QuestOwnerDisplayName ?? string.Empty;
+            questObjectiveId = record.QuestObjectiveId ?? string.Empty;
+            questLootJson = record.QuestLootJson ?? string.Empty;
         }
 
         public override void OnStartClient()

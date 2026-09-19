@@ -22,6 +22,7 @@ namespace DFMP.Runtime
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
         readonly Dictionary<string, float> lastStrikeRejectLogTimesByEnemyId = new Dictionary<string, float>();
         readonly HashSet<DFMPDungeonGeometryScopeKey> missingLineOfSightGeometryWarnings = new HashSet<DFMPDungeonGeometryScopeKey>();
+        DFMPQuestEnemyProvider questEnemyProvider;
         const float StrikeRejectLogIntervalSeconds = 2f;
         ulong serverWorldSeed;
         int dungeonRosterSize;
@@ -70,6 +71,7 @@ namespace DFMP.Runtime
             attackCooldownSeconds = config.AttackCooldownSeconds;
             attackDamage = config.AttackDamage;
             requireLineOfSight = config.RequireLineOfSight;
+            questEnemyProvider = new DFMPQuestEnemyProvider(registry);
             Subscribe();
         }
 
@@ -190,6 +192,52 @@ namespace DFMP.Runtime
         public bool TryGetRecord(string enemyId, out DFMPDynamicEnemyRecord record)
         {
             return registry.TryGetRecord(enemyId, out record);
+        }
+
+        public bool TrySpawnQuestObjective(DFMPQuestObjectiveRecord objective, out DFMPDynamicEnemyRecord record)
+        {
+            record = default(DFMPDynamicEnemyRecord);
+            if (objective == null)
+                return false;
+            if (questEnemyProvider == null)
+                questEnemyProvider = new DFMPQuestEnemyProvider(registry);
+
+            DFMPDynamicEnemyRegistryResult result = questEnemyProvider.Spawn(objective, out record);
+            if (result != DFMPDynamicEnemyRegistryResult.Accepted &&
+                result != DFMPDynamicEnemyRegistryResult.AlreadyRegistered)
+                return false;
+
+            string[] existing;
+            if (!enemyIdsByContext.TryGetValue(objective.Context, out existing))
+            {
+                enemyIdsByContext[objective.Context] = new[] { record.Identity.EnemyId };
+            }
+            else if (Array.IndexOf(existing, record.Identity.EnemyId) < 0)
+            {
+                var expanded = new string[existing.Length + 1];
+                Array.Copy(existing, expanded, existing.Length);
+                expanded[existing.Length] = record.Identity.EnemyId;
+                enemyIdsByContext[objective.Context] = expanded;
+            }
+
+            ProjectActiveRecords(objective.Context, new[] { record.Identity.EnemyId });
+            return true;
+        }
+
+        public bool TryDespawnQuestObjective(string objectiveId)
+        {
+            if (questEnemyProvider == null)
+                return false;
+
+            string enemyId;
+            if (!questEnemyProvider.TryGetEnemyId(objectiveId, out enemyId))
+                return false;
+            DFMPDynamicEnemyRegistryResult result = questEnemyProvider.DespawnAlive(objectiveId);
+            if (result != DFMPDynamicEnemyRegistryResult.Accepted)
+                return false;
+
+            DestroyStateObject(enemyId);
+            return true;
         }
 
         void ProcessContextAi(DFMPWorldContextKey context, string[] enemyIds, float currentTime, float deltaTime)

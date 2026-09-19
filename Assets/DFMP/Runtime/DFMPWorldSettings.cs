@@ -10,6 +10,15 @@ namespace DFMP.Runtime
         [SyncVar(hook = nameof(OnRestPolicyChanged))]
         string restPolicy = DFMPRestPolicies.Disabled;
 
+        [SyncVar(hook = nameof(OnFailureDeadlinesEnabledChanged))]
+        bool failureDeadlinesEnabled;
+
+        [SyncVar]
+        float questAutosaveIntervalSeconds = DFMPServerQuestConfig.DefaultAutosaveIntervalSeconds;
+
+        [SyncVar]
+        bool showQuestEnemyOwnerCue = true;
+
         public static DFMPWorldSettings Local { get; private set; }
 
         public string RestPolicy
@@ -25,6 +34,31 @@ namespace DFMP.Runtime
                     ? Local.RestPolicy
                     : DFMPRestPolicies.Disabled;
             }
+        }
+
+        public bool FailureDeadlinesEnabled
+        {
+            get { return failureDeadlinesEnabled; }
+        }
+
+        public static bool CurrentFailureDeadlinesEnabled
+        {
+            get { return Local != null && Local.FailureDeadlinesEnabled; }
+        }
+
+        public static float CurrentQuestAutosaveIntervalSeconds
+        {
+            get
+            {
+                return Local != null
+                    ? Mathf.Max(10f, Local.questAutosaveIntervalSeconds)
+                    : DFMPServerQuestConfig.DefaultAutosaveIntervalSeconds;
+            }
+        }
+
+        public static bool CurrentShowQuestEnemyOwnerCue
+        {
+            get { return Local == null || Local.showQuestEnemyOwnerCue; }
         }
 
         public static void RegisterClientSpawnHandler()
@@ -45,11 +79,36 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Rest] World rest policy set: policy={restPolicy}.");
         }
 
+        public void SetFailureDeadlinesEnabled(bool enabled)
+        {
+            if (!NetworkServer.active)
+                return;
+
+            failureDeadlinesEnabled = enabled;
+            Debug.Log($"[DFMP Quest] World failure deadline policy set: enabled={enabled}.");
+        }
+
+        public void SetQuestAutosaveInterval(float intervalSeconds)
+        {
+            if (!NetworkServer.active)
+                return;
+            questAutosaveIntervalSeconds = Mathf.Clamp(intervalSeconds, 10f, 3600f);
+        }
+
+        public void SetShowQuestEnemyOwnerCue(bool enabled)
+        {
+            if (NetworkServer.active)
+                showQuestEnemyOwnerCue = enabled;
+        }
+
         public override void OnStartClient()
         {
             base.OnStartClient();
             Local = this;
-            Debug.Log($"[DFMP Rest] Client received world settings: restPolicy={RestPolicy}.");
+            Debug.Log(
+                $"[DFMP World] Client received world settings: restPolicy={RestPolicy}, " +
+                $"failureDeadlinesEnabled={FailureDeadlinesEnabled}, " +
+                $"questAutosaveIntervalSeconds={questAutosaveIntervalSeconds:0.##}.");
         }
 
         public override void OnStopClient()
@@ -63,6 +122,11 @@ namespace DFMP.Runtime
         void OnRestPolicyChanged(string oldValue, string newValue)
         {
             Debug.Log($"[DFMP Rest] Client rest policy update: policy={DFMPServerRestConfig.NormalizePolicy(newValue)}.");
+        }
+
+        void OnFailureDeadlinesEnabledChanged(bool oldValue, bool newValue)
+        {
+            Debug.Log($"[DFMP Quest] Client failure deadline policy update: enabled={newValue}.");
         }
 
         static GameObject SpawnClientWorldSettings(SpawnMessage message)

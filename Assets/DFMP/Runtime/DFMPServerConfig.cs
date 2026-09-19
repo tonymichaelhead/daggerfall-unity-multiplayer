@@ -17,6 +17,81 @@ namespace DFMP.Runtime
         public const string Alternate = "Alternate";
     }
 
+    public static class DFMPQuestModes
+    {
+        public const string ClientOwned = "ClientOwned";
+        public const string Shared = "Shared";
+    }
+
+    [Serializable]
+    public class DFMPServerQuestConfig
+    {
+        public const float DefaultActivationRadius = 30f;
+        public const float DefaultDespawnRadius = 45f;
+        public const float DefaultDespawnGraceSeconds = 10f;
+        public const int DefaultMaximumObjectivesPerCharacter = 64;
+        public const int DefaultMaximumFoesPerObjective = 8;
+        public const int DefaultMaximumRegistrationsPerMinute = 120;
+        public const int DefaultMaximumPayloadBytes = 4 * 1024 * 1024;
+        public const float DefaultAutosaveIntervalSeconds = 60f;
+
+        public string Mode = DFMPQuestModes.ClientOwned;
+        public bool FailureDeadlinesEnabled;
+        public float EnemyActivationRadius = DefaultActivationRadius;
+        public float EnemyDespawnRadius = DefaultDespawnRadius;
+        public float EnemyDespawnGraceSeconds = DefaultDespawnGraceSeconds;
+        public int MaximumObjectivesPerCharacter = DefaultMaximumObjectivesPerCharacter;
+        public int MaximumFoesPerObjective = DefaultMaximumFoesPerObjective;
+        public int MaximumRegistrationsPerMinute = DefaultMaximumRegistrationsPerMinute;
+        public int MaximumPayloadBytes = DefaultMaximumPayloadBytes;
+        public float AutosaveIntervalSeconds = DefaultAutosaveIntervalSeconds;
+        public bool ShowEnemyOwnerCue = true;
+
+        public void Normalize()
+        {
+            Mode = string.Equals(Mode, DFMPQuestModes.Shared, StringComparison.OrdinalIgnoreCase)
+                ? DFMPQuestModes.Shared
+                : DFMPQuestModes.ClientOwned;
+            EnemyActivationRadius = EnemyActivationRadius > 0f && EnemyActivationRadius <= 1000f
+                ? EnemyActivationRadius
+                : DefaultActivationRadius;
+            EnemyDespawnRadius = EnemyDespawnRadius > EnemyActivationRadius && EnemyDespawnRadius <= 2000f
+                ? EnemyDespawnRadius
+                : Math.Max(DefaultDespawnRadius, EnemyActivationRadius + 1f);
+            EnemyDespawnGraceSeconds = EnemyDespawnGraceSeconds >= 0f && EnemyDespawnGraceSeconds <= 300f
+                ? EnemyDespawnGraceSeconds
+                : DefaultDespawnGraceSeconds;
+            MaximumObjectivesPerCharacter = MaximumObjectivesPerCharacter > 0 && MaximumObjectivesPerCharacter <= 1024
+                ? MaximumObjectivesPerCharacter
+                : DefaultMaximumObjectivesPerCharacter;
+            MaximumFoesPerObjective = MaximumFoesPerObjective > 0 && MaximumFoesPerObjective <= 8
+                ? MaximumFoesPerObjective
+                : DefaultMaximumFoesPerObjective;
+            MaximumRegistrationsPerMinute = MaximumRegistrationsPerMinute >= 1 && MaximumRegistrationsPerMinute <= 600
+                ? MaximumRegistrationsPerMinute
+                : DefaultMaximumRegistrationsPerMinute;
+            MaximumPayloadBytes = MaximumPayloadBytes >= 64 * 1024 && MaximumPayloadBytes <= 16 * 1024 * 1024
+                ? MaximumPayloadBytes
+                : DefaultMaximumPayloadBytes;
+            AutosaveIntervalSeconds = AutosaveIntervalSeconds >= 10f && AutosaveIntervalSeconds <= 3600f
+                ? AutosaveIntervalSeconds
+                : DefaultAutosaveIntervalSeconds;
+        }
+
+        public bool TryValidateImplementedMode(out string reason)
+        {
+            Normalize();
+            if (string.Equals(Mode, DFMPQuestModes.Shared, StringComparison.Ordinal))
+            {
+                reason = "Quests.Mode 'Shared' is reserved for the future shared-quest implementation. Use 'ClientOwned'.";
+                return false;
+            }
+
+            reason = string.Empty;
+            return true;
+        }
+    }
+
     [Serializable]
     public class DFMPServerChatConfig
     {
@@ -222,6 +297,7 @@ namespace DFMP.Runtime
         public DFMPServerDeveloperConfig Developer = new DFMPServerDeveloperConfig();
         public DFMPServerCombatConfig Combat = new DFMPServerCombatConfig();
         public DFMPServerEnemyConfig Enemies = new DFMPServerEnemyConfig();
+        public DFMPServerQuestConfig Quests = new DFMPServerQuestConfig();
         public DFMPServerRestConfig Rest = new DFMPServerRestConfig();
         public DFMPServerStartingLocationConfig StartingLocation = new DFMPServerStartingLocationConfig();
 
@@ -264,6 +340,11 @@ namespace DFMP.Runtime
                 Enemies = new DFMPServerEnemyConfig();
 
             Enemies.Normalize();
+
+            if (Quests == null)
+                Quests = new DFMPServerQuestConfig();
+
+            Quests.Normalize();
 
             if (Rest == null)
                 Rest = new DFMPServerRestConfig();

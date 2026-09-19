@@ -28,6 +28,7 @@ namespace DFMP.Runtime
         public static IDFMPLocalAccountStore LocalAccountStore { get; private set; }
         public static DFMPDungeonGeometryService DungeonGeometryService { get; private set; }
         public static DFMPDungeonEnemyRosterService DungeonEnemyRosterService { get; private set; }
+        public static DFMPQuestObjectiveService QuestObjectiveService { get; private set; }
 
         public static int ConnectedPlayerCount
         {
@@ -43,6 +44,8 @@ namespace DFMP.Runtime
         static readonly Dictionary<int, string> startMarkerAssignments = new Dictionary<int, string>();
         static readonly Dictionary<int, DFMPTransitionAssignmentState> transitionAssignmentStates = new Dictionary<int, DFMPTransitionAssignmentState>();
         static readonly Dictionary<int, DFMPVitalState> vitalStates = new Dictionary<int, DFMPVitalState>();
+        static readonly Dictionary<int, DFMPQuestPayloadAssembler> questPayloadAssemblers =
+            new Dictionary<int, DFMPQuestPayloadAssembler>();
         static readonly HashSet<int> initializedIdentityReportConnections = new HashSet<int>();
         static readonly Dictionary<int, uint> lastDamageSequences = new Dictionary<int, uint>();
         static readonly Dictionary<int, ulong> lastDamageRequestIds = new Dictionary<int, ulong>();
@@ -125,6 +128,44 @@ namespace DFMP.Runtime
         public static bool TryGetPlayerSessionState(int connectionId, out DFMPPlayerSessionState sessionState)
         {
             return playerSessionStates.TryGetValue(connectionId, out sessionState);
+        }
+
+        public static bool TryGetActiveCharacterId(int connectionId, out string characterId)
+        {
+            characterId = string.Empty;
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(connectionId, out joinDecision) ||
+                joinDecision == null ||
+                joinDecision.CharacterRecord == null ||
+                string.IsNullOrWhiteSpace(joinDecision.CharacterRecord.CharacterId))
+                return false;
+
+            characterId = joinDecision.CharacterRecord.CharacterId;
+            return true;
+        }
+
+        public static bool TryGetActiveCharacterRecord(int connectionId, out DFMPCharacterRecord record)
+        {
+            record = null;
+            DFMPJoinDecision joinDecision;
+            if (!joinDecisions.TryGetValue(connectionId, out joinDecision) ||
+                joinDecision == null ||
+                joinDecision.CharacterRecord == null)
+                return false;
+            record = joinDecision.CharacterRecord;
+            return true;
+        }
+
+        public static bool PersistQuestObjectives(int connectionId, DFMPQuestObjectiveRecord[] objectives)
+        {
+            DFMPCharacterRecord record;
+            if (!TryGetActiveCharacterRecord(connectionId, out record) || CharacterStore == null)
+                return false;
+
+            record.QuestObjectives = objectives ?? new DFMPQuestObjectiveRecord[0];
+            record.MarkPlayed();
+            CharacterStore.Save(record);
+            return true;
         }
 
         public static bool TryGetPlayerLevel(int connectionId, out int level)
@@ -404,6 +445,11 @@ namespace DFMP.Runtime
             DungeonGeometryService.Initialize();
             DungeonEnemyRosterService = networkGo.AddComponent<DFMPDungeonEnemyRosterService>();
             DungeonEnemyRosterService.Initialize(Config.Enemies);
+            QuestObjectiveService = new DFMPQuestObjectiveService();
+            networkGo.AddComponent<DFMPQuestObjectiveServerController>().Initialize(
+                QuestObjectiveService,
+                DungeonEnemyRosterService,
+                Config.Quests);
 
             Manager = networkGo.AddComponent<DFMPNetworkManager>();
             Manager.authenticator = networkGo.AddComponent<DFMPNetworkAuthenticator>();
@@ -431,6 +477,7 @@ namespace DFMP.Runtime
             NetworkServer.RegisterHandler<DFMPPlayerDeathReport>(OnPlayerDeathReport);
             NetworkServer.RegisterHandler<DFMPPlayerPositionReport>(OnPlayerPositionReport);
             NetworkServer.RegisterHandler<DFMPPlayerIdentityReport>(OnPlayerIdentityReport);
+            NetworkServer.RegisterHandler<DFMPQuestPayloadChunkMessage>(OnQuestPayloadChunk);
             NetworkServer.RegisterHandler<DFMPDamageIntent>(OnDamageIntent);
             NetworkServer.RegisterHandler<DFMPPlayerActionReport>(OnPlayerActionReport);
             NetworkServer.RegisterHandler<DFMPRestRequest>(OnRestRequest);
@@ -573,6 +620,21 @@ namespace DFMP.Runtime
         static void SendReturningCharacterState(NetworkConnectionToClient conn, DFMPCharacterRecord record)
         {
             conn.Send(DFMPCharacterSnapshotProtocol.FromRecord(record));
+            string questPayload;
+            if (DFMPCharacterSnapshotProtocol.TryGetQuestPayload(record, out questPayload))
+            {
+                DFMPQuestPayloadChunkMessage[] chunks;
+                string reason;
+                if (DFMPQuestPayloadProtocol.TryCreateChunks(questPayload, out chunks, out reason))
+                {
+                    for (int index = 0; index < chunks.Length; index++)
+                        conn.Send(chunks[index]);
+                }
+                else
+                {
+                    Debug.LogWarning($"[DFMP Quest] Stored quest payload was not sent: connectionId={conn.connectionId}, reason={reason}.");
+                }
+            }
             SendVitalSnapshot(conn, CreateVitalState(record), false);
             initializedIdentityReportConnections.Add(conn.connectionId);
         }
@@ -760,7 +822,15 @@ namespace DFMP.Runtime
             settingsGo.SetActive(true);
             NetworkServer.Spawn(settingsGo, DFMPWorldSettings.AssetId);
             SetRestPolicy(Config != null && Config.Rest != null ? Config.Rest.Policy : DFMPRestPolicies.Disabled);
-            Debug.Log("[DFMP Rest] Server spawned world settings.");
+            WorldSettings.SetFailureDeadlinesEnabled(
+                Config != null && Config.Quests != null && Config.Quests.FailureDeadlinesEnabled);
+            WorldSettings.SetQuestAutosaveInterval(
+                Config != null && Config.Quests != null
+                    ? Config.Quests.AutosaveIntervalSeconds
+                    : DFMPServerQuestConfig.DefaultAutosaveIntervalSeconds);
+            WorldSettings.SetShowQuestEnemyOwnerCue(
+                Config == null || Config.Quests == null || Config.Quests.ShowEnemyOwnerCue);
+            Debug.Log("[DFMP World] Server spawned world settings.");
         }
 
         public static bool SetRestPolicy(string policy)
@@ -2324,6 +2394,52 @@ namespace DFMP.Runtime
             }
         }
 
+        private static void OnQuestPayloadChunk(NetworkConnectionToClient conn, DFMPQuestPayloadChunkMessage chunk)
+        {
+            if (conn == null)
+                return;
+
+            DFMPPlayerSessionState sessionState;
+            DFMPJoinDecision joinDecision;
+            if (!playerSessionStates.TryGetValue(conn.connectionId, out sessionState) ||
+                sessionState == null || !sessionState.SpawnConfirmed ||
+                !joinDecisions.TryGetValue(conn.connectionId, out joinDecision) ||
+                joinDecision == null || joinDecision.CharacterRecord == null)
+            {
+                Debug.LogWarning($"[DFMP Quest] Rejected quest payload before character binding: connectionId={conn.connectionId}.");
+                return;
+            }
+
+            DFMPQuestPayloadAssembler assembler;
+            if (!questPayloadAssemblers.TryGetValue(conn.connectionId, out assembler))
+            {
+                assembler = new DFMPQuestPayloadAssembler();
+                questPayloadAssemblers.Add(conn.connectionId, assembler);
+            }
+
+            string payload;
+            string reason;
+            if (!assembler.TryAdd(chunk, out payload, out reason))
+            {
+                Debug.LogWarning($"[DFMP Quest] Rejected quest payload chunk: connectionId={conn.connectionId}, reason={reason}.");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(payload))
+                return;
+
+            DFMPQuestStateEnvelope envelope;
+            if (!DFMPQuestStateCodec.TryDecode(payload, out envelope, out reason))
+            {
+                Debug.LogWarning($"[DFMP Quest] Rejected completed quest payload: connectionId={conn.connectionId}, reason={reason}.");
+                return;
+            }
+
+            joinDecision.CharacterRecord.QuestState = envelope;
+            SaveCharacterRecord(conn.connectionId, sessionState);
+            Debug.Log($"[DFMP Quest] Persisted quest payload: connectionId={conn.connectionId}, bytes={chunk.TotalBytes}, chunks={chunk.ChunkCount}.");
+        }
+
         private static void OnRestRequest(NetworkConnectionToClient conn, DFMPRestRequest request)
         {
             if (conn == null)
@@ -2723,6 +2839,7 @@ namespace DFMP.Runtime
             startMarkerAssignments.Remove(connectionId);
             transitionAssignmentStates.Remove(connectionId);
             vitalStates.Remove(connectionId);
+            questPayloadAssemblers.Remove(connectionId);
             initializedIdentityReportConnections.Remove(connectionId);
             lastDamageSequences.Remove(connectionId);
             lastDamageRequestIds.Remove(connectionId);
@@ -2761,6 +2878,7 @@ namespace DFMP.Runtime
             WorldSettings = null;
             DungeonGeometryService = null;
             DungeonEnemyRosterService = null;
+            QuestObjectiveService = null;
             playerSessionStates.Clear();
             joinDecisions.Clear();
             worldOccupancy.Clear();

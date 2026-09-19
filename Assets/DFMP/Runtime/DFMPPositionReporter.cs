@@ -2,6 +2,7 @@ using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;
 using DaggerfallConnect;
 using Mirror;
+using System.Text;
 using UnityEngine;
 
 namespace DFMP.Runtime
@@ -15,8 +16,10 @@ namespace DFMP.Runtime
         float nextReportTime;
         float nextIdentityReportTime;
         float nextChangeReportTime;
+        float nextQuestStateReportTime;
         int lastContextSignature;
         int lastInventorySignature;
+        string lastQuestPayloadChecksum;
         static ulong nextDamageRequestId = 1;
         static uint nextDamageSequence = 1;
         WeaponStates lastWeaponState = WeaponStates.Idle;
@@ -46,6 +49,12 @@ namespace DFMP.Runtime
             nextDamageRequestId = 1;
             nextDamageSequence = 1;
             instance = null;
+        }
+
+        public static void RequestQuestSave()
+        {
+            if (instance != null)
+                instance.nextQuestStateReportTime = 0f;
         }
 
         void OnDestroy()
@@ -329,6 +338,25 @@ namespace DFMP.Runtime
                     DFMPCharacterPersistence.CaptureEquipment(equipTable)),
                 EquipmentJson = string.Empty
             });
+
+            if (Time.unscaledTime >= nextQuestStateReportTime)
+            {
+                nextQuestStateReportTime =
+                    Time.unscaledTime + DFMPWorldSettings.CurrentQuestAutosaveIntervalSeconds;
+                DFMPQuestStateEnvelope questState;
+                string questReason;
+                if (DFMPQuestStateCodec.TryCapture(out questState, out questReason))
+                {
+                    string payload = DFMPQuestStateCodec.Encode(questState);
+                    string checksum = DFMPQuestPayloadProtocol.ComputeChecksum(Encoding.UTF8.GetBytes(payload));
+                    if (!string.Equals(checksum, lastQuestPayloadChecksum, System.StringComparison.Ordinal))
+                    {
+                        string sentChecksum;
+                        if (DFMPNetworkClient.SendQuestState(questState, out sentChecksum))
+                            lastQuestPayloadChecksum = sentChecksum;
+                    }
+                }
+            }
         }
 
         bool SendWorldContextReport(StreamingWorld streamingWorld)

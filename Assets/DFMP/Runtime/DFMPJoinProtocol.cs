@@ -36,13 +36,17 @@ namespace DFMP.Runtime
         public string CareerJson;
         public string InventoryJson;
         public string EquipmentJson;
+        public bool HasQuestState;
+        public string QuestTransferId;
+        public int QuestPayloadBytes;
+        public string QuestPayloadChecksum;
     }
 
     public static class DFMPCharacterSnapshotProtocol
     {
         public static DFMPCharacterSnapshotMessage FromRecord(DFMPCharacterRecord record)
         {
-            return new DFMPCharacterSnapshotMessage
+            var snapshot = new DFMPCharacterSnapshotMessage
             {
                 AccountId = record.AccountId,
                 CharacterName = DFMPPositionProtocol.SanitizeDisplayName(record.CharacterName),
@@ -64,6 +68,25 @@ namespace DFMP.Runtime
                 CareerJson = record.CareerJson ?? string.Empty,
                 InventoryJson = DFMPInventorySnapshotCodec.Encode(record.Inventory, record.Equipment)
             };
+
+            string questPayload;
+            DFMPQuestPayloadChunkMessage[] chunks;
+            string questReason;
+            if (TryGetQuestPayload(record, out questPayload) &&
+                DFMPQuestPayloadProtocol.TryCreateChunks(questPayload, out chunks, out questReason))
+            {
+                snapshot.HasQuestState = true;
+                snapshot.QuestTransferId = chunks[0].TransferId;
+                snapshot.QuestPayloadBytes = chunks[0].TotalBytes;
+                snapshot.QuestPayloadChecksum = chunks[0].Checksum;
+            }
+            else
+            {
+                snapshot.QuestTransferId = string.Empty;
+                snapshot.QuestPayloadChecksum = string.Empty;
+            }
+
+            return snapshot;
         }
 
         public static bool IsValid(DFMPCharacterSnapshotMessage snapshot)
@@ -80,7 +103,26 @@ namespace DFMP.Runtime
                 snapshot.MaxFatigue >= 1 && snapshot.Fatigue >= 0 && snapshot.Fatigue <= snapshot.MaxFatigue &&
                 snapshot.Attributes != null && snapshot.Attributes.Length == 8 &&
                 snapshot.Skills != null && snapshot.Skills.Length == 35 &&
-                snapshot.Gold >= 0 && snapshot.StartingLevelUpSkillSum >= 0;
+                snapshot.Gold >= 0 && snapshot.StartingLevelUpSkillSum >= 0 &&
+                (!snapshot.HasQuestState ||
+                 (!string.IsNullOrEmpty(snapshot.QuestTransferId) &&
+                  snapshot.QuestTransferId.Length == 32 &&
+                  snapshot.QuestPayloadBytes > 0 &&
+                  snapshot.QuestPayloadBytes <= DFMPQuestStateCodec.MaximumEnvelopeBytes &&
+                  !string.IsNullOrEmpty(snapshot.QuestPayloadChecksum) &&
+                  snapshot.QuestPayloadChecksum.Length == 64));
+        }
+
+        public static bool TryGetQuestPayload(DFMPCharacterRecord record, out string payload)
+        {
+            payload = string.Empty;
+            string reason;
+            if (record == null || record.QuestState == null ||
+                !DFMPQuestStateCodec.TryValidate(record.QuestState, out reason))
+                return false;
+
+            payload = DFMPQuestStateCodec.Encode(record.QuestState);
+            return !string.IsNullOrEmpty(payload);
         }
     }
 

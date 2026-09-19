@@ -1,5 +1,6 @@
 using System.IO;
 using NUnit.Framework;
+using DaggerfallWorkshop.Game.Questing;
 using DaggerfallWorkshop.Game.Serialization;
 using DFMP.Runtime;
 using UnityEngine;
@@ -148,6 +149,124 @@ namespace DFMP.Tests
             Assert.AreEqual(3, restored.artifactIndexBitfield);
             Assert.AreEqual(777u, restored.timeForItemToDisappear);
             Assert.AreEqual(888u, restored.timeHealthLeechLastUsed);
+        }
+
+        [Test]
+        public void CharacterItemRecord_RoundTripsQuestUidAndResourceSymbol()
+        {
+            var itemData = new ItemData_v1
+            {
+                uid = 42,
+                itemGroup = DaggerfallWorkshop.Game.Items.ItemGroups.QuestItems,
+                groupIndex = 3,
+                stackCount = 1,
+                isQuestItem = true,
+                questUID = 987654321u,
+                questItemSymbol = new Symbol("_artifact_")
+            };
+
+            DFMPCharacterItemRecord record = DFMPCharacterItemRecord.FromItemData(itemData);
+            ItemData_v1 restored = record.ToItemData();
+
+            Assert.IsTrue(restored.isQuestItem);
+            Assert.AreEqual(987654321u, restored.questUID);
+            Assert.NotNull(restored.questItemSymbol);
+            Assert.AreEqual("_artifact_", restored.questItemSymbol.Original);
+            Assert.AreEqual("artifact", restored.questItemSymbol.Name);
+        }
+
+        [Test]
+        public void QuestStateEnvelope_IsVersionedBoundedAndRoundTripsThroughCharacterRecord()
+        {
+            var record = DFMPCharacterRecord.CreateNew("quest-owner", "world", "Quester");
+            record.QuestState = new DFMPQuestStateEnvelope
+            {
+                QuestMachineJson = "{\"siteLinks\":[],\"quests\":[]}",
+                FactionJson = "{\"factionDict\":{}}",
+                ConversationJson = "{}",
+                NotebookJson = "{}",
+                GlobalVars = new[]
+                {
+                    new DFMPQuestGlobalVar { Index = 7, Name = "quest_flag", Value = true }
+                },
+                SocialGroupReputations = new short[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 },
+                OneTimeQuestsAccepted = new[] { "M0B00Y01" }
+            };
+
+            DFMPCharacterRecord restored = DFMPCharacterRecord.FromJson(
+                record.ToJson(),
+                "quest-owner",
+                "world");
+
+            Assert.AreEqual(8, DFMPCharacterRecord.CurrentSchemaVersion);
+            Assert.NotNull(restored.QuestState);
+            Assert.AreEqual(DFMPQuestStateEnvelope.CurrentVersion, restored.QuestState.Version);
+            Assert.AreEqual(record.QuestState.QuestMachineJson, restored.QuestState.QuestMachineJson);
+            Assert.AreEqual(1, restored.QuestState.GlobalVars.Length);
+            Assert.AreEqual(7, restored.QuestState.GlobalVars[0].Index);
+            Assert.AreEqual("quest_flag", restored.QuestState.GlobalVars[0].Name);
+            Assert.IsTrue(restored.QuestState.GlobalVars[0].Value);
+            Assert.AreEqual(11, restored.QuestState.SocialGroupReputations[10]);
+            Assert.AreEqual("M0B00Y01", restored.QuestState.OneTimeQuestsAccepted[0]);
+
+            string reason;
+            restored.QuestState.Version++;
+            Assert.IsFalse(DFMPQuestStateCodec.TryValidate(restored.QuestState, out reason));
+            Assert.IsTrue(reason.Contains("version"));
+
+            restored.QuestState.Version = DFMPQuestStateEnvelope.CurrentVersion;
+            restored.QuestState.QuestMachineJson =
+                new string('q', DFMPQuestStateCodec.MaximumSectionBytes + 1);
+            Assert.IsFalse(DFMPQuestStateCodec.TryValidate(restored.QuestState, out reason));
+            Assert.IsTrue(reason.Contains("section"));
+        }
+
+        [Test]
+        public void QuestPayloadProtocol_ReassemblesOutOfOrderAndRejectsChecksumMismatch()
+        {
+            string payload = "{\"Version\":1,\"QuestMachineJson\":\"" +
+                new string('q', DFMPQuestPayloadProtocol.ChunkSize + 17) + "\"}";
+            DFMPQuestPayloadChunkMessage[] chunks;
+            string reason;
+            Assert.IsTrue(DFMPQuestPayloadProtocol.TryCreateChunks(payload, out chunks, out reason));
+            Assert.Greater(chunks.Length, 1);
+            Assert.LessOrEqual(chunks[0].Data.Length, DFMPQuestPayloadProtocol.ChunkSize);
+
+            var assembler = new DFMPQuestPayloadAssembler();
+            string completed = string.Empty;
+            for (int index = chunks.Length - 1; index >= 0; index--)
+                Assert.IsTrue(assembler.TryAdd(chunks[index], out completed, out reason), reason);
+            Assert.AreEqual(payload, completed);
+
+            chunks[0].Data[0] ^= 1;
+            assembler.Reset();
+            for (int index = 0; index < chunks.Length - 1; index++)
+                Assert.IsTrue(assembler.TryAdd(chunks[index], out completed, out reason), reason);
+            Assert.IsFalse(assembler.TryAdd(chunks[chunks.Length - 1], out completed, out reason));
+            Assert.IsTrue(reason.Contains("checksum"));
+        }
+
+        [Test]
+        public void ReturningSnapshot_WaitsForMatchingQuestPayloadBeforeInventoryRestore()
+        {
+            var snapshot = new DFMPCharacterSnapshotMessage
+            {
+                HasQuestState = true,
+                QuestTransferId = "0123456789abcdef0123456789abcdef"
+            };
+
+            Assert.IsFalse(DFMPClientJoinFlowController.IsQuestPayloadReady(snapshot, null, null));
+            Assert.IsFalse(DFMPClientJoinFlowController.IsQuestPayloadReady(
+                snapshot,
+                "ffffffffffffffffffffffffffffffff",
+                "{}"));
+            Assert.IsTrue(DFMPClientJoinFlowController.IsQuestPayloadReady(
+                snapshot,
+                snapshot.QuestTransferId,
+                "{}"));
+
+            snapshot.HasQuestState = false;
+            Assert.IsTrue(DFMPClientJoinFlowController.IsQuestPayloadReady(snapshot, null, null));
         }
 
         [Test]

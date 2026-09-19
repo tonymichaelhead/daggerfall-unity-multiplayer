@@ -2110,6 +2110,35 @@ namespace DFMP.Tests
             CollectionAssert.AreEquivalent(new int[] { 1, 2 }, dungeonOccupants);
         }
 
+        [Test]
+        public void QuestOwnerCue_RequiresQuestOwnershipNearRangeAndFocus()
+        {
+            Assert.IsTrue(DFMPDynamicEnemyPresentation.ShouldShowQuestOwnerCue(
+                true,
+                "Alice",
+                Vector3.zero,
+                Vector3.forward,
+                new Vector3(0f, 0f, 8f)));
+            Assert.IsFalse(DFMPDynamicEnemyPresentation.ShouldShowQuestOwnerCue(
+                false,
+                "Alice",
+                Vector3.zero,
+                Vector3.forward,
+                new Vector3(0f, 0f, 8f)));
+            Assert.IsFalse(DFMPDynamicEnemyPresentation.ShouldShowQuestOwnerCue(
+                true,
+                "Alice",
+                Vector3.zero,
+                Vector3.forward,
+                new Vector3(0f, 0f, 13f)));
+            Assert.IsFalse(DFMPDynamicEnemyPresentation.ShouldShowQuestOwnerCue(
+                true,
+                "Alice",
+                Vector3.zero,
+                Vector3.forward,
+                new Vector3(8f, 0f, 0f)));
+        }
+
         static DFMPDynamicEnemyRecord[] CreateRoster()
         {
             DFMPDynamicEnemyRecord[] roster;

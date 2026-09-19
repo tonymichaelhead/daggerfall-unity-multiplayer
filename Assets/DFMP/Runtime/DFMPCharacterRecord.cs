@@ -6,7 +6,7 @@ namespace DFMP.Runtime
     [Serializable]
     public class DFMPCharacterRecord
     {
-        public const int CurrentSchemaVersion = 7;
+        public const int CurrentSchemaVersion = 8;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public string AccountId = string.Empty;
@@ -49,6 +49,8 @@ namespace DFMP.Runtime
         public int Gold;
         public int[] Attributes = new int[8];
         public int[] Skills = new int[35];
+        public DFMPQuestStateEnvelope QuestState;
+        public DFMPQuestObjectiveRecord[] QuestObjectives = new DFMPQuestObjectiveRecord[0];
         public DFMPCharacterItemRecord[] Inventory = new DFMPCharacterItemRecord[0];
         public DFMPCharacterEquipmentRecord[] Equipment = new DFMPCharacterEquipmentRecord[0];
 
@@ -97,6 +99,15 @@ namespace DFMP.Runtime
             Gold = Mathf.Max(0, Gold);
             Attributes = Attributes ?? new int[8];
             Skills = Skills ?? new int[35];
+            if (QuestState != null)
+            {
+                string questStateReason;
+                if (!DFMPQuestStateCodec.TryValidate(QuestState, out questStateReason))
+                    QuestState = null;
+            }
+            QuestObjectives = QuestObjectives ?? new DFMPQuestObjectiveRecord[0];
+            if (QuestObjectives.Length > DFMPServerQuestConfig.DefaultMaximumObjectivesPerCharacter)
+                Array.Resize(ref QuestObjectives, DFMPServerQuestConfig.DefaultMaximumObjectivesPerCharacter);
             Inventory = Inventory ?? new DFMPCharacterItemRecord[0];
             Equipment = Equipment ?? new DFMPCharacterEquipmentRecord[0];
             for (int index = 0; index < Inventory.Length; index++)
