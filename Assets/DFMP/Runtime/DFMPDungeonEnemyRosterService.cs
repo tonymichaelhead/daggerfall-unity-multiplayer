@@ -14,10 +14,10 @@ namespace DFMP.Runtime
         readonly Dictionary<DFMPWorldContextKey, string[]> enemyIdsByContext = new Dictionary<DFMPWorldContextKey, string[]>();
         readonly Dictionary<string, GameObject> stateObjectsByEnemyId = new Dictionary<string, GameObject>();
         readonly Dictionary<string, DFMPDynamicEnemySensesState> sensesByEnemyId = new Dictionary<string, DFMPDynamicEnemySensesState>();
-        readonly Dictionary<string, int> blockedMovementTicksByEnemyId = new Dictionary<string, int>();
-        readonly Dictionary<string, float> stuckRecoveryTimesByEnemyId = new Dictionary<string, float>();
-        readonly Dictionary<string, int> stuckTargetConnectionIdsByEnemyId = new Dictionary<string, int>();
+        readonly Dictionary<string, DFMPDynamicEnemyMotorState> motorByEnemyId = new Dictionary<string, DFMPDynamicEnemyMotorState>();
         readonly Dictionary<string, int> lastLoggedTargetConnectionIdsByEnemyId = new Dictionary<string, int>();
+        readonly Dictionary<string, float> lastDetourFailLogTimesByEnemyId = new Dictionary<string, float>();
+        readonly Dictionary<string, float> lastDetourLogTimesByEnemyId = new Dictionary<string, float>();
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
         readonly Dictionary<string, float> lastStrikeRejectLogTimesByEnemyId = new Dictionary<string, float>();
@@ -36,8 +36,6 @@ namespace DFMP.Runtime
         float attackCooldownSeconds;
         int attackDamage;
         bool requireLineOfSight;
-        int stuckMovementTickLimit;
-        float stuckRecoverySeconds;
         string enemyRosterMode;
         float nativeMonsterPower;
         int nativeMonsterVariance;
@@ -72,8 +70,6 @@ namespace DFMP.Runtime
             attackCooldownSeconds = config.AttackCooldownSeconds;
             attackDamage = config.AttackDamage;
             requireLineOfSight = config.RequireLineOfSight;
-            stuckMovementTickLimit = config.StuckMovementTickLimit;
-            stuckRecoverySeconds = config.StuckRecoverySeconds;
             Subscribe();
         }
 
@@ -179,10 +175,10 @@ namespace DFMP.Runtime
             lastAttackTimesByEnemyId.Clear();
             lastStrikeRejectLogTimesByEnemyId.Clear();
             sensesByEnemyId.Clear();
-            blockedMovementTicksByEnemyId.Clear();
-            stuckRecoveryTimesByEnemyId.Clear();
-            stuckTargetConnectionIdsByEnemyId.Clear();
+            motorByEnemyId.Clear();
             lastLoggedTargetConnectionIdsByEnemyId.Clear();
+            lastDetourFailLogTimesByEnemyId.Clear();
+            lastDetourLogTimesByEnemyId.Clear();
             missingLineOfSightGeometryWarnings.Clear();
             if (!isSubscribed)
                 return;
@@ -231,14 +227,48 @@ namespace DFMP.Runtime
                         DeltaTime = deltaTime,
                         ClassicGameMinutes = classicGameMinutes,
                         IsPassive = record.Descriptor.Reaction == (int)DFBlock.EnemyReactionTypes.Passive,
-                        IgnoredTargetConnectionId = GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime),
+                        IgnoredTargetConnectionId = -1,
                         StealthRoll = UnityEngine.Random.Range(0, 100)
                     },
                     sensesState);
 
-                Vector3 destination = senses.HasLastKnownTargetPosition
+                DFMPDynamicEnemyMotorState motorState = GetOrCreateMotorState(record.Identity.EnemyId);
+                bool isFlying = DFMPDungeonRosterPolicy.GetNativeFlyingHeightOffset(record.Descriptor.MobileType) > 0f;
+                Vector3 predictedTarget = senses.HasLastKnownTargetPosition
                     ? senses.LastKnownTargetPosition
                     : record.Descriptor.DungeonLocalPosition;
+                bool hasClearPath = HasClearPathToPredictedTarget(
+                    context,
+                    record.Descriptor.DungeonLocalPosition,
+                    predictedTarget,
+                    isFlying,
+                    motorState.CurrentDestination);
+
+                Vector3 destination = DFMPDynamicEnemyPursuitPolicy.SelectDestination(
+                    new DFMPDynamicEnemyPursuitInput
+                    {
+                        EnemyPosition = record.Descriptor.DungeonLocalPosition,
+                        PredictedTargetPosition = predictedTarget,
+                        LastKnownTargetPosition = senses.LastKnownTargetPosition,
+                        LastPositionDiff = senses.LastPositionDiff,
+                        HasLastKnownTargetPosition = senses.HasLastKnownTargetPosition,
+                        HasClearPathToPredictedTarget = hasClearPath,
+                        TargetInSight = senses.TargetInSight,
+                        CanUseRangedOrMagicPursuit = attackProfile.Kind != DFMPDynamicEnemyAttackKind.Melee,
+                        IsFlying = isFlying,
+                        // Native shares one stopDistance between the searchMult ramp and the move decision. Using a
+                        // different value here lets the ramp stall at a range that still reads as "stop", which pins
+                        // a blocked enemy in place forever.
+                        StopDistance = attackProfile.Range,
+                        DeltaTime = deltaTime,
+                        CanAct = senses.CanAct,
+                        CurrentTime = currentTime
+                    },
+                    motorState);
+
+                bool isDetouring = motorState.AvoidObstaclesTimer > 0f;
+
+                TryOpenNearbyDoor(context, record.Identity.EnemyId, record.Descriptor, senses.HasTarget, motorState);
 
                 DFMPDynamicEnemyAiDecision decision = DFMPDynamicEnemyAiPolicy.Evaluate(new DFMPDynamicEnemyAiInput
                 {
@@ -250,44 +280,115 @@ namespace DFMP.Runtime
                     CanAct = senses.CanAct,
                     AttackRange = attackProfile.Range,
                     MoveSpeed = moveSpeed,
-                    DeltaTime = deltaTime
+                    DeltaTime = deltaTime,
+                    IsDetouring = isDetouring
                 });
 
                 DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
-                bool movementBlocked;
-                Vector3 resolvedPosition;
-                bool movementAvailable = TryResolveEnemyMovement(context, record.Descriptor.DungeonLocalPosition, decision.NextDungeonLocalPosition, record.Descriptor.MobileType, out resolvedPosition, out movementBlocked);
-                resolvedPosition = ResolveEnemyVerticalPosition(
-                    context,
-                    record.Descriptor.DungeonLocalPosition,
-                    resolvedPosition,
-                    record.Descriptor.MobileType);
-                UpdateBlockedMovement(
-                    record.Identity.EnemyId,
-                    record.Descriptor.MobileType,
-                    record.Descriptor.DungeonLocalPosition,
-                    decision.NextDungeonLocalPosition,
-                    resolvedPosition,
-                    decision,
-                    movementAvailable,
-                    movementBlocked,
-                    currentTime);
+                bool skipMoveThisTick = false;
+                Vector3 moveDir = Vector3.zero;
+                bool hasMoveDir = false;
+                if (decision.IsMoving)
+                {
+                    Vector3 moveOffset = decision.NextDungeonLocalPosition - record.Descriptor.DungeonLocalPosition;
+                    moveDir = moveOffset;
+                    if (!isFlying)
+                        moveDir.y = 0f;
+                    if (moveDir.sqrMagnitude > 0.0001f)
+                    {
+                        moveDir.Normalize();
+                        hasMoveDir = true;
+                        DFMPObstacleProbeResult hazards;
+                        if (TryProbeHazards(context, record.Descriptor.DungeonLocalPosition, moveDir, isFlying, out hazards))
+                        {
+                            RememberDoorFromProbe(record.Descriptor, motorState, hazards);
+                            if (DFMPDynamicEnemyDetourPolicy.ShouldFindDetour(hazards.ObstacleDetected, hazards.FallDetected))
+                            {
+                                ApplyDetour(
+                                    context,
+                                    record,
+                                    motorState,
+                                    destination,
+                                    moveDir,
+                                    isFlying,
+                                    currentTime,
+                                    hazards);
+                                skipMoveThisTick = true;
+                            }
+                        }
+                    }
+                }
+
+                bool movementCollided = false;
+                Vector3 resolvedPosition = record.Descriptor.DungeonLocalPosition;
+                bool movementAvailable = true;
+                if (!skipMoveThisTick)
+                {
+                    movementAvailable = TryResolveEnemyMovement(
+                        context,
+                        record.Descriptor.DungeonLocalPosition,
+                        decision.NextDungeonLocalPosition,
+                        record.Descriptor.MobileType,
+                        out resolvedPosition,
+                        out movementCollided);
+                    resolvedPosition = ResolveEnemyVerticalPosition(
+                        context,
+                        record.Descriptor.DungeonLocalPosition,
+                        resolvedPosition,
+                        record.Descriptor.MobileType);
+
+                    // Probe can miss when already flush (CapsuleCast start-overlap) or false-clear a wall as a
+                    // slope. If the mover spent the whole step and still did not advance, pick a detour now so
+                    // the next tick steers along the surface. Keep this tick's resolved position (usually the
+                    // flush contact) — only the heading changes.
+                    Vector3 attempted = decision.NextDungeonLocalPosition - record.Descriptor.DungeonLocalPosition;
+                    if (!isFlying)
+                        attempted.y = 0f;
+                    Vector3 achieved = resolvedPosition - record.Descriptor.DungeonLocalPosition;
+                    if (!isFlying)
+                        achieved.y = 0f;
+                    if (decision.IsMoving &&
+                        movementAvailable &&
+                        movementCollided &&
+                        hasMoveDir &&
+                        motorState.AvoidObstaclesTimer <= 0f &&
+                        attempted.sqrMagnitude > 0.0001f &&
+                        achieved.sqrMagnitude <= 0.0001f)
+                    {
+                        DFMPObstacleProbeResult stuckHazards = new DFMPObstacleProbeResult { ObstacleDetected = true };
+                        ApplyDetour(
+                            context,
+                            record,
+                            motorState,
+                            destination,
+                            moveDir,
+                            isFlying,
+                            currentTime,
+                            stuckHazards);
+                    }
+                }
+
                 LogTargetTransition(record.Identity.EnemyId, record.TargetConnectionId, decision.TargetConnectionId);
-                descriptor.DungeonLocalPosition = movementAvailable ? resolvedPosition : record.Descriptor.DungeonLocalPosition;
+                descriptor.DungeonLocalPosition = !skipMoveThisTick && movementAvailable ? resolvedPosition : record.Descriptor.DungeonLocalPosition;
                 descriptor.FacingYaw = decision.FacingYaw;
-                bool isMoving = decision.IsMoving && movementAvailable && !movementBlocked && descriptor.DungeonLocalPosition != record.Descriptor.DungeonLocalPosition;
+                // A collision that still slid the enemy along the surface is movement, so displacement is the signal
+                // rather than the collision flag; otherwise every wall-hugging detour replicates as a standing enemy.
+                bool isMoving = decision.IsMoving &&
+                    !skipMoveThisTick &&
+                    movementAvailable &&
+                    descriptor.DungeonLocalPosition != record.Descriptor.DungeonLocalPosition;
                 DFMPDynamicEnemyRecord updatedRecord;
                 if (registry.TryUpdateAiState(true, record.Identity.EnemyId, descriptor, decision.TargetConnectionId, isMoving, out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
                     UpdateStateProjection(updatedRecord);
 
-                if (decision.HasTarget && senses.CanAct && GetIgnoredTargetConnectionId(record.Identity.EnemyId, currentTime) < 0)
+                if (decision.HasTarget && senses.CanAct)
                 {
                     Vector3 liveTargetPosition;
                     bool hasLiveTarget = TryGetLiveTargetPosition(decision.TargetConnectionId, out liveTargetPosition);
                     bool targetInSightForStrike = hasLiveTarget &&
                         DFMPDynamicEnemySensesPolicy.IsWithinSightRange(descriptor.DungeonLocalPosition, liveTargetPosition, sightModifier) &&
                         DFMPDynamicEnemySensesPolicy.IsWithinFieldOfView(descriptor.DungeonLocalPosition, descriptor.FacingYaw, liveTargetPosition) &&
-                        (!requireLineOfSight || HasDungeonLineOfSight(context, descriptor.DungeonLocalPosition, liveTargetPosition));
+                        (!requireLineOfSight || HasDungeonLineOfSight(context, descriptor.DungeonLocalPosition, liveTargetPosition, false));
                     bool canStrike = hasLiveTarget &&
                         DFMPDynamicEnemyStrikePolicy.CanStrike(
                             decision.HasTarget,
@@ -341,6 +442,18 @@ namespace DFMP.Runtime
             return state;
         }
 
+        DFMPDynamicEnemyMotorState GetOrCreateMotorState(string enemyId)
+        {
+            DFMPDynamicEnemyMotorState state;
+            if (!motorByEnemyId.TryGetValue(enemyId, out state) || state == null)
+            {
+                state = new DFMPDynamicEnemyMotorState();
+                motorByEnemyId[enemyId] = state;
+            }
+
+            return state;
+        }
+
         static void GetMobileSenseModifiers(int mobileType, out float sightModifier, out float hearingModifier)
         {
             sightModifier = 0f;
@@ -353,34 +466,170 @@ namespace DFMP.Runtime
             }
         }
 
-        void UpdateBlockedMovement(
-            string enemyId,
-            int mobileType,
-            Vector3 currentPosition,
-            Vector3 desiredPosition,
-            Vector3 resolvedPosition,
-            DFMPDynamicEnemyAiDecision decision,
-            bool movementAvailable,
-            bool movementBlocked,
-            float currentTime)
+        static bool CanOpenDoors(int mobileType)
         {
-            if (!decision.HasTarget || !decision.IsMoving || !movementAvailable || !movementBlocked)
+            MobileEnemy enemy;
+            return EnemyBasics.GetEnemy((MobileTypes)mobileType, out enemy) && enemy.CanOpenDoors;
+        }
+
+        bool HasClearPathToPredictedTarget(
+            DFMPWorldContextKey context,
+            Vector3 fromPosition,
+            Vector3 predictedTarget,
+            bool isFlying,
+            Vector3 previousDestination)
+        {
+            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
+            if (geometryService == null)
+                return !requireLineOfSight;
+
+            float pathDistance = (previousDestination - fromPosition).magnitude;
+            if (pathDistance <= 0.0001f)
+                pathDistance = (predictedTarget - fromPosition).magnitude;
+
+            bool hasClearPath;
+            if (geometryService.TryHasClearPathToPosition(
+                context,
+                fromPosition,
+                predictedTarget,
+                EnemyMovementRadius,
+                EnemyMovementHeight,
+                isFlying,
+                pathDistance,
+                out hasClearPath))
+                return hasClearPath;
+
+            return !requireLineOfSight;
+        }
+
+        bool TryProbeHazards(DFMPWorldContextKey context, Vector3 fromPosition, Vector3 direction, bool isFlying, out DFMPObstacleProbeResult result)
+        {
+            result = new DFMPObstacleProbeResult();
+            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
+            return geometryService != null &&
+                geometryService.TryProbeMovementHazards(
+                    context,
+                    fromPosition,
+                    direction,
+                    EnemyMovementRadius,
+                    EnemyMovementHeight,
+                    isFlying,
+                    out result);
+        }
+
+        DFMPObstacleProbeResult ProbeDetourDirection(DFMPWorldContextKey context, Vector3 fromPosition, Vector3 direction, bool isFlying)
+        {
+            DFMPObstacleProbeResult result;
+            if (!TryProbeHazards(context, fromPosition, direction, isFlying, out result))
+                return new DFMPObstacleProbeResult();
+            return result;
+        }
+
+        static void RememberDoorFromProbe(DFMPDynamicEnemyDescriptor descriptor, DFMPDynamicEnemyMotorState motorState, DFMPObstacleProbeResult hazards)
+        {
+            if (!DFMPDynamicEnemyDoorPolicy.ShouldRememberDoor(
+                hazards.FoundDoor,
+                hazards.DoorLoadId,
+                DFMPDynamicEnemySensesPolicy.IsWithinYawAngle(
+                    descriptor.DungeonLocalPosition,
+                    descriptor.FacingYaw,
+                    hazards.DoorDungeonLocalPosition,
+                    DFMPDynamicEnemyDoorPolicy.DoorYawHalfAngle)))
+                return;
+
+            motorState.HasLastKnownDoor = true;
+            motorState.LastKnownDoorLoadId = hazards.DoorLoadId;
+            motorState.LastKnownDoorPosition = hazards.DoorDungeonLocalPosition;
+            motorState.DistanceToDoor = Vector3.Distance(descriptor.DungeonLocalPosition, hazards.DoorDungeonLocalPosition);
+        }
+
+        void TryOpenNearbyDoor(
+            DFMPWorldContextKey context,
+            string enemyId,
+            DFMPDynamicEnemyDescriptor descriptor,
+            bool hasTarget,
+            DFMPDynamicEnemyMotorState motorState)
+        {
+            if (!hasTarget || !CanOpenDoors(descriptor.MobileType) || !motorState.HasLastKnownDoor)
+                return;
+
+            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
+            if (geometryService == null)
+                return;
+
+            bool isOpen;
+            bool isLocked;
+            Vector3 doorPosition;
+            if (!geometryService.TryGetActionDoorState(context, motorState.LastKnownDoorLoadId, out isOpen, out isLocked, out doorPosition))
             {
-                blockedMovementTicksByEnemyId.Remove(enemyId);
+                motorState.HasLastKnownDoor = false;
                 return;
             }
 
-            int blockedTicks;
-            blockedMovementTicksByEnemyId.TryGetValue(enemyId, out blockedTicks);
-            blockedTicks++;
-            blockedMovementTicksByEnemyId[enemyId] = blockedTicks;
-            if (blockedTicks < stuckMovementTickLimit)
+            motorState.LastKnownDoorPosition = doorPosition;
+            motorState.DistanceToDoor = Vector3.Distance(descriptor.DungeonLocalPosition, doorPosition);
+            if (!DFMPDynamicEnemyDoorPolicy.ShouldOpenDoor(
+                true,
+                motorState.HasLastKnownDoor,
+                isOpen,
+                isLocked,
+                motorState.DistanceToDoor))
                 return;
 
-            blockedMovementTicksByEnemyId.Remove(enemyId);
-            stuckRecoveryTimesByEnemyId[enemyId] = currentTime + stuckRecoverySeconds;
-            stuckTargetConnectionIdsByEnemyId[enemyId] = decision.TargetConnectionId;
-            Debug.LogWarning($"[DFMP Enemy] Movement stuck; temporarily releasing target: enemyId={enemyId}, mobileType={(MobileTypes)mobileType}, target={decision.TargetConnectionId}, blockedTicks={blockedTicks}, current={currentPosition}, desired={desiredPosition}, resolved={resolvedPosition}.");
+            if (!geometryService.TryApplyActionDoor(context, motorState.LastKnownDoorLoadId, true))
+                return;
+
+            DFMPNetworkServer.BroadcastActionDoorSync(context, motorState.LastKnownDoorLoadId, true);
+            Debug.Log($"[DFMP Enemy] Opened action door: enemyId={enemyId}, loadID={motorState.LastKnownDoorLoadId}.");
+        }
+
+        void ApplyDetour(
+            DFMPWorldContextKey context,
+            DFMPDynamicEnemyRecord record,
+            DFMPDynamicEnemyMotorState motorState,
+            Vector3 destination,
+            Vector3 moveDir,
+            bool isFlying,
+            float currentTime,
+            DFMPObstacleProbeResult hazards)
+        {
+            int firstAngle = UnityEngine.Random.Range(0, 2) == 0 ? 45 : -45;
+            int verticalSign = UnityEngine.Random.Range(0, 2) == 0 ? 1 : -1;
+            DFMPDynamicEnemyDetourPolicy.FindDetour(
+                motorState,
+                record.Descriptor.DungeonLocalPosition,
+                destination,
+                moveDir,
+                isFlying,
+                currentTime,
+                firstAngle,
+                verticalSign,
+                testDirection => ProbeDetourDirection(context, record.Descriptor.DungeonLocalPosition, testDirection, isFlying));
+            if (motorState.LastDetourFailed)
+                LogDetourFailed(record.Identity.EnemyId, record.Descriptor.MobileType, currentTime);
+            else
+                LogDetourStarted(record.Identity.EnemyId, hazards, motorState, record.Descriptor.DungeonLocalPosition, currentTime);
+        }
+
+        void LogDetourFailed(string enemyId, int mobileType, float currentTime)
+        {
+            float lastLogTime;
+            if (lastDetourFailLogTimesByEnemyId.TryGetValue(enemyId, out lastLogTime) && currentTime - lastLogTime < StrikeRejectLogIntervalSeconds)
+                return;
+
+            lastDetourFailLogTimesByEnemyId[enemyId] = currentTime;
+            Debug.LogWarning($"[DFMP Enemy] Detour failed; no clear step: enemyId={enemyId}, mobileType={(MobileTypes)mobileType}.");
+        }
+
+        void LogDetourStarted(string enemyId, DFMPObstacleProbeResult hazards, DFMPDynamicEnemyMotorState motorState, Vector3 fromPosition, float currentTime)
+        {
+            float lastLogTime;
+            if (lastDetourLogTimesByEnemyId.TryGetValue(enemyId, out lastLogTime) && currentTime - lastLogTime < StrikeRejectLogIntervalSeconds)
+                return;
+
+            lastDetourLogTimesByEnemyId[enemyId] = currentTime;
+            Vector3 detourOffset = motorState.DetourDestination - fromPosition;
+            Debug.Log($"[DFMP Enemy] Detour started: enemyId={enemyId}, obstacle={hazards.ObstacleDetected}, fall={hazards.FallDetected}, clockwise={motorState.CheckingClockwise}, detourDistance={detourOffset.magnitude:0.###}.");
         }
 
         void LogTargetTransition(string enemyId, int previousTargetConnectionId, int nextTargetConnectionId)
@@ -394,22 +643,6 @@ namespace DFMP.Runtime
                 Debug.Log($"[DFMP Enemy] Target acquired: enemyId={enemyId}, target={nextTargetConnectionId}, previousTarget={previousTargetConnectionId}.");
             else if (previousTargetConnectionId > 0)
                 Debug.Log($"[DFMP Enemy] Target lost: enemyId={enemyId}, previousTarget={previousTargetConnectionId}.");
-        }
-
-        int GetIgnoredTargetConnectionId(string enemyId, float currentTime)
-        {
-            float recoveryUntil;
-            if (!stuckRecoveryTimesByEnemyId.TryGetValue(enemyId, out recoveryUntil))
-                return -1;
-            if (currentTime >= recoveryUntil)
-            {
-                stuckRecoveryTimesByEnemyId.Remove(enemyId);
-                stuckTargetConnectionIdsByEnemyId.Remove(enemyId);
-                return -1;
-            }
-
-            int targetConnectionId;
-            return stuckTargetConnectionIdsByEnemyId.TryGetValue(enemyId, out targetConnectionId) ? targetConnectionId : -1;
         }
 
         bool TryResolveEnemyMovement(DFMPWorldContextKey context, Vector3 fromPosition, Vector3 desiredPosition, int mobileType, out Vector3 resolvedPosition, out bool blocked)
@@ -474,9 +707,8 @@ namespace DFMP.Runtime
                 if (!DFMPNetworkServer.TryGetPlayerSessionState(connectionIds[index], out sessionState) || sessionState == null || !sessionState.HasDungeonLocalPosition)
                     continue;
 
-                bool hasSightClearance = !requireLineOfSight || HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition);
-                // Native hearing ignores action doors; hosted-geometry LOS does not. Door nuance is owned by M9 item 5.
-                bool hasHearingClearance = HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition);
+                bool hasSightClearance = !requireLineOfSight || HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition, false);
+                bool hasHearingClearance = HasDungeonLineOfSight(context, enemyPosition, sessionState.DungeonLocalPosition, true);
 
                 int stealthSkill;
                 if (!DFMPNetworkServer.TryGetPlayerStealthSkill(connectionIds[index], out stealthSkill))
@@ -502,15 +734,15 @@ namespace DFMP.Runtime
             return targets.ToArray();
         }
 
-        bool HasDungeonLineOfSight(DFMPWorldContextKey context, Vector3 enemyPosition, Vector3 targetPosition)
+        bool HasDungeonLineOfSight(DFMPWorldContextKey context, Vector3 enemyPosition, Vector3 targetPosition, bool ignoreActionDoors)
         {
             bool hasLineOfSight;
             DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
-            if (geometryService != null && geometryService.TryHasLineOfSight(context, enemyPosition, targetPosition, out hasLineOfSight))
+            if (geometryService != null && geometryService.TryHasLineOfSight(context, enemyPosition, targetPosition, ignoreActionDoors, out hasLineOfSight))
                 return hasLineOfSight;
 
             DFMPDungeonGeometryScopeKey scope;
-            if (DFMPDungeonGeometryService.TryCreateScope(context, out scope) && missingLineOfSightGeometryWarnings.Add(scope))
+            if (requireLineOfSight && DFMPDungeonGeometryService.TryCreateScope(context, out scope) && missingLineOfSightGeometryWarnings.Add(scope))
                 Debug.LogWarning($"[DFMP Enemy] Strict line of sight is enabled but dungeon geometry is unavailable: scope={scope}.");
 
             return false;
@@ -808,14 +1040,17 @@ namespace DFMP.Runtime
 
             lastAttackTimesByEnemyId.Remove(enemyId);
             lastStrikeRejectLogTimesByEnemyId.Remove(enemyId);
-            blockedMovementTicksByEnemyId.Remove(enemyId);
-            stuckRecoveryTimesByEnemyId.Remove(enemyId);
-            stuckTargetConnectionIdsByEnemyId.Remove(enemyId);
+            lastDetourFailLogTimesByEnemyId.Remove(enemyId);
+            lastDetourLogTimesByEnemyId.Remove(enemyId);
             lastLoggedTargetConnectionIdsByEnemyId.Remove(enemyId);
             DFMPDynamicEnemySensesState sensesState;
             if (sensesByEnemyId.TryGetValue(enemyId, out sensesState) && sensesState != null)
                 sensesState.Reset();
             sensesByEnemyId.Remove(enemyId);
+            DFMPDynamicEnemyMotorState motorState;
+            if (motorByEnemyId.TryGetValue(enemyId, out motorState) && motorState != null)
+                motorState.Reset();
+            motorByEnemyId.Remove(enemyId);
         }
 
         static bool IsDungeonBlock(DFMPWorldContextKey context)

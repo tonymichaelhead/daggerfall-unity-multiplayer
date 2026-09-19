@@ -686,6 +686,215 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DynamicEnemySenses_TracksLastPositionDiffAcrossConsecutiveSightSamples()
+        {
+            var state = new DFMPDynamicEnemySensesState();
+            DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 90f, CreateSensesTarget(21, new Vector3(4f, 0f, 0f), true), 0.1f, stealthRoll: 0),
+                state);
+
+            DFMPDynamicEnemySensesDecision second = DFMPDynamicEnemySensesPolicy.Evaluate(
+                CreateSensesInput(Vector3.zero, 90f, CreateSensesTarget(21, new Vector3(6f, 0f, 0f), true), 0.1f, stealthRoll: 0, currentTargetId: 21),
+                state);
+
+            Assert.AreEqual(new Vector3(2f, 0f, 0f), second.LastPositionDiff);
+            Assert.AreEqual(new Vector3(6f, 0f, 0f), second.LastKnownTargetPosition);
+        }
+
+        [Test]
+        public void PursuitPolicy_UsesPredictedTargetWhenPathIsClear()
+        {
+            var motor = new DFMPDynamicEnemyMotorState();
+            Vector3 destination = DFMPDynamicEnemyPursuitPolicy.SelectDestination(
+                new DFMPDynamicEnemyPursuitInput
+                {
+                    EnemyPosition = Vector3.zero,
+                    PredictedTargetPosition = new Vector3(8f, 1f, 0f),
+                    LastKnownTargetPosition = new Vector3(8f, 1f, 0f),
+                    HasLastKnownTargetPosition = true,
+                    HasClearPathToPredictedTarget = true,
+                    StopDistance = DFMPDynamicEnemyPursuitPolicy.NativeStopDistance,
+                    CanAct = true
+                },
+                motor);
+
+            Assert.AreEqual(new Vector3(8f, 0f, 0f), destination);
+            Assert.AreEqual(0, motor.SearchMult);
+        }
+
+        [Test]
+        public void PursuitPolicy_RampsSearchMultAlongLastPositionDiffWhenPathIsBlocked()
+        {
+            var motor = new DFMPDynamicEnemyMotorState();
+            var input = new DFMPDynamicEnemyPursuitInput
+            {
+                EnemyPosition = new Vector3(4f, 0f, 0f),
+                PredictedTargetPosition = new Vector3(4f, 0f, 0f),
+                LastKnownTargetPosition = new Vector3(4f, 0f, 0f),
+                LastPositionDiff = new Vector3(2f, 0f, 0f),
+                HasLastKnownTargetPosition = true,
+                HasClearPathToPredictedTarget = false,
+                StopDistance = DFMPDynamicEnemyPursuitPolicy.NativeStopDistance,
+                CanAct = true
+            };
+
+            Vector3 first = DFMPDynamicEnemyPursuitPolicy.SelectDestination(input, motor);
+            Assert.AreEqual(new Vector3(4f, 0f, 0f), first);
+            Assert.AreEqual(1, motor.SearchMult);
+
+            Vector3 second = DFMPDynamicEnemyPursuitPolicy.SelectDestination(input, motor);
+            Assert.AreEqual(new Vector3(5f, 0f, 0f), second);
+            Assert.AreEqual(2, motor.SearchMult);
+        }
+
+        [Test]
+        public void PursuitPolicy_PrefersDetourDestinationWhileAvoidTimerIsActive()
+        {
+            var motor = new DFMPDynamicEnemyMotorState
+            {
+                AvoidObstaclesTimer = 0.5f,
+                DetourDestination = new Vector3(0f, 0f, 2f)
+            };
+
+            Vector3 destination = DFMPDynamicEnemyPursuitPolicy.SelectDestination(
+                new DFMPDynamicEnemyPursuitInput
+                {
+                    EnemyPosition = Vector3.zero,
+                    PredictedTargetPosition = new Vector3(8f, 0f, 0f),
+                    LastKnownTargetPosition = new Vector3(8f, 0f, 0f),
+                    HasLastKnownTargetPosition = true,
+                    HasClearPathToPredictedTarget = true,
+                    CanAct = true,
+                    DeltaTime = 0.1f
+                },
+                motor);
+
+            Assert.AreEqual(new Vector3(0f, 0f, 2f), destination);
+            Assert.Greater(motor.AvoidObstaclesTimer, 0f);
+        }
+
+        [Test]
+        public void AiPolicy_MovesTowardDetourWaypointThatSitsInsideAttackRange()
+        {
+            var input = new DFMPDynamicEnemyAiInput
+            {
+                EnemyPosition = Vector3.zero,
+                HasTarget = true,
+                TargetConnectionId = 5,
+                DestinationPosition = new Vector3(0f, 0f, DFMPDynamicEnemyDetourPolicy.DetourDistance),
+                CanAct = true,
+                AttackRange = 2.25f,
+                MoveSpeed = 4f,
+                DeltaTime = 0.1f
+            };
+
+            // Without the detour override the waypoint reads as "already in melee range" and the enemy never steps.
+            DFMPDynamicEnemyAiDecision stopped = DFMPDynamicEnemyAiPolicy.Evaluate(input);
+            Assert.IsFalse(stopped.IsMoving);
+            Assert.IsTrue(stopped.InAttackRange);
+
+            input.IsDetouring = true;
+            DFMPDynamicEnemyAiDecision detouring = DFMPDynamicEnemyAiPolicy.Evaluate(input);
+            Assert.IsTrue(detouring.IsMoving);
+            Assert.IsFalse(detouring.InAttackRange);
+            Assert.AreEqual(0.4f, detouring.NextDungeonLocalPosition.z, 0.0001f);
+        }
+
+        [Test]
+        public void DetourPolicy_UsesFirstClearFortyFiveDegreeSideAndSticksClockwise()
+        {
+            var motor = new DFMPDynamicEnemyMotorState();
+            Vector3 forward = Vector3.forward;
+            DFMPDynamicEnemyDetourPolicy.FindDetour(
+                motor,
+                Vector3.zero,
+                new Vector3(0f, 0f, 8f),
+                forward,
+                false,
+                10f,
+                45,
+                1,
+                direction => new DFMPObstacleProbeResult
+                {
+                    ObstacleDetected = Vector3.Dot(direction.normalized, Vector3.forward) > 0.9f
+                });
+
+            Assert.IsTrue(motor.CheckingClockwise);
+            Assert.AreEqual(DFMPDynamicEnemyDetourPolicy.AvoidObstaclesSeconds, motor.AvoidObstaclesTimer, 0.001f);
+            Vector3 expected = Quaternion.AngleAxis(45f, Vector3.up) * forward * DFMPDynamicEnemyDetourPolicy.DetourDistance;
+            Assert.AreEqual(expected.x, motor.DetourDestination.x, 0.001f);
+            Assert.AreEqual(expected.z, motor.DetourDestination.z, 0.001f);
+            Assert.IsFalse(motor.LastDetourFailed);
+        }
+
+        [Test]
+        public void DetourPolicy_FallsBackToOppositeFortyFiveWhenFirstSideIsBlocked()
+        {
+            var motor = new DFMPDynamicEnemyMotorState();
+            Vector3 forward = Vector3.forward;
+            DFMPDynamicEnemyDetourPolicy.FindDetour(
+                motor,
+                Vector3.zero,
+                new Vector3(0f, 0f, 8f),
+                forward,
+                false,
+                10f,
+                45,
+                1,
+                direction =>
+                {
+                    float signed = Vector3.SignedAngle(forward, direction, Vector3.up);
+                    return new DFMPObstacleProbeResult
+                    {
+                        ObstacleDetected = signed >= 0f
+                    };
+                });
+
+            Assert.IsFalse(motor.CheckingClockwise);
+            Vector3 expected = Quaternion.AngleAxis(-45f, Vector3.up) * forward * DFMPDynamicEnemyDetourPolicy.DetourDistance;
+            Assert.AreEqual(expected.x, motor.DetourDestination.x, 0.001f);
+            Assert.AreEqual(expected.z, motor.DetourDestination.z, 0.001f);
+        }
+
+        [Test]
+        public void DetourPolicy_RejectsLedgeDirectionsDuringSweep()
+        {
+            var motor = new DFMPDynamicEnemyMotorState();
+            Vector3 forward = Vector3.forward;
+            DFMPDynamicEnemyDetourPolicy.FindDetour(
+                motor,
+                Vector3.zero,
+                new Vector3(0f, 0f, 8f),
+                forward,
+                false,
+                10f,
+                45,
+                1,
+                direction =>
+                {
+                    float signed = Vector3.SignedAngle(forward, direction, Vector3.up);
+                    return new DFMPObstacleProbeResult
+                    {
+                        FallDetected = signed > -89f
+                    };
+                });
+
+            Vector3 expected = Quaternion.AngleAxis(-90f, Vector3.up) * forward * DFMPDynamicEnemyDetourPolicy.DetourDistance;
+            Assert.AreEqual(expected.x, motor.DetourDestination.x, 0.001f);
+            Assert.AreEqual(expected.z, motor.DetourDestination.z, 0.001f);
+            Assert.IsFalse(motor.LastDetourFailed);
+        }
+
+        [Test]
+        public void DoorPolicy_OpensUnlockedClosedDoorInRange()
+        {
+            Assert.IsTrue(DFMPDynamicEnemyDoorPolicy.ShouldOpenDoor(true, true, false, false, 1.5f));
+            Assert.IsFalse(DFMPDynamicEnemyDoorPolicy.ShouldOpenDoor(true, true, false, false, 2f));
+            Assert.IsFalse(DFMPDynamicEnemyDoorPolicy.ShouldOpenDoor(true, true, false, true, 1f));
+            Assert.IsFalse(DFMPDynamicEnemyDoorPolicy.ShouldOpenDoor(false, true, false, false, 1f));
+        }
+
+        [Test]
         public void DynamicEnemySenses_BlindPursuitUsesLastKnownPositionThenStops()
         {
             var state = new DFMPDynamicEnemySensesState();
@@ -1386,23 +1595,30 @@ namespace DFMP.Tests
                 GameObject root;
                 Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
                 Assert.IsTrue(geometry.TryGetRoot(scope, out root));
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = initialPosition + new Vector3(0f, -0.1f, 0f);
+                floor.transform.localScale = new Vector3(40f, 0.2f, 40f);
+
+                // A long wall the enemy cannot round within the ticks below, so pursuit has to follow it sideways.
                 GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 wall.transform.SetParent(root.transform, false);
                 wall.transform.localPosition = initialPosition + new Vector3(1f, 1f, 0f);
-                wall.transform.localScale = new Vector3(0.25f, 3f, 3f);
+                wall.transform.localScale = new Vector3(0.25f, 3f, 12f);
                 Physics.SyncTransforms();
                 Assert.IsTrue(geometry.TryMarkGeometryAvailableForTesting(scope));
 
-                service.ProcessAiTick(10f, 0.5f);
-                service.ProcessAiTick(10.5f, 0.5f);
-                service.ProcessAiTick(11f, 0.5f);
-                service.ProcessAiTick(11.5f, 0.5f);
+                // Use the production AI tick length so the 0.75s avoid-obstacles window lasts more than one step.
+                for (int tick = 0; tick < 20; tick++)
+                    service.ProcessAiTick(10f + tick * 0.1f, 0.1f);
                 DFMPDynamicEnemyRecord updatedRecord = GetRecord(service, enemyId);
 
-                Assert.AreEqual(-1, updatedRecord.TargetConnectionId);
-                Assert.IsFalse(updatedRecord.IsMoving);
+                Assert.AreEqual(116, updatedRecord.TargetConnectionId);
                 Assert.Less(updatedRecord.Descriptor.DungeonLocalPosition.x, initialPosition.x + 1f);
-                Assert.Greater(updatedRecord.Descriptor.DungeonLocalPosition.x, initialPosition.x);
+                Assert.Greater(
+                    Mathf.Abs(updatedRecord.Descriptor.DungeonLocalPosition.z - initialPosition.z),
+                    0.3f,
+                    "A blocked pursuer must detour along the wall instead of freezing flush against it.");
             }
             finally
             {

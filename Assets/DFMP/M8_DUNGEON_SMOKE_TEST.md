@@ -29,19 +29,21 @@ Expected server evidence:
 
 ### 2. Geometry movement and sensing
 
-1. Allow an enemy to pursue a player toward a visible wall or doorway.
+1. Allow an enemy to pursue a player toward a visible wall, pillar, brazier, or doorway.
 2. Confirm the enemy does not pass through hosted dungeon geometry.
-3. Confirm the enemy stops or makes a bounded partial move at the obstacle.
-4. Leave the enemy blocked for enough AI ticks to trigger stuck recovery.
-5. Confirm it releases the target temporarily and does not retry the same blocked path forever.
-6. Move the player into a clear route and confirm the enemy can acquire and pursue again after recovery.
+3. Confirm a thin walkable blocker (brazier, pillar) causes a ±45° detour rather than a permanent freeze.
+4. Confirm an enemy meeting a solid wall follows it sideways instead of freezing flush against it, and does **not** drop the target (no stuck-recovery release).
+5. Stand behind a pillar with the enemy on the far side and confirm it comes around rather than stalling at the pillar face.
+6. For a `CanOpenDoors` enemy, confirm an unlocked closed door opens and pursuit continues through.
+7. Move the player out of detection until give-up expires, then reacquire.
 
 Expected server evidence:
 
 - Target acquisition is logged once per target transition.
 - Blocked movement does not produce wall-crossing positions.
-- A stuck warning appears after the configured blocked-tick limit.
-- Target loss is logged when stuck recovery releases the target.
+- `Detour started` appears when an enemy meets a blocker, rate-limited per enemy; the enemy position changes over the following ticks rather than repeating one value.
+- Detour-failed warnings appear only when every 45° sample is blocked, never a stuck-recovery target release.
+- Unlocked doors opened by enemies emit an action-door sync to observers.
 - Strict line-of-sight behavior fails closed if geometry is unavailable.
 
 ### 3. Player damage and shared health
@@ -85,7 +87,7 @@ Expected server evidence:
 
 - The enemy transitions to `Dead` and stops moving or attacking.
 - One kill-credit record is emitted.
-- No stale attack cooldown or stuck-recovery state survives death.
+- No stale attack cooldown or motor/senses state survives death.
 - Player respawn completes through the existing M7 transition path.
 
 ### 6. Re-entry and disconnect cleanup
@@ -111,8 +113,9 @@ Expected server/client evidence:
 M8 passes only when all of the following are true:
 
 - Both clients observe the same server-owned enemy IDs and positions.
-- Enemy movement respects hosted dungeon geometry.
-- Stuck recovery prevents permanent wall retries.
+- Enemy movement respects hosted dungeon geometry and native-style detours around walkable blockers.
+- No enemy remains pinned against a wall, pillar, or doorway while it still has a target.
+- Enemies do not drop targets solely because movement is blocked.
 - Melee, ranged, and direct-damage magic profiles work through server authority.
 - Both clients observe replicated attack presentation state.
 - Shared enemy health, death, kill credit, and personal corpse loot behave correctly.

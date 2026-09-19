@@ -157,6 +157,13 @@ namespace DFMP.Runtime
         public float AttackRange;
         public float MoveSpeed;
         public float DeltaTime;
+
+        /// <summary>
+        /// Native <c>EnemyMotor.TakeAction</c> always calls <c>AttemptMove</c> while <c>avoidObstaclesTimer &gt; 0</c>
+        /// and never compares the detour waypoint against stop distance. The waypoint sits two units out, which is
+        /// inside melee range, so honouring stop distance here would pin the enemy in place for the whole detour.
+        /// </summary>
+        public bool IsDetouring;
     }
 
     public struct DFMPDynamicEnemyAiDecision
@@ -258,11 +265,12 @@ namespace DFMP.Runtime
             decision.HasTarget = true;
             decision.TargetConnectionId = input.TargetConnectionId;
             decision.FacingYaw = distance > 0.0001f ? YawFromDirection(offset) : decision.FacingYaw;
-            decision.InAttackRange = distance <= Mathf.Max(0f, input.AttackRange);
+            float stopDistance = input.IsDetouring ? 0f : Mathf.Max(0f, input.AttackRange);
+            decision.InAttackRange = !input.IsDetouring && distance <= Mathf.Max(0f, input.AttackRange);
 
-            if (!decision.InAttackRange && distance > 0.0001f && input.MoveSpeed > 0f && input.DeltaTime > 0f)
+            if (distance > stopDistance && distance > 0.0001f && input.MoveSpeed > 0f && input.DeltaTime > 0f)
             {
-                float step = Mathf.Min(input.MoveSpeed * input.DeltaTime, Mathf.Max(0f, distance - Mathf.Max(0f, input.AttackRange)));
+                float step = Mathf.Min(input.MoveSpeed * input.DeltaTime, Mathf.Max(0f, distance - stopDistance));
                 decision.NextDungeonLocalPosition = input.EnemyPosition + offset / distance * step;
                 decision.IsMoving = step > 0.0001f;
             }

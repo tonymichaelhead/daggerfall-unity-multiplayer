@@ -478,6 +478,61 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_ActionDoorIsNotAMovementObstacle()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryDoorObstacleTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryDoorObstacleSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "door-obstacle");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(119, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                GameObject doorGo = new GameObject("DFMP_HostedActionDoorObstacle");
+                doorGo.transform.SetParent(root.transform, false);
+                doorGo.transform.localPosition = new Vector3(10f, 1f, 10.3f);
+                doorGo.AddComponent<AudioSource>();
+                BoxCollider doorCollider = doorGo.AddComponent<BoxCollider>();
+                doorCollider.size = new Vector3(1f, 2f, 0.2f);
+                DaggerfallActionDoor door = doorGo.AddComponent<DaggerfallActionDoor>();
+                door.LoadID = 4242UL;
+                door.PlaySounds = false;
+                Physics.SyncTransforms();
+
+                Vector3 enemyPosition = new Vector3(10f, 0f, 10f);
+                DFMPObstacleProbeResult result;
+                Assert.IsTrue(service.TryProbeMovementHazards(dungeon, enemyPosition, Vector3.forward, 0.35f, 1.8f, false, out result));
+                Assert.IsTrue(result.FoundDoor);
+                Assert.IsFalse(result.ObstacleDetected);
+                Assert.AreEqual(4242UL, result.DoorLoadId);
+
+                ulong loadId;
+                Vector3 doorPosition;
+                float distance;
+                bool isOpen;
+                bool isLocked;
+                Assert.IsTrue(service.TryFindOpenableActionDoor(dungeon, enemyPosition, 2f, out loadId, out doorPosition, out distance, out isOpen, out isLocked));
+                Assert.AreEqual(4242UL, loadId);
+                Assert.IsFalse(isOpen);
+                Assert.IsFalse(isLocked);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonGeometryService_Movement_ReachesDesiredPositionWhenClear()
         {
             GameObject serviceGo = new GameObject("DFMP_DungeonGeometryClearMovementTest");
@@ -586,6 +641,99 @@ namespace DFMP.Tests
                 Assert.IsTrue(blocked);
                 Assert.Less(resolvedPosition.z, 2f);
                 Assert.Greater(resolvedPosition.z, 0f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_Movement_SlidesAlongHostedWallWhenPushedAtAnAngle()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometrySlideMovementTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometrySlideMovementSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "slide-movement");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(120, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                wall.transform.SetParent(root.transform, false);
+                wall.transform.localPosition = new Vector3(0f, 1f, 2f);
+                wall.transform.localScale = new Vector3(8f, 3f, 0.25f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 resolvedPosition;
+                bool blocked;
+                Assert.IsTrue(service.TryResolveMovement(dungeon, Vector3.zero, new Vector3(3f, 0f, 3f), 0.35f, 1.8f, out resolvedPosition, out blocked));
+                Assert.IsTrue(blocked);
+                Assert.Less(resolvedPosition.z, 1.9f, "Enemy must not pass through the hosted wall.");
+                Assert.Greater(resolvedPosition.x, 2.5f, "Blocked motion must deflect along the wall instead of stopping dead.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonGeometryService_MovementProbe_IgnoresClimbableStepButDetectsTallBlocker()
+        {
+            GameObject serviceGo = new GameObject("DFMP_DungeonGeometryProbeHeightTest");
+            GameObject sessionGo = new GameObject("DFMP_DungeonGeometryProbeHeightSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "probe-height");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(121, session, dungeon, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = new Vector3(10f, -0.1f, 10f);
+                floor.transform.localScale = new Vector3(20f, 0.2f, 20f);
+
+                GameObject step = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                step.transform.SetParent(root.transform, false);
+                step.transform.localPosition = new Vector3(10f, 0.2f, 10.3f);
+                step.transform.localScale = new Vector3(1f, 0.4f, 0.2f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                // Probes originate from the capsule center, so anything below the native 0.65 step height is walkable.
+                Vector3 enemyPosition = new Vector3(10f, 0f, 10f);
+                DFMPObstacleProbeResult stepResult;
+                Assert.IsTrue(service.TryProbeMovementHazards(dungeon, enemyPosition, Vector3.forward, 0.35f, 1.8f, false, out stepResult));
+                Assert.IsFalse(stepResult.ObstacleDetected, "A knee-high step must not read as an obstacle.");
+                Assert.IsFalse(stepResult.FallDetected, "Flat floor ahead must not read as a ledge.");
+
+                step.transform.localPosition = new Vector3(10f, 0.75f, 10.3f);
+                step.transform.localScale = new Vector3(1f, 1.5f, 0.2f);
+                Physics.SyncTransforms();
+
+                DFMPObstacleProbeResult wallResult;
+                Assert.IsTrue(service.TryProbeMovementHazards(dungeon, enemyPosition, Vector3.forward, 0.35f, 1.8f, false, out wallResult));
+                Assert.IsTrue(wallResult.ObstacleDetected, "A chest-high blocker must read as an obstacle.");
+                Assert.IsFalse(wallResult.FoundUpwardSlope, "A vertical wall must not be cleared as a climbable slope.");
             }
             finally
             {

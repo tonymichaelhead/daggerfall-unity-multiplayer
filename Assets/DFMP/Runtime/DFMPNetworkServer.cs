@@ -92,6 +92,36 @@ namespace DFMP.Runtime
             return worldOccupancy.GetConnectionsInInterestScope(context);
         }
 
+        public static int BroadcastActionDoorSync(DFMPWorldContextKey context, ulong loadId, bool isOpen, int excludedConnectionId = -1)
+        {
+            if (loadId == 0UL || !NetworkServer.active)
+                return 0;
+
+            var message = new DFMPActionDoorSyncMessage
+            {
+                LoadID = loadId,
+                IsOpen = isOpen
+            };
+
+            int[] coLocated = GetConnectionsInInterestScope(context);
+            int relayedCount = 0;
+            for (int i = 0; i < coLocated.Length; i++)
+            {
+                int targetConnId = coLocated[i];
+                if (targetConnId == excludedConnectionId)
+                    continue;
+
+                NetworkConnectionToClient targetConn;
+                if (NetworkServer.connections.TryGetValue(targetConnId, out targetConn) && targetConn != null)
+                {
+                    targetConn.Send(message);
+                    relayedCount++;
+                }
+            }
+
+            return relayedCount;
+        }
+
         public static bool TryGetPlayerSessionState(int connectionId, out DFMPPlayerSessionState sessionState)
         {
             return playerSessionStates.TryGetValue(connectionId, out sessionState);
@@ -1306,23 +1336,7 @@ namespace DFMP.Runtime
                 return;
 
             bool appliedHosted = DungeonGeometryService != null && DungeonGeometryService.TryApplyActionDoor(senderContext, message.LoadID, message.IsOpen);
-
-            int[] coLocated = GetConnectionsInInterestScope(senderContext);
-            int relayedCount = 0;
-            for (int i = 0; i < coLocated.Length; i++)
-            {
-                int targetConnId = coLocated[i];
-                if (targetConnId == conn.connectionId)
-                    continue;
-
-                NetworkConnectionToClient targetConn;
-                if (NetworkServer.connections.TryGetValue(targetConnId, out targetConn) && targetConn != null)
-                {
-                    targetConn.Send(message);
-                    relayedCount++;
-                }
-            }
-
+            int relayedCount = BroadcastActionDoorSync(senderContext, message.LoadID, message.IsOpen, conn.connectionId);
             Debug.Log($"[DFMP World] Relayed action door sync: sender={conn.connectionId}, loadID={message.LoadID}, isOpen={message.IsOpen}, context={senderContext}, recipients={relayedCount}, appliedHosted={appliedHosted}.");
         }
 

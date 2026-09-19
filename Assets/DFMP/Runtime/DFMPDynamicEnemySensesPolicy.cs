@@ -97,6 +97,9 @@ namespace DFMP.Runtime
         public int TargetConnectionId = -1;
         public Vector3 LastKnownTargetPosition;
         public bool HasLastKnownTargetPosition;
+        public Vector3 OldLastKnownTargetPosition;
+        public Vector3 LastPositionDiff;
+        public bool AwareOfTargetForLastSightSample;
         public bool HasEncounteredTarget;
         public uint LastStealthCheckMinute;
         public bool PreviouslyDetected;
@@ -110,6 +113,9 @@ namespace DFMP.Runtime
             TargetConnectionId = -1;
             LastKnownTargetPosition = Vector3.zero;
             HasLastKnownTargetPosition = false;
+            OldLastKnownTargetPosition = Vector3.zero;
+            LastPositionDiff = Vector3.zero;
+            AwareOfTargetForLastSightSample = false;
             HasEncounteredTarget = false;
             LastStealthCheckMinute = 0;
             PreviouslyDetected = false;
@@ -157,6 +163,7 @@ namespace DFMP.Runtime
         public bool CanAct;
         public Vector3 LastKnownTargetPosition;
         public bool HasLastKnownTargetPosition;
+        public Vector3 LastPositionDiff;
         public int GiveUpTimer;
         public bool TargetInSight;
     }
@@ -252,6 +259,7 @@ namespace DFMP.Runtime
                 TargetConnectionId = -1,
                 LastKnownTargetPosition = state.LastKnownTargetPosition,
                 HasLastKnownTargetPosition = state.HasLastKnownTargetPosition,
+                LastPositionDiff = state.LastPositionDiff,
                 GiveUpTimer = state.GiveUpTimer
             };
 
@@ -350,6 +358,8 @@ namespace DFMP.Runtime
                     state.HasEncounteredTarget = true;
             }
 
+            UpdateLastPositionDiff(state, selectedInSight);
+
             state.PreviouslyDetected = selectedDetected;
             DFMPGiveUpTimerPolicy.Advance(ref state.GiveUpTimer, classicTicks, selectedDetected);
 
@@ -360,11 +370,39 @@ namespace DFMP.Runtime
             decision.GiveUpTimer = state.GiveUpTimer;
             decision.HasLastKnownTargetPosition = state.HasLastKnownTargetPosition;
             decision.LastKnownTargetPosition = state.LastKnownTargetPosition;
+            decision.LastPositionDiff = state.LastPositionDiff;
             decision.CanAct = state.GiveUpTimer > 0 && state.HasLastKnownTargetPosition;
             return decision;
         }
 
+        static void UpdateLastPositionDiff(DFMPDynamicEnemySensesState state, bool targetInSight)
+        {
+            if (!state.HasLastKnownTargetPosition)
+                return;
+
+            if (state.OldLastKnownTargetPosition == Vector3.zero && state.LastKnownTargetPosition != Vector3.zero)
+                state.OldLastKnownTargetPosition = state.LastKnownTargetPosition;
+
+            if (targetInSight)
+            {
+                if (state.AwareOfTargetForLastSightSample)
+                    state.LastPositionDiff = state.LastKnownTargetPosition - state.OldLastKnownTargetPosition;
+
+                state.OldLastKnownTargetPosition = state.LastKnownTargetPosition;
+                state.AwareOfTargetForLastSightSample = true;
+            }
+            else
+            {
+                state.AwareOfTargetForLastSightSample = false;
+            }
+        }
+
         public static bool IsWithinFieldOfView(Vector3 enemyPosition, float facingYaw, Vector3 targetPosition)
+        {
+            return IsWithinYawAngle(enemyPosition, facingYaw, targetPosition, FieldOfViewDegrees * 0.5f);
+        }
+
+        public static bool IsWithinYawAngle(Vector3 enemyPosition, float facingYaw, Vector3 targetPosition, float halfAngleDegrees)
         {
             Vector3 toTarget = targetPosition - enemyPosition;
             toTarget.y = 0f;
@@ -373,7 +411,7 @@ namespace DFMP.Runtime
 
             float yawRadians = facingYaw * Mathf.Deg2Rad;
             Vector3 forward = new Vector3(Mathf.Sin(yawRadians), 0f, Mathf.Cos(yawRadians));
-            return Vector3.Angle(toTarget, forward) < FieldOfViewDegrees * 0.5f;
+            return Vector3.Angle(toTarget, forward) < halfAngleDegrees;
         }
 
         public static bool IsWithinSightRange(Vector3 enemyPosition, Vector3 targetPosition, float sightModifier)
