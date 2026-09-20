@@ -1,4 +1,10 @@
 {
+    // Never rebase this fork. master carries upstream Daggerfall Unity history,
+    // and rebase drops the merge commits that link it to Interkarma's repo.
+    // These override a user-level setting that would rebase on Sync.
+    "git.rebaseWhenSync": false,
+    "git.pullBeforeCheckout": false,
+    "git.useForcePushWithLease": true,
     // Line endings: the repository is LF-only. .gitattributes enforces this at
     // the Git layer; these settings stop the editor from writing CRLF in the
     // first place. Unity's .meta YAML parser also requires a final newline.

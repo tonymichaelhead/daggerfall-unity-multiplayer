@@ -16,6 +16,28 @@ Never rebase or force-push `master`.
 
 The only exception was a one-time history rewrite immediately before the public GitHub release, to remove internal tooling files. Do not repeat that. After that rewrite, `master` is published history again.
 
+### Rebase silently deletes the upstream link
+
+There is a second failure mode that is worse than the broken SHAs, because it
+looks like it succeeded. Rebase replays patches, and a merge commit carries no
+patch of its own, so **rebase drops merge commits**. The upstream work is
+flattened into duplicate copies of the individual commits, the
+`Merge remote-tracking branch 'upstream/master'` commit disappears, and Git
+stops treating `upstream/master` as an ancestor of `master`.
+
+Once that link is gone, the next sync reports thousands of incoming commits and
+conflicts against work you already have.
+
+The usual way this happens is not an explicit `git rebase`. It is `git pull`
+with `pull.rebase = true` set globally, or the editor's Sync button configured
+to rebase. Pin the local config (see setup below) and pull upstream explicitly.
+
+After every sync, confirm the link survived. This must exit `0`:
+
+```sh
+git merge-base --is-ancestor upstream/master master
+```
+
 There is deliberately no separate branch for the Layer 1 hook edits. The complete hook
 patch against upstream is derivable at any time:
 
@@ -31,6 +53,10 @@ to maintain, and cannot drift. See the Layer 1 audit in step 9.
 ```sh
 git remote add upstream https://github.com/Interkarma/daggerfall-unity.git
 
+# Never let a pull rebase this branch, even if pull.rebase is true globally.
+git config --local pull.rebase false
+git config --local pull.ff only
+
 # Replay previously recorded conflict resolutions automatically.
 git config rerere.enabled true
 
@@ -38,8 +64,10 @@ git config rerere.enabled true
 git config merge.renormalize true
 ```
 
-Both settings are local-only and cannot be committed, which is why they are listed
-here and in [architecture.md](architecture.md).
+These settings are local-only and cannot be committed, which is why they are listed
+here and in [architecture.md](architecture.md). The editor equivalent is committed:
+`.vscode/settings.json` pins `git.rebaseWhenSync` to `false` so VS Code and Cursor
+cannot rebase this repository from the Sync button.
 
 ### Unity Smart Merge (recommended)
 

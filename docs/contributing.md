@@ -34,6 +34,43 @@ Do not simplify native DFU gameplay “for now” without maintainers agreeing. 
 - Merge upstream; **never rebase or force-push `master`**. See [upstream-sync.md](upstream-sync.md).
 - Line endings are LF via `.gitattributes`. Run `git config merge.renormalize true` in your clone.
 
+### Never rebase this fork
+
+`master` carries the full upstream Daggerfall Unity history on top of DFMP's own commits. Rebasing it causes two distinct kinds of damage:
+
+1. **It rewrites every SHA**, which forces a force-push and breaks every existing clone, open pull request, and commit link.
+2. **It silently drops merge commits.** Rebase replays patches, and a merge commit has no patch of its own. The commits merged in from `Interkarma/daggerfall-unity` get flattened into duplicate copies, and Git stops recognizing `upstream/master` as an ancestor of `master`. Future upstream merges then look like thousands of incoming commits and conflict everywhere.
+
+The second one is the dangerous one, because it looks like it worked.
+
+Run this once per clone so `git pull` can never rebase by accident, even if your global config sets `pull.rebase = true`:
+
+```sh
+git config --local pull.rebase false
+git config --local pull.ff only
+git config --local rerere.enabled true
+git config --local merge.renormalize true
+```
+
+In VS Code or Cursor, leave **Git: Rebase When Sync** off. This repository already pins `git.rebaseWhenSync` to `false` in `.vscode/settings.json`, so a user-level setting cannot override it here.
+
+Pull upstream explicitly rather than through the editor's Sync button:
+
+```sh
+git fetch upstream
+git merge upstream/master
+```
+
+Verify afterwards that the link survived. This must exit `0`:
+
+```sh
+git merge-base --is-ancestor upstream/master master
+```
+
+If it exits `1`, the upstream link is broken. Stop and ask a maintainer instead of force-pushing a fix.
+
+Rebase is fine on your own feature branch before it is merged. It is never fine on `master`.
+
 ## Pull requests
 
 - Keep the Layer 1 diff small (`git diff --stat upstream/master..HEAD -- Assets/Scripts`).
