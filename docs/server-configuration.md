@@ -2,7 +2,7 @@
 
 Dedicated servers load `dfmp-server.json` from the **current working directory** (`Directory.GetCurrentDirectory()`). If the file is missing, DFMP writes one with built-in defaults.
 
-Ship and copy [`dfmp-server.example.json`](../dfmp-server.example.json). Keep your real `dfmp-server.json` out of git.
+Ship and copy [`dfmp-server.example.json`](../dfmp-server.example.json). Keep your real `dfmp-server.json` out of git: it is gitignored, and `.githooks/pre-commit` refuses the file if it is staged anyway. Change that file as much as you want locally.
 
 CLI flags override JSON **only when the parsed CLI value is not the parser default** (for example `-port` only wins if it is not `7777`). Prefer editing JSON for anything you care about.
 

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Block local operator files that .gitignore is supposed to keep out of commits.
+# git add -f can still stage them; this hook is the last line of defense.
+
+blocked=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(dfmp-server\.json|\.github/copilot-instructions\.md)$' || true)
+
+if [ -n "$blocked" ]; then
+    echo "Refusing commit: these files are local-only and must not be pushed:" >&2
+    echo "$blocked" >&2
+    echo "Use dfmp-server.example.json for public defaults. See docs/server-configuration.md." >&2
+    exit 1
+fi
+
+exit 0

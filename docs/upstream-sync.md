@@ -62,6 +62,9 @@ git config rerere.enabled true
 
 # Collapse line-ending-only differences instead of conflicting on them.
 git config merge.renormalize true
+
+# Run the repo's pre-commit hook (blocks dfmp-server.json even if force-added).
+git config --local core.hooksPath .githooks
 ```
 
 These settings are local-only and cannot be committed, which is why they are listed

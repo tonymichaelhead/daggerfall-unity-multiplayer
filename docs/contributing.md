@@ -8,7 +8,7 @@ Thanks for helping. DFMP is a fork of [Daggerfall Unity](https://github.com/Inte
 2. Check [roadmap.md](roadmap.md) so the change matches a milestone instead of inventing a parallel system.
 3. Prefer Layer 3 (`Assets/DFMP/Runtime/`, `Assets/DFMP/Editor/`) over touching `Assets/Scripts/`.
 
-Do not add Cursor/Copilot instruction files, `.cursor/` trees, or personal `dfmp-server.json` to pull requests. Those are gitignored on purpose.
+Do not add Cursor/Copilot instruction files, `.cursor/` trees, or personal `dfmp-server.json` to pull requests. Those are gitignored on purpose. Edit `dfmp-server.json` freely for local testing; ship public defaults only in `dfmp-server.example.json`. A pre-commit hook in `.githooks/` also refuses to commit `dfmp-server.json` if someone force-adds it.
 
 ## Three-layer rule
 
@@ -50,6 +50,7 @@ git config --local pull.rebase false
 git config --local pull.ff only
 git config --local rerere.enabled true
 git config --local merge.renormalize true
+git config --local core.hooksPath .githooks
 ```
 
 In VS Code or Cursor, leave **Git: Rebase When Sync** off. This repository already pins `git.rebaseWhenSync` to `false` in `.vscode/settings.json`, so a user-level setting cannot override it here.
