@@ -427,6 +427,15 @@ namespace DFMP.Runtime
             MaxConnections = maxConnections;
             Config = config ?? new DFMPServerConfig();
             Config.Normalize();
+
+            string discordConfigReason;
+            if (!DFMPDiscordSecrets.TryValidate(Config, out discordConfigReason))
+            {
+                Debug.LogError("[DFMP Auth] " + discordConfigReason);
+                Config = null;
+                return;
+            }
+
             CharacterStore = new DFMPFileCharacterStore(GetCharacterStoreDirectory());
             LocalAccountStore = new DFMPFileLocalAccountStore(GetLocalAccountStoreDirectory());
             Debug.Log($"[DFMP Character] Store path '{GetCharacterStoreDirectory()}'.");

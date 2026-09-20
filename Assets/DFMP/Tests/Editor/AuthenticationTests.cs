@@ -85,6 +85,19 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void Resolve_ExplainsServerLocalWhenClientHasNoCredential()
+        {
+            DFMPAuthDecision decision = DFMPAuthPolicy.Resolve(
+                CreateRequest(credential: string.Empty),
+                Nonce,
+                CreateConfig(),
+                new InMemoryLocalAccountStore());
+
+            Assert.AreEqual(DFMPAuthResultCode.InvalidRequest, decision.Code);
+            StringAssert.Contains("username and password", decision.Reason);
+        }
+
+        [Test]
         public void Resolve_RejectsAccountOutsideWhitelist()
         {
             DFMPServerConfig config = CreateConfig();
@@ -151,13 +164,37 @@ namespace DFMP.Tests
         public void Resolve_OpenModeIgnoresCredentialsButStillNormalizesAccount()
         {
             DFMPAuthDecision decision = DFMPAuthPolicy.Resolve(
-                CreateRequest("Tester", credential: string.Empty, nonce: string.Empty),
+                CreateRequest("Tester", credential: string.Empty, nonce: Nonce),
                 Nonce,
                 CreateConfig(DFMPAuthModes.Open),
                 null);
 
             Assert.AreEqual(DFMPAuthResultCode.Accepted, decision.Code);
             Assert.AreEqual("tester", decision.AccountId);
+        }
+
+        [Test]
+        public void Resolve_OpenModeRejectsMismatchedNonce()
+        {
+            DFMPAuthDecision decision = DFMPAuthPolicy.Resolve(
+                CreateRequest("tester", credential: string.Empty, nonce: "ffffffffffffffffffffffffffffffff"),
+                Nonce,
+                CreateConfig(DFMPAuthModes.Open),
+                null);
+
+            Assert.AreEqual(DFMPAuthResultCode.InvalidRequest, decision.Code);
+        }
+
+        [Test]
+        public void Resolve_DiscordModeIgnoresClientSuppliedAccount()
+        {
+            DFMPAuthDecision decision = DFMPAuthPolicy.Resolve(
+                CreateRequest("spoofed"),
+                Nonce,
+                CreateConfig(DFMPAuthModes.Discord),
+                new InMemoryLocalAccountStore());
+
+            Assert.AreEqual(DFMPAuthResultCode.InvalidRequest, decision.Code);
         }
 
         [Test]
@@ -169,11 +206,255 @@ namespace DFMP.Tests
         }
 
         [Test]
-        public void AuthModes_UnknownModeFallsBackToServerLocal()
+        public void AuthModes_UnknownModeFallsBackToServerLocal_AndEmptyDefaultsToOpen()
         {
             Assert.AreEqual(DFMPAuthModes.ServerLocal, DFMPAuthModes.Normalize("nonsense"));
-            Assert.AreEqual(DFMPAuthModes.ServerLocal, DFMPAuthModes.Normalize(null));
+            Assert.AreEqual(DFMPAuthModes.Open, DFMPAuthModes.Normalize(null));
+            Assert.AreEqual(DFMPAuthModes.Open, DFMPAuthModes.Normalize(string.Empty));
+            Assert.AreEqual(DFMPAuthModes.Discord, DFMPAuthModes.Normalize("DISCORD"));
             Assert.AreEqual(DFMPAuthModes.Open, DFMPAuthModes.Normalize("OPEN"));
+        }
+    }
+
+    [TestFixture]
+    public class DiscordConnectPolicyTests
+    {
+        const string UserId = "123456789012345678";
+
+        static DFMPServerConfig CreateDiscordConfig()
+        {
+            var config = new DFMPServerConfig();
+            config.Identity.Mode = DFMPAuthModes.Discord;
+            config.Identity.WhitelistEnabled = false;
+            return config;
+        }
+
+        [Test]
+        public void FormatAccountId_PrefixesSnowflake()
+        {
+            string accountId;
+            string reason;
+            Assert.IsTrue(DFMPDiscordIdentity.TryFormatAccountId(UserId, out accountId, out reason));
+            Assert.AreEqual("discord:" + UserId, accountId);
+        }
+
+        [Test]
+        public void FormatAccountId_RejectsNonNumeric()
+        {
+            string accountId;
+            string reason;
+            Assert.IsFalse(DFMPDiscordIdentity.TryFormatAccountId("not-a-snowflake", out accountId, out reason));
+        }
+
+        [Test]
+        public void Resolve_AcceptsDiscordUserAndIgnoresClientSpoof()
+        {
+            DFMPAuthDecision decision = DFMPDiscordConnectPolicy.Resolve(UserId, CreateDiscordConfig(), null, false, false);
+
+            Assert.AreEqual(DFMPAuthResultCode.Accepted, decision.Code);
+            Assert.AreEqual("discord:" + UserId, decision.AccountId);
+        }
+
+        [Test]
+        public void Resolve_RejectsAccountOutsideWhitelist()
+        {
+            DFMPServerConfig config = CreateDiscordConfig();
+            config.Identity.WhitelistEnabled = true;
+            config.Identity.AllowedAccountIds = new[] { "discord:999" };
+
+            DFMPAuthDecision decision = DFMPDiscordConnectPolicy.Resolve(UserId, config, null, false, false);
+
+            Assert.AreEqual(DFMPAuthResultCode.NotWhitelisted, decision.Code);
+        }
+
+        [Test]
+        public void Resolve_AcceptsWhitelistedDiscordId()
+        {
+            DFMPServerConfig config = CreateDiscordConfig();
+            config.Identity.WhitelistEnabled = true;
+            config.Identity.AllowedAccountIds = new[] { "discord:" + UserId };
+
+            DFMPAuthDecision decision = DFMPDiscordConnectPolicy.Resolve(UserId, config, null, false, false);
+
+            Assert.AreEqual(DFMPAuthResultCode.Accepted, decision.Code);
+        }
+
+        [Test]
+        public void Resolve_AllowsMemberWithRequiredRole()
+        {
+            DFMPServerConfig config = CreateDiscordConfig();
+            config.Identity.DiscordGuildId = "guild";
+            config.Identity.DiscordAllowedRoleIds = new[] { "role-allowed" };
+            var member = new DFMPDiscordGuildMember
+            {
+                IsMember = true,
+                RoleIds = new[] { "role-other", "role-allowed" }
+            };
+
+            DFMPAuthDecision decision = DFMPDiscordConnectPolicy.Resolve(UserId, config, member, true, true);
+
+            Assert.AreEqual(DFMPAuthResultCode.Accepted, decision.Code);
+        }
+
+        [Test]
+        public void Resolve_RejectsMemberWithoutRequiredRole()
+        {
+            DFMPServerConfig config = CreateDiscordConfig();
+            var member = new DFMPDiscordGuildMember
+            {
+                IsMember = true,
+                RoleIds = new[] { "role-other" }
+            };
+
+            DFMPAuthDecision decision = DFMPDiscordConnectPolicy.Resolve(UserId, config, member, true, true);
+
+            Assert.AreEqual(DFMPAuthResultCode.NotWhitelisted, decision.Code);
+        }
+
+        [Test]
+        public void Resolve_RejectsNonMember()
+        {
+            var member = new DFMPDiscordGuildMember { IsMember = false, RoleIds = new string[0] };
+
+            DFMPAuthDecision decision = DFMPDiscordConnectPolicy.Resolve(UserId, CreateDiscordConfig(), member, true, true);
+
+            Assert.AreEqual(DFMPAuthResultCode.NotWhitelisted, decision.Code);
+        }
+
+        [Test]
+        public void Resolve_FailsClosedWithoutBotToken()
+        {
+            DFMPAuthDecision decision = DFMPDiscordConnectPolicy.Resolve(UserId, CreateDiscordConfig(), null, true, false);
+
+            Assert.AreEqual(DFMPAuthResultCode.ServerUnavailable, decision.Code);
+        }
+
+        [Test]
+        public void Secrets_RequireClientCredentialsForDiscordMode()
+        {
+            string error;
+            Assert.IsFalse(DFMPDiscordSecrets.TryValidate(CreateDiscordConfig(), "", "secret", "", out error));
+            Assert.IsFalse(string.IsNullOrEmpty(error));
+            Assert.IsTrue(DFMPDiscordSecrets.TryValidate(CreateDiscordConfig(), UserId, "secret", "", out error));
+        }
+
+        [Test]
+        public void Secrets_RejectNonSnowflakeClientId()
+        {
+            string error;
+            Assert.IsFalse(DFMPDiscordSecrets.TryValidate(CreateDiscordConfig(), "not-an-id", "secret", "", out error));
+            StringAssert.Contains(DFMPDiscordSecrets.ClientIdVariable, error);
+        }
+
+        [Test]
+        public void Secrets_TolerateQuotedAndPaddedEnvironmentValues()
+        {
+            string error;
+            Assert.IsTrue(DFMPDiscordSecrets.TryValidate(CreateDiscordConfig(), "  \"" + UserId + "\"  ", " secret ", "", out error));
+            Assert.AreEqual(UserId, DFMPDiscordSecrets.Clean("\"" + UserId + "\""));
+            Assert.AreEqual("secret", DFMPDiscordSecrets.Clean("  secret\n"));
+            Assert.AreEqual(string.Empty, DFMPDiscordSecrets.Clean(null));
+        }
+
+        [Test]
+        public void Secrets_RequireBotTokenWhenRolesConfigured()
+        {
+            DFMPServerConfig config = CreateDiscordConfig();
+            config.Identity.DiscordGuildId = "guild";
+            config.Identity.DiscordAllowedRoleIds = new[] { "role" };
+
+            string error;
+            Assert.IsFalse(DFMPDiscordSecrets.TryValidate(config, UserId, "secret", "", out error));
+            Assert.IsTrue(DFMPDiscordSecrets.TryValidate(config, UserId, "secret", "bot", out error));
+        }
+
+        [Test]
+        public void Secrets_SkipDiscordWhenModeIsOpen()
+        {
+            var config = new DFMPServerConfig();
+            config.Identity.Mode = DFMPAuthModes.Open;
+            string error;
+            Assert.IsTrue(DFMPDiscordSecrets.TryValidate(config, "", "", "", out error));
+        }
+
+        [Test]
+        public void PollFailure_MapsDeniedTimeoutAndApiError()
+        {
+            DFMPAuthResultCode code;
+            string reason;
+            Assert.IsTrue(DFMPDiscordConnectPolicy.TryMapAuthorizeError("access_denied", out code, out reason));
+            Assert.AreEqual(DFMPAuthResultCode.DiscordDenied, code);
+            Assert.IsTrue(DFMPDiscordConnectPolicy.TryMapAuthorizeError("timeout", out code, out reason));
+            Assert.AreEqual(DFMPAuthResultCode.DiscordTimeout, code);
+            Assert.IsTrue(DFMPDiscordConnectPolicy.TryMapAuthorizeError("server_error", out code, out reason));
+            Assert.AreEqual(DFMPAuthResultCode.ServerUnavailable, code);
+            Assert.IsFalse(DFMPDiscordConnectPolicy.TryMapAuthorizeError(string.Empty, out code, out reason));
+            Assert.IsFalse(DFMPDiscordConnectPolicy.TryMapAuthorizeError(null, out code, out reason));
+        }
+
+        [Test]
+        public void Redirect_AcceptsLoopbackAndRejectsEverythingElse()
+        {
+            int port;
+            string reason;
+
+            Assert.IsTrue(DFMPDiscordRedirect.TryParseLoopback(DFMPDiscordRedirect.Default, out port, out reason));
+            Assert.AreEqual(53682, port);
+
+            Assert.IsTrue(DFMPDiscordRedirect.TryParseLoopback("http://localhost:49000/cb", out port, out reason));
+            Assert.AreEqual(49000, port);
+
+            // A non-loopback host would expose a listener off the machine.
+            Assert.IsFalse(DFMPDiscordRedirect.TryParseLoopback("http://example.com:53682/cb", out port, out reason));
+            // Discord matches the redirect literally, so a port must be stated.
+            Assert.IsFalse(DFMPDiscordRedirect.TryParseLoopback("http://127.0.0.1/cb", out port, out reason));
+            Assert.IsFalse(DFMPDiscordRedirect.TryParseLoopback("https://127.0.0.1:53682/cb", out port, out reason));
+            Assert.IsFalse(DFMPDiscordRedirect.TryParseLoopback("not a url", out port, out reason));
+            Assert.IsFalse(DFMPDiscordRedirect.TryParseLoopback(string.Empty, out port, out reason));
+        }
+
+        [Test]
+        public void Pkce_ChallengeIsDeterministicBase64UrlOfVerifier()
+        {
+            // Known S256 vector from RFC 7636 appendix B.
+            Assert.AreEqual(
+                "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+                DFMPDiscordPkce.CreateChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
+
+            string verifier = DFMPDiscordPkce.CreateVerifier();
+            Assert.AreNotEqual(verifier, DFMPDiscordPkce.CreateVerifier());
+            StringAssert.DoesNotContain("=", verifier);
+            StringAssert.DoesNotContain("+", verifier);
+            StringAssert.DoesNotContain("/", verifier);
+        }
+
+        [Test]
+        public void AuthorizeUrl_CarriesPkceStateAndRedirect()
+        {
+            string url = DFMPDiscordRedirect.BuildAuthorizeUrl(
+                "123456789012345678",
+                DFMPDiscordRedirect.Default,
+                "nonce-value",
+                "challenge-value");
+
+            StringAssert.Contains("response_type=code", url);
+            StringAssert.Contains("client_id=123456789012345678", url);
+            StringAssert.Contains("code_challenge=challenge-value", url);
+            StringAssert.Contains("code_challenge_method=S256", url);
+            StringAssert.Contains("state=nonce-value", url);
+            StringAssert.Contains("scope=identify", url);
+            StringAssert.Contains(System.Uri.EscapeDataString(DFMPDiscordRedirect.Default), url);
+        }
+
+        [Test]
+        public void Secrets_RejectNonLoopbackRedirectUri()
+        {
+            DFMPServerConfig config = CreateDiscordConfig();
+            config.Identity.DiscordRedirectUri = "https://example.com/callback";
+
+            string error;
+            Assert.IsFalse(DFMPDiscordSecrets.TryValidate(config, UserId, "secret", "", out error));
+            StringAssert.Contains("DiscordRedirectUri", error);
         }
     }
 

@@ -4,7 +4,7 @@ DFMP is a multiplayer framework for Daggerfall Unity. Players join a dedicated s
 
 Development is split into three phases with different definitions of "done".
 
-**Phase 1 — Private Beta.** Everything needed to run one author-operated, whitelisted server that Discord testers can join and actually play on. The gameplay loop must be complete and stable: identity and login, character persistence, chat, a shared world, combat, and dungeon enemies. The build is not handed to other server owners in this phase, so a deep configuration surface, server-side scripting, and public documentation are deliberately out of scope. A minimal launcher is the single exception, pulled forward into M8.5, because testers cannot be handed a build without a login flow.
+**Phase 1 — Private Beta.** Everything needed to run one author-operated, whitelisted server that Discord testers can join and actually play on. The gameplay loop must be complete and stable: identity and login, character persistence, chat, a shared world, combat, and dungeon enemies. The build is not handed to other server owners in this phase, so a deep configuration surface, server-side scripting, and public documentation are deliberately out of scope. A minimal launcher is the single exception, pulled forward into M8.5, because testers cannot be handed a build without a way to launch the client and complete server-side Discord login.
 
 **Phase 2 — Public Release.** Everything needed for someone else to run their own DFMP server without the author's help: server-side scripting, a full configuration surface, admin and moderation tooling, client distribution and a launcher, operational hardening, and documentation.
 
@@ -31,8 +31,9 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | M6.5 | Timeboxed spike: can the headless server host dungeon geometry for server-side AI? | Done |
 | M7 | Server-authoritative vitals and validated combat damage, with a PvP toggle. | Done |
 | M8 | Server-owned dynamic world enemies, with dungeon enemies as the first vertical slice. | In-Progress |
-| M8.5 | Account authentication, account roles, and the client launcher login flow. | In-Progress |
+| M8.5 | Account authentication, per-server Discord connect, account roles, and the client launcher. | In-Progress |
 | M8.6 | Post-auth character select, multi-character persistence, and owner-gated create/delete. | In-Progress |
+| M8.7 | Client-owned quest progression with persisted quest machines and owner-scoped, server-owned quest foes. | Done |
 | M9 | Tester client build, minimal ops, and beta stability pass. | Planned |
 | — | **Phase 1 exit: private beta server live for Discord testers.** | Planned |
 
@@ -40,7 +41,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 
 | # | Milestone | Status |
 | --- | --- | --- |
-| R0 | Identity service, Discord authentication, and the public master server list. | Planned |
+| R0 | Optional public master server list (listing only; not a hosted login service). | Planned |
 | R1 | Full server configuration surface, validation, and documented defaults. | Planned |
 | R2 | Server-side scripting layer bound to the event bus. | Planned |
 | R3 | Admin, moderation, and chat command tooling. | Planned |
@@ -56,7 +57,7 @@ Target scale in both phases is roughly 8-16 concurrent players, built so growth 
 | P-MOD | Server-supplied mod manifest with automatic client download, enable, and configuration. | Future |
 | P-VOICE | Proximity text chat, spatialized proximity voice, and party channels. | Future |
 | P-WORLD | Shared quests, shared world state and economy, ambient NPC sync. | Future |
-| P-QUEST-FOES | Spike and implement a reliable server-owned quest-enemy model, if justified by play evidence. | Future |
+| P-QUEST-FOES | Spike and implement a reliable server-owned quest-enemy model, if justified by play evidence. | Superseded by M8.7 |
 | P-SCALE | SQL persistence, strict authority and anti-cheat, 100+ player scaling. | Future |
 | P-COMMUNITY | Server browser, expanded scripting API, script sharing, friends and invites. | Future |
 
@@ -68,11 +69,11 @@ Phase 1 is complete when a tester can run this loop end to end on the author's s
 
 Systems are divided by a single rule: **replicate state when a desync between two co-located players would break immersion or be exploitable. Otherwise keep it personal to each client and document it.**
 
-Server-owned in Phase 1: player presence and movement, global chat, game time and weather, character persistence, vitals, combat damage, PvP policy, dynamic world enemies (dungeon enemies first), location occupancy, and door state.
+Server-owned in Phase 1: player presence and movement, global chat, game time and weather, character persistence, vitals, combat damage, PvP policy, dynamic world enemies (dungeon enemies first), quest foes and quest-machine persistence, location occupancy, and door state.
 
-Personal (client-local) in Phase 1: wandering town citizens, static NPCs and shopkeepers, shop inventories and guild services, loot, and quests. Daggerfall's world geometry, dungeon layouts, and static flats are deterministic from game data, so they are never replicated.
+Personal (client-local) in Phase 1: wandering town citizens, static NPCs and shopkeepers, shop inventories and guild services, loot, and quest progression itself — each character runs its own quest machine, and only the physical quest foes are server-owned (M8.7). Daggerfall's world geometry, dungeon layouts, and static flats are deterministic from game data, so they are never replicated.
 
-Explicitly deferred to Phase 2, even though it would be tempting to build early: server-side scripting, an exhaustive configuration surface, in-game admin and moderation commands, launcher auto-update and mod provisioning, and player-facing documentation. Phase 1 configuration stays at whatever the author needs to run one server, and operational tasks may be manual.
+Explicitly deferred to Phase 2, even though it would be tempting to build early: server-side scripting, an exhaustive configuration surface, in-game admin and moderation commands, launcher auto-update (check for new DFMP releases on open, then download and install), tes3mp-style username/password as a player-facing auth mode, mod provisioning, and player-facing documentation. Phase 1 configuration stays at whatever the author needs to run one server, and operational tasks may be manual. DFMP does not operate a central identity or OAuth service in any phase.
 
 ## Architectural Rules
 
@@ -296,7 +297,7 @@ Status: Complete.
 - Server-owned death and respawn.
 - Clients submit damage *intent*; the server validates and applies it. All damage flows through a single server-side application chokepoint so validation can tighten in one place.
 - Beta validation is deliberately loose: bounds, cooldown, range, and source-session sanity checks rather than full server-side combat simulation.
-- **Client-local quest PvE exception.** A client may report damage from its own local quest enemy only against its own character. The server cannot verify that source entity in Phase 1, so this is an explicit beta trust exception, but the normal damage chokepoint still enforces numeric bounds, rate limits, source-session ownership, and an owner-only target. Local quest enemies can never damage another player.
+- **Client-local quest PvE exception. Superseded by M8.7 (2026-09-20).** Quest foes are now server-owned, so quest damage arrives through the ordinary server-originated path and no real quest foe uses this trust exception any more. The `LocalQuestPve` source kind and its owner-only validation remain in the chokepoint for developer commands and as the fallback classification; if anything ever reports it in normal play, that is a quest foe that failed to register server-side. Original rule, retained for context: a client may report damage from its own local quest enemy only against its own character, under the same numeric bounds, rate limits, and source-session ownership checks, and never against another player.
 - PvP is a server configuration flag. When disabled, the server rejects player-versus-player damage at the same chokepoint.
 - Event bus raises `PlayerDamaged`, `PlayerDied`, and `PlayerRespawned`.
 - **Authoritative vital restoration is not damage.** Applying a persisted join snapshot or a server respawn snapshot must preserve the stored vital values without triggering DFU damage flash, pain audio, or other damage presentation. Only an accepted damage application may produce damage feedback.
@@ -306,7 +307,7 @@ Status: Complete.
 M7 is implemented as a sequence of vertical slices. The first end-to-end combat slice is player-versus-player combat because existing synchronized player sessions provide visible source and target actors, authoritative positions, world contexts, and a deterministic two-client smoke-test surface.
 
 1. **PvP vertical slice.** Complete client damage-intent production, server validation, PvP enabled/disabled policy, same-context and range checks, cooldown and rate limits, authoritative vital replication, persistence, death/respawn integration, and combat lifecycle events. All damage continues through the source-agnostic server chokepoint.
-2. **Local quest PvE exception.** Reuse the same chokepoint for client-local quest enemies. Restrict the target to the submitting player, retain bounded and rate-limited validation, and keep the source explicitly beta-trusted and non-shared.
+2. **Local quest PvE exception.** Reuse the same chokepoint for client-local quest enemies. Restrict the target to the submitting player, retain bounded and rate-limited validation, and keep the source explicitly beta-trusted and non-shared. *(Delivered, then superseded by M8.7's server-owned quest foes.)*
 3. **Server-owned dynamic world enemies.** Continue into M8 only after the PvP damage, vital replication, death/respawn, and policy-toggle paths are proven. Dungeon enemies are the first provider and vertical slice; wilderness encounters, city/night spawns, and future mod-provided encounters must fit the same server-owned entity, activation, replication, kill-credit, and loot boundaries. Enemy entities, AI, attack timing, navigation, kill credit, and loot remain M8 concerns and must submit server-originated damage through the existing chokepoint rather than create a second combat path.
 
 Verification:
@@ -357,7 +358,7 @@ Verification:
 
 #### M8 Public-Ready Dungeon Enemy Combat Plan
 
-The current M8 implementation has an end-to-end shared dungeon enemy combat slice, but it is not public-server-ready until enemy sensing, movement, attack authority, geometry interaction, lifecycle cleanup, and presentation are hardened. This plan is scoped only to shared dynamic dungeon enemies. Wilderness, city/night, ambient world enemies, and quest enemies are deferred to later milestones or follow-up planning.
+The current M8 implementation has an end-to-end shared dungeon enemy combat slice, but it is not public-server-ready until enemy sensing, movement, attack authority, geometry interaction, lifecycle cleanup, and presentation are hardened. This plan is scoped only to shared dynamic dungeon enemies. Wilderness, city/night, and ambient world enemies are deferred to later milestones or follow-up planning; quest foes shipped separately in M8.7 on top of this same registry.
 
 Design decisions for M8 closeout:
 
@@ -386,9 +387,9 @@ Status: In-Progress.
 
 Taken out of order, ahead of the remaining M8 enemy AI parity work, because private beta testers need a real login flow and a launcher before a build can be handed to them at all.
 
-This milestone establishes the **authentication spine** and the launcher shell. It deliberately ships the weakest credential scheme that is still safe enough for a small, invite-only, trusted tester group, placed behind interfaces that R0 replaces with Discord identity without a rewrite.
+This milestone establishes the **authentication spine**, per-server Discord connect, and the launcher as a local profile shell. There is no DFMP-hosted identity service and no global launcher account. Discord hosts identity; each dedicated game server validates connects itself.
 
-The governing rule, taken from FiveM, is that **authentication and authorization are separate concerns**. Authentication answers "who are you", and will eventually be global and issued once. Authorization answers "may you play on *this* server", and is always evaluated per server at connect. Conflating the two is what makes per-server password schemes impossible to grow out of.
+The governing rule, taken from FiveM, is that **authentication and authorization are separate concerns**. Authentication answers "who are you" (Discord user id on this server). Authorization answers "may you play on *this* server" and is always evaluated per server at connect (ID whitelist and optional guild roles).
 
 #### Authentication Spine
 
@@ -396,19 +397,23 @@ The governing rule, taken from FiveM, is that **authentication and authorization
 - Client and server exchange a protocol version and build identifier in the same handshake, so a mismatched tester build is rejected at connect with a readable reason instead of desyncing. This item moves here from M9.
 - The server issues a per-connection nonce that the client echoes, so a captured handshake cannot be replayed.
 - Authentication mode is a server configuration choice rather than a build choice:
-  - `open` — no credential. Development and LAN only. The server warns loudly at boot if it is bound to a non-loopback interface in this mode.
-  - `server_local` — username and password held per server. The beta default.
-  - `dfmp` — identity service join token. Reserved for R0.
-- Credentials never cross the wire in plaintext. The client sends a key derived from the password and username, and the server stores a salted hash of what it receives, so a real password is never present on the server, in a log, or in a crash dump. Testers reuse real passwords, and the server must not be in a position to leak one.
-- Password records use PBKDF2-HMAC-SHA256 with a per-account salt and a constant-time comparison, written through the same atomic file pattern the M5 character store already uses.
-- Per-address connection throttling and per-account failed-attempt backoff, with a generic failure reason that does not distinguish "no such account" from "wrong password".
-- Accounts self-register on first successful connect. Self-registration is paired with the M5 whitelist so that only pre-listed tester names can claim an account. Without that pairing, the first client to connect under a given name owns it permanently.
+  - `discord` — the mode the author's beta server runs. The game server is the Discord confidential client. The player approves the server in their own browser through the authorization code flow with a loopback redirect (RFC 8252) plus PKCE; the client forwards only the resulting authorization code, and the server redeems it with its client secret and binds the connection to `discord:<snowflake>`. Discord access tokens never ride the unencrypted KCP game wire. Opt-in rather than generated, because it cannot start without a registered Discord application.
+  - `open` — no credential. Development and LAN only. The server warns loudly at boot if it is bound to a non-loopback interface in this mode. Identity is the launcher's local profile id. A freshly generated `dfmp-server.json` selects this, so cloning the repo and starting a server works with no external setup.
+  - `server_local` — username and password held per server. Protocol, PBKDF2 store, and Development Session remain; there is no player-facing launcher or in-game prompt yet. Deferred as a first-class flow.
+  - `dfmp` — leftover reserved mode. Unsupported. A DFMP-operated identity service is not planned.
+- An unset mode resolves to `open`; an unrecognized mode resolves to `server_local`, which no current client can satisfy, so a typo fails closed instead of silently disabling authentication. Selecting `discord` without the required secrets aborts startup rather than falling back.
+- Discord secrets (`DFMP_DISCORD_CLIENT_ID`, `DFMP_DISCORD_CLIENT_SECRET`, and `DFMP_DISCORD_BOT_TOKEN` when role-whitelisting) come from the environment, never from `dfmp-server.json`.
+- `Identity.DiscordRedirectUri` (default `http://127.0.0.1:53682/dfmp-auth`) must be registered verbatim under OAuth2 > Redirects for the operator's application. It must be loopback with an explicit port; the server refuses to start otherwise. The client binds that port with a raw `TcpListener` rather than `HttpListener`, because http.sys on Windows requires elevation or a pre-registered URL ACL and a player must need neither.
 
-Accepted beta limitation: the KCP transport is unencrypted, so the derived credential is visible to anyone able to observe the connection and can be replayed against that same server. This is acceptable for an invite-only tester group on the author's own hardware, and it is removed by R0, where credentials are replaced by short-lived, audience-bound, single-use tokens. It must not survive into public release.
+**Rejected: the OAuth2 device-code grant.** M8.5 was first built on Discord's device-code flow. Every call to `/oauth2/device/authorize` is refused with `{"code": 50023, "message": "Invalid client id"}` for an ordinary application, reproduced outside DFMP with `curl` using a valid application id, with and without Public Client, and with both HTTP Basic and form-body credentials. That grant is documented only under the Social SDK and console account-linking, where it is presented for approved console middleware, and it appears nowhere in Discord's general OAuth2 documentation. Even with approval it would not fit DFMP, because every server operator registers their own application and none of them can be expected to obtain partner access from Discord. The loopback authorization code flow uses the plain grant every application already has.
+- After Discord identity is known, the existing M5 `WhitelistEnabled` / `AllowedAccountIds` list applies (`discord:<snowflake>`). Optional `DiscordGuildId` plus `DiscordAllowedRoleIds` checks guild roles via the bot token and fails closed.
+- For `server_local` only: credentials never cross the wire in plaintext. The client sends a key derived from the password and username, and the server stores a salted hash of what it receives. Password records use PBKDF2-HMAC-SHA256 with a per-account salt and a constant-time comparison. Per-address throttling and per-account failed-attempt backoff use a generic failure reason. Accounts self-register on first successful connect, paired with the whitelist so only pre-listed names can claim an account.
+
+Accepted beta limitation: KCP is unencrypted. The authorization code on the handshake is not a Discord token and cannot be redeemed without the server's client secret, and PKCE binds it to the client that requested it. `server_local` derived credentials on that transport remain replayable against that server; that mode must not become the public default.
 
 #### Account Roles
 
-- An account role of player, moderator, or admin, assigned by account identity in `dfmp-server.json`.
+- An account role of player, moderator, or admin, assigned by account identity in `dfmp-server.json` (Discord ids included).
 - Privileged message handlers check role rather than merely checking that a connection is authenticated. This closes the gap recorded in R3, where the administration prototype intentionally allows every logged-in player to kick, teleport, and issue developer commands.
 - Commands, audit logging, and the full owner/admin/moderator/player permission matrix remain R3. M8.5 establishes only enforcement and the role source.
 
@@ -416,46 +421,43 @@ Accepted beta limitation: the KCP transport is unencrypted, so the derived crede
 
 A Tauri application at `launcher/`, outside `Assets/` so Unity does not import its sources. Tauri uses the operating system's existing webview rather than bundling a browser, which keeps the download near five megabytes on Windows, macOS, and Linux.
 
-- Login and local profile management. Credentials are stored in the operating system credential store, not in a plaintext file.
+- Local profile only: a stable `profileId` plus Daggerfall path. No DFMP account login. Discord happens in the client at connect.
 - Locates the player's existing Daggerfall game files and writes `MyDaggerfallPath` into the DFMP client settings, reusing the same path resolution the dedicated server bootstrap already relies on. This item is pulled forward from R4.
 - Resolves the bundled DFMP client from the install layout (`client/` beside the launcher, overridable via exe-adjacent `dfmp-launcher.json` or `DFMP_CLIENT_PATH`) rather than asking the player to pick an executable.
-- Launches the DFMP client and hands off the session. The session is passed through a restricted-permission temporary file rather than a command-line argument, because command lines are readable by any local process.
+- Launches the DFMP client and hands off the local profile through a restricted-permission temporary session file rather than a command-line argument.
 
 The server list stays in the DFMP client rather than moving into the launcher, so the client's advanced options panel remains reachable. Relocating it later is a decision, not a requirement.
 
-Out of scope for M8.5: Discord authentication, Discord role whitelisting, the identity service, the master server list, client version management and updating, mod provisioning, in-game moderation commands, and audit logging.
+Out of scope for M8.5: username/password as a player-facing flow, a DFMP-hosted identity service, the master server list, launcher auto-update, mod provisioning, in-game moderation commands, and audit logging.
 
 #### Delivered
 
-The authentication spine, the account role model, and the launcher shell are implemented.
+The authentication spine, the account role model, Discord connect, and the launcher profile shell are implemented.
 
-- `Assets/DFMP/Runtime/Auth/` holds the protocol version, credential derivation, local account store, connect policy, attempt throttle, Mirror authenticator, and client session handoff.
-- `DFMPAccountIdentityMessage` is deleted. The account identity now comes from the authenticator, never from a client-supplied message.
-- Because the target framework predates the hash-selecting overload of `Rfc2898DeriveBytes`, PBKDF2-HMAC-SHA256 is implemented explicitly in both `DFMPCredential` and the launcher's `credential.rs`. Both carry the same known-answer vector so the two implementations cannot silently diverge.
+- `Assets/DFMP/Runtime/Auth/` holds the protocol version, credential derivation, local account store, connect policy, Discord device-code client, attempt throttle, Mirror authenticator, and client session handoff.
+- `DFMPAccountIdentityMessage` is deleted. The account identity now comes from the authenticator, never from a client-supplied message. In Discord mode the client-supplied account id is ignored.
+- Because the target framework predates the hash-selecting overload of `Rfc2898DeriveBytes`, PBKDF2-HMAC-SHA256 is implemented explicitly in both `DFMPCredential` and the launcher's `credential.rs`. Both carry the same known-answer vector so the two implementations cannot silently diverge when `server_local` returns.
 - Rejections use a delayed disconnect, because Mirror drops a queued message if the connection closes in the same frame, which would leave a rejected tester with no reason.
 - The launcher builds and runs on Windows. `cargo test` and the EditMode auth fixtures pass.
 
 #### Remaining
 
-1. **Runtime verification.** Every item in the verification list below is still outstanding. The EditMode fixtures pass, but no live client has authenticated against a live server yet.
-2. **No in-client login UI.** The client can only obtain credentials from a launcher session file or the `DFMP > Development Session` editor menu. A player who runs the client directly has no way to sign in. Either accept the launcher as the only supported entry point, or add a login prompt to the startup menu.
-3. **`DFMPProtocol.BuildId` is a hard-coded constant.** The protocol version gates compatibility correctly, but the build identifier is cosmetic until it is injected at build time.
-4. **The launcher is unbuilt and untested on macOS and Linux.** Only Windows has been exercised. macOS additionally needs a real `icon.icns`, which the icon script deliberately does not fabricate.
-5. **Placeholder launcher icon.** `launcher/scripts/make-icons.mjs` draws a generated placeholder.
-6. **Optional credential transport hardening.** An ephemeral X25519 exchange encrypting only the credential field would close the passive-sniffing window ahead of R0. Offered and not taken; the risk is recorded above as an accepted beta limitation.
-7. **Character and account stores resolve through Unity's `Application.persistentDataPath`, not the portable-aware path the rest of the client uses.** They land in the shared Daggerfall Workshop folder rather than beside `dfmp-server.json` or inside the portable install, which is confusing for an operator and inconsistent with the portable-install rule in R4. Only the server writes them today, so nothing is broken, but the decision should be made before anyone else runs a server. Deferred to R1 or R5.
+1. **Runtime verification.** Live Discord connect against a dedicated server is still outstanding after EditMode fixtures.
+2. **`DFMPProtocol.BuildId` is a hard-coded constant.** The protocol version gates compatibility correctly, but the build identifier is cosmetic until it is injected at build time.
+3. **The launcher is unbuilt and untested on macOS and Linux.** Only Windows has been exercised. macOS additionally needs a real `icon.icns`, which the icon script deliberately does not fabricate.
+4. **Placeholder launcher icon.** `launcher/scripts/make-icons.mjs` draws a generated placeholder.
+5. **Character and account stores resolve through Unity's `Application.persistentDataPath`, not the portable-aware path the rest of the client uses.** They land in the shared Daggerfall Workshop folder rather than beside `dfmp-server.json` or inside the portable install, which is confusing for an operator and inconsistent with the portable-install rule in R4. Only the server writes them today, so nothing is broken, but the decision should be made before anyone else runs a server. Deferred to R1 or R5.
 
 Verification:
 
-- EditMode tests for handshake version mismatch, nonce replay rejection, mode selection, credential derivation, account registration, correct and incorrect password paths, lockout behavior, and role resolution. **Done.**
+- EditMode tests for handshake version mismatch, nonce replay rejection, mode selection, credential derivation, account registration, correct and incorrect password paths, lockout behavior, Discord identity mapping, ID whitelist, guild-role allow/deny/fail-closed, and role resolution.
 - A negative test confirming that administration and developer messages sent before authentication are dropped. Before this milestone that attempt succeeded, and it must not.
-- Round trip on a `server_local` server: register on first connect, disconnect, reconnect with the same credentials, and confirm the same character record loads.
+- Discord smoke: launcher Play with no login, in-game server list, browser consent overlay, approve and decline paths, loopback port already in use, whitelist miss (readable reject), whitelist hit (and optional role), character select.
 - Confirm a client built with a bumped protocol version is rejected with a readable reason rather than desyncing.
-- Confirm an account that is not in `AllowedAccountIds` is refused with a readable reason, and that repeated wrong passwords trigger the lockout.
 - Confirm a non-admin account cannot invoke the F12 roster, kick, or any developer command.
-- Launcher smoke test on Windows, macOS, and Linux: log in, locate game files, launch the bundled client, reach the server list, and connect.
+- Editor `open` still joins without Discord. Development Session still covers `server_local`.
 
-Migration note: account identities change shape in this milestone, and character records are keyed by account identity, so existing beta test characters are orphaned. This is accepted rather than migrated.
+Migration note: account identities become `discord:<snowflake>` in Discord mode, and character records are keyed by account identity, so existing beta test characters are orphaned. This is accepted rather than migrated.
 
 ### M8.6: Character Select
 
@@ -474,6 +476,31 @@ Verification:
 - EditMode tests for config clamp, multi-character store list/save/delete, legacy-file migration, join-policy auto-join vs select, create-at-cap, delete-disabled, and select-unknown-id rejection.
 - Smoke test: empty account sees New Character and reaches the wizard; a second character can be created up to the cap; delete confirms and respects the owner toggle; UI-off auto-joins an existing character and auto-creates when none exist; a pre-M8.6 single-file character still loads after migration.
 
+### M8.7: Client-Owned Questing
+
+Status: Complete (2026-09-20). A character can take a quest from a questor, progress it, log out, return after a server restart, and finish it, with other players able to help fight its foes. Two follow-ups stay open and are tracked where they belong: exterior quest-foe geometry in M9 below, and the QUEST-START-001 divergence at the end of this section. Implementation is done; [QUESTING_SMOKE_MATRIX.md](QUESTING_SMOKE_MATRIX.md) is deliberately retained as the manual verification sheet and is signed off during the M9 beta stability pass, not here.
+
+Quest progression is **client-owned per character**. Each client runs one native quest machine, while the server persists that machine and owns physical quest enemies. Full quest-graph replication is out of scope and is not required for other players to assist with quest combat.
+
+- `Quests.Mode` reserves two architecture modes: `ClientOwned` and future `Shared`. `ClientOwned` is the only implemented mode; a server configured for `Shared` fails startup explicitly.
+- Quest dialogue, journal, branching, placed NPCs, placed objects, rewards, and faction effects remain personal. Placed quest objects are visible and interactive only for their owner, preventing another player from stealing an objective.
+- Quest-machine state, SiteLinks, quest-adjacent character state, and complete quest-item identity persist in the server's per-character record. Restore ordering is quest machine first, then quest-linked inventory and world resources.
+- Quest failure deadlines are disabled by default, while clocks required for quest sequencing continue to run. Built-in clock expiry paths require explicit classification; blanket clock suppression is not acceptable because it can stall the main quest.
+- Every quest foe is owner-scoped and server-owned. Only the owner can activate it, but every nearby observer can see, fight, and be attacked by it. Death advances only the owning objective regardless of who dealt damage or the killing blow.
+- Marker-bound and dynamic quest foes use the M8 provider-agnostic enemy registry, M6 context interest, and M7 damage chokepoint. A subtle owner cue disambiguates otherwise identical owner-scoped foes.
+- Quest-foe AI requires hosted server geometry for its context. Dungeons and building interiors are hosted; exteriors are not yet, so an outdoor quest foe cannot currently sense or move. Closing that gap is an M9 pre-release polish item.
+- Activation defaults to exact authoritative context plus 30 metres from the objective. Despawn begins outside 45 metres or after leaving context, with a 10-second grace period. Despawn preserves the live logical generation and health so crossing the boundary cannot heal the foe.
+- A foe-carried quest item appears only in the owner's personal corpse loot and retains its quest UID and resource symbol. Non-owners cannot take or consume it.
+- Objective, encounter generation, and network enemy IDs remain separate. Future `Shared` mode can coalesce equivalent personal objectives without replacing personal quest machines.
+- Built-in quest actions that touch server authority, including teleport, shared time, guards, and scene-wide enemy commands, require an explicit compatibility classification and validated server route. Full-game progression does not permit a silent quest blacklist.
+- The owner-scoped lifecycle and future shared migration path are specified in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
+- **Known divergence (QUEST-START-001, 2026-09-20):** DFMP registers the quest UID before `TalkManager.AddQuestTopicWithInfoAndRumors()`, so `UndiscoverQuestResidence()` can resolve the live quest. Upstream DFU adds topics first, then inserts the quest, so `GetQuest()` is still null and that undiscover call no-ops. `PlayerGPS.UndiscoverBuilding()` only mutates the currently loaded map pixel, so a remote site (for example `M0B00Y07` Yeomsly Residence in Woodsly Hall, accepted in Daggerfall city) is unaffected. A same-town quest residence the player had already discovered can be hidden on accept in DFMP and would stay discovered in vanilla. Do not treat a missing city-map nameplate as a DFMP bug unless an NPC has marked the building (`TalkManager.MarkKeySubjectLocationOnMap`); residences stay unnamed until then in both games. Replacement: either restore the vanilla no-op for undiscover while keeping UID registration for dialog reveal, or keep DFMP's working undiscover and treat it as intentional parity-plus.
+
+Verification:
+
+- EditMode fixtures for quest config validation, quest-state persistence round trips, objective registration and credit, re-entry generation/health retention, teleport marker bounds, clock classification, and the owner cue.
+- Manual coverage lives in [QUESTING_SMOKE_MATRIX.md](QUESTING_SMOKE_MATRIX.md) and runs against a dedicated server with two clients.
+
 ### M9: Beta Server Launch Readiness
 
 Status: Planned.
@@ -481,7 +508,7 @@ Status: Planned.
 The smallest amount of non-gameplay work required to actually put testers on the author's server. Everything here is intentionally minimal, because the polished versions are Phase 2.
 
 - Tester client build: one versioned zip containing the M8.5 launcher and a `client/` portable DFMP build that the launcher resolves automatically. No auto-update and no server browser.
-- Whitelist administered by hand, out of band via Discord, using the M5 whitelist store and the M8.5 authentication modes.
+- Whitelist administered in `dfmp-server.json` (`AllowedAccountIds` as `discord:<snowflake>`) and optionally via Discord guild roles. The author still issues Discord app credentials out of band.
 - Manual operations are acceptable: file-copy character backups, restart by hand, read logs on disk.
 - Beta stability pass: run the server continuously for a multi-day soak, watch for leaks, unbounded growth in session or roster state, and reconnect edge cases.
 - Dungeon enemy navigation hardening: **Delivered with M9 AI parity items 2 and 5.** Native `FindDetour` / `GetDestination` replace stop-flush-and-release. Remaining overlap of stacked pursuers is the enemy-separation item below.
@@ -528,23 +555,6 @@ Verification:
 - A tester who has never run DFMP can install the client, connect, create a character, play, disconnect, and return to the same character.
 - Multi-day soak run with no unbounded resource growth and no manual intervention required to keep the server up.
 
-### Quest Policy for Phase 1
-
-Quest progression is **client-owned per character**. Each client runs one native quest machine, while the server persists that machine and owns physical quest enemies. Full quest-graph replication is out of scope and is not required for other players to assist with quest combat.
-
-- `Quests.Mode` reserves two architecture modes: `ClientOwned` and future `Shared`. `ClientOwned` is the only implemented mode; a server configured for `Shared` fails startup explicitly.
-- Quest dialogue, journal, branching, placed NPCs, placed objects, rewards, and faction effects remain personal. Placed quest objects are visible and interactive only for their owner, preventing another player from stealing an objective.
-- Quest-machine state, SiteLinks, quest-adjacent character state, and complete quest-item identity persist in the server's per-character record. Restore ordering is quest machine first, then quest-linked inventory and world resources.
-- Quest failure deadlines are disabled by default, while clocks required for quest sequencing continue to run. Built-in clock expiry paths require explicit classification; blanket clock suppression is not acceptable because it can stall the main quest.
-- Every quest foe is owner-scoped and server-owned. Only the owner can activate it, but every nearby observer can see, fight, and be attacked by it. Death advances only the owning objective regardless of who dealt damage or the killing blow.
-- Marker-bound and dynamic quest foes use the M8 provider-agnostic enemy registry, M6 context interest, and M7 damage chokepoint. A subtle owner cue disambiguates otherwise identical owner-scoped foes.
-- Quest-foe AI requires hosted server geometry for its context. Dungeons and building interiors are hosted; exteriors are not yet, so an outdoor quest foe cannot currently sense or move. Closing that gap is an M9 pre-release polish item.
-- Activation defaults to exact authoritative context plus 30 metres from the objective. Despawn begins outside 45 metres or after leaving context, with a 10-second grace period. Despawn preserves the live logical generation and health so crossing the boundary cannot heal the foe.
-- A foe-carried quest item appears only in the owner's personal corpse loot and retains its quest UID and resource symbol. Non-owners cannot take or consume it.
-- Objective, encounter generation, and network enemy IDs remain separate. Future `Shared` mode can coalesce equivalent personal objectives without replacing personal quest machines.
-- Built-in quest actions that touch server authority, including teleport, shared time, guards, and scene-wide enemy commands, require an explicit compatibility classification and validated server route. Full-game progression does not permit a silent quest blacklist.
-- The owner-scoped lifecycle and future shared migration path are specified in [Quest Enemy Networking Spike](QUEST_ENEMY_NETWORKING_SPIKE.md).
-
 ## Phase 2 Milestones: Public Release
 
 Phase 2 turns a server the author can run into a product other people can run. Nothing here changes the core gameplay loop; it changes who is capable of operating it.
@@ -557,44 +567,21 @@ Phase 2 carries the deferred disease-state work that M6 deliberately leaves outs
 - Design and implement the complete lycanthropy lifecycle, including infection, timers, transformation, transformed state, relocation if required, cure behavior, and persistence.
 - Add focused lifecycle and persistence tests before exposing disease controls to public server owners or GM tooling.
 
-### R0: Identity Service, Discord Authentication, and Master Server List
+### R0: Public Master Server List
 
 Status: Planned.
 
-M8.5's per-server passwords are a private beta expedient. Public release requires a real identity model, because a public ecosystem means players connect to servers run by strangers, and a password typed into a stranger's server is a password that stranger now holds.
+Per-server Discord authentication and ID/role whitelist shipped in M8.5. DFMP does not operate a central identity service, OAuth callback, or join-token signer in this milestone or as a required public-release path. Discord remains the identity provider; each game server keeps validating connects itself.
 
-This milestone gates public release. It must land before the server is opened beyond invited testers.
+A public master *list* of servers is optional later work and is listing only. It must not become a hosted login dependency. Private servers can opt out of listing. Heartbeats, if they exist, should record the source address rather than trusting a self-reported one.
 
-#### Identity Model
+Username/password (`server_local`) as a first-class player flow (TES3MP-style per-server accounts, with launcher or in-game prompt) stays deferred. The hash/store/throttle path already exists.
 
-Authentication becomes global and centralized while authorization stays per server. A player logs into the launcher once, and each server independently decides whether that authenticated player may join.
+Verification, if a listing service is ever built:
 
-- A DFMP identity service, hosted on a free tier, is the only central component. It is small by design: an OAuth callback, an account table, and a token signer. The intended shape is Cloudflare Workers plus D1 on a `workers.dev` subdomain, which costs nothing, needs no purchased domain, includes TLS, and does not idle out between logins. It lives in its own repository, not in the Unity project.
-- Accounts are keyed by an opaque identifier rather than a Discord snowflake, so a second login provider can be linked later without changing a player's identity or orphaning their characters.
-- Discord is the default login provider, over an OAuth2 authorization code flow. The client secret lives on the service. A desktop launcher is a public client and cannot hold a secret.
-- Login uses a device-code flow rather than a loopback redirect. A loopback redirect requires a fixed pre-registered port, trips firewalls, and fails when the browser is on a different machine.
-- The service issues short-lived join tokens that are signed, bound to a specific server, bound to that server's connection nonce, and single-use, so a server operator cannot replay a player's token against a different server.
-- Servers verify tokens offline against a pinned public key, so a service outage does not stop players joining a running server, and a server without outbound internet access still works.
-- Email and password login is deferred. It requires verified transactional email, which conflicts with the zero-cost hosting constraint. Until it exists, the non-Discord path is a server's own `server_local` mode.
-
-#### Discord Whitelisting
-
-- Server owners whitelist by Discord guild role. The owner runs their own bot in their own guild and the server checks role membership at connect, so role changes apply immediately and the central service is never involved in an individual server's access policy.
-- The bot token is read from the environment, never from `dfmp-server.json`, because configuration files get shared and pasted.
-- The connecting client is shown progress while the role check is in flight rather than appearing to hang, and the check fails closed by default.
-
-#### Master Server List
-
-- Servers heartbeat to a listing service, and the client's server list can show public servers alongside LAN discovery and direct connection.
-- Listings are tied to a registered owner account, and the listing service records the source address of the heartbeat rather than trusting a self-reported one, so the list cannot be poisoned or spammed.
-- Private servers can opt out of listing.
-
-Verification:
-
-- Token tests covering expiry, wrong audience, wrong nonce, replayed identifier, tampered signature, and unknown signing key.
-- Discord whitelist tests for an allowed role, a member without an allowed role, a non-member, and a revoked bot token.
-- With outbound network access blocked on the server host, a player holding a valid token still joins.
-- A token issued for one server is rejected by another.
+- Listings cannot be poisoned by a self-reported address.
+- A server that opts out of listing does not appear.
+- Players can still connect by LAN discovery and direct address without the list.
 
 ### R1: Full Server Configuration Surface
 
@@ -660,7 +647,7 @@ Status: Planned.
 
 Ship DFMP as a separate client application that reuses the player's existing Daggerfall data instead of replacing or modifying their Daggerfall Unity install. The DFMP client is a sibling of DFU in the same way DFU is a sibling of classic Daggerfall: another engine binary reading the same `arena2` data.
 
-M8.5 already delivers the launcher shell, login, and game-file location. R4 completes it.
+M8.5 already delivers the launcher shell, local profile, game-file location, and Discord-at-connect. R4 completes distribution.
 
 - Launcher locates the player's existing Daggerfall game files and writes `MyDaggerfallPath` into the DFMP client settings, using the same path resolution the dedicated server bootstrap already relies on. **Delivered in M8.5.**
 - DFMP client ships as a portable install (`Portable.txt`) so settings, saves, keybinds, and mod settings live in its own `PortableAppdata` folder and never read or write DFU's persistent data folder.
@@ -668,7 +655,7 @@ M8.5 already delivers the launcher shell, login, and game-file location. R4 comp
 - Net effect: separate settings, saves, keybinds, mod list, and mod configs. The only shared resource is the read-only `arena2` game data.
 - Players do not inherit their existing DFU mods or keybinds. Keybind import is a possible later launcher convenience. Mod inheritance is explicitly not wanted.
 - Server dictates the allowed mod set and the launcher provisions the client's mod folder to match, without touching the player's single-player setup. R4 only has to detect a mismatch and tell the player what is required; fully automatic download, enable, and configuration is P-MOD.
-- Launcher owns client version management and update integrity.
+- **Launcher auto-update:** when opened, the launcher checks for a new DFMP release, downloads it, and installs it. Integrity-checked. Not implemented in M8.5.
 - The server list remains in the DFMP client, where the advanced options panel lives. Relocating it into the launcher is optional and is not a requirement of this milestone.
 - No game files are copied, moved, or patched. The player's vanilla DFU install keeps working side by side.
 - Client-release polish: synchronize remote-player bow draw, held-draw, release, and cancellation state so holding the bow without releasing is not presented to other players as an immediate fire. This is presentation-only and does not change ranged hit authority.
@@ -756,7 +743,7 @@ Status: Future.
 
 ### P-QUEST-FOES: Quest Enemy Networking Spike
 
-Status: Superseded by the Phase 1 client-owned quest milestone.
+Status: Superseded by M8.7, the Phase 1 client-owned questing milestone.
 
 The owner-scoped server-enemy model is now the implementation baseline. Future work here is limited to `Shared` mode: prove objective equivalence and optionally coalesce equivalent owner-scoped encounters while retaining personal quest machines, personal rewards, and idempotent per-character credit.
 

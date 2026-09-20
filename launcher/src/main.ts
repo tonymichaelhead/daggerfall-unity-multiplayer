@@ -2,10 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 type LauncherState = {
-  accountId: string;
+  profileId: string;
   daggerfallPath: string | null;
   clientReady: boolean;
-  hasStoredPassword: boolean;
 };
 
 const el = <T extends HTMLElement>(id: string): T => {
@@ -14,21 +13,14 @@ const el = <T extends HTMLElement>(id: string): T => {
   return node as T;
 };
 
-const loginPanel = el<HTMLElement>("login-panel");
-const mainPanel = el<HTMLElement>("main-panel");
-const accountInput = el<HTMLInputElement>("account");
-const passwordInput = el<HTMLInputElement>("password");
-const rememberInput = el<HTMLInputElement>("remember");
 const statusLine = el<HTMLParagraphElement>("status");
-const signedInAccount = el<HTMLElement>("signed-in-account");
 const daggerfallPathLabel = el<HTMLElement>("daggerfall-path");
 const playButton = el<HTMLButtonElement>("play");
 
 let state: LauncherState = {
-  accountId: "",
+  profileId: "",
   daggerfallPath: null,
-  clientReady: false,
-  hasStoredPassword: false
+  clientReady: false
 };
 
 function setStatus(message: string, kind: "info" | "error" = "info") {
@@ -37,10 +29,6 @@ function setStatus(message: string, kind: "info" | "error" = "info") {
 }
 
 function render() {
-  const signedIn = state.accountId.length > 0 && state.hasStoredPassword;
-  loginPanel.hidden = signedIn;
-  mainPanel.hidden = !signedIn;
-  signedInAccount.textContent = state.accountId;
   daggerfallPathLabel.textContent = state.daggerfallPath ?? "Not set";
   playButton.disabled = !state.clientReady;
 }
@@ -48,32 +36,6 @@ function render() {
 async function refresh() {
   state = await invoke<LauncherState>("load_state");
   render();
-}
-
-async function signIn() {
-  const accountId = accountInput.value.trim();
-  const password = passwordInput.value;
-
-  if (!accountId || !password) {
-    setStatus("Enter a username and password.", "error");
-    return;
-  }
-
-  setStatus("Preparing credentials…");
-  try {
-    await invoke("sign_in", { accountId, password, remember: rememberInput.checked });
-    passwordInput.value = "";
-    await refresh();
-    setStatus("Signed in. Your credentials are verified by the server when you connect.");
-  } catch (error) {
-    setStatus(String(error), "error");
-  }
-}
-
-async function signOut() {
-  await invoke("sign_out");
-  await refresh();
-  setStatus("Signed out.");
 }
 
 async function browseDaggerfall() {
@@ -96,19 +58,14 @@ async function play() {
   setStatus("Launching DFMP…");
   try {
     await invoke("launch_client");
-    setStatus("DFMP client launched. Choose a server from the in-game server list.");
+    setStatus("DFMP client launched. Choose a server from the in-game server list. Discord login happens when you connect.");
   } catch (error) {
     setStatus(String(error), "error");
   }
 }
 
-el<HTMLButtonElement>("sign-in").addEventListener("click", signIn);
-el<HTMLButtonElement>("sign-out").addEventListener("click", signOut);
 el<HTMLButtonElement>("browse-daggerfall").addEventListener("click", browseDaggerfall);
 playButton.addEventListener("click", play);
-passwordInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") signIn();
-});
 
 refresh().then(() => {
   if (!state.clientReady) {
@@ -118,5 +75,7 @@ refresh().then(() => {
     );
   } else if (!state.daggerfallPath) {
     setStatus("Set your Daggerfall folder before playing.");
+  } else {
+    setStatus("Ready. Servers check Discord when you connect.");
   }
 });

@@ -25,6 +25,11 @@ namespace DFMP.Runtime
             get { return DFMPCredential.IsValidCredentialFormat(Credential); }
         }
 
+        public static bool HasAccountId
+        {
+            get { return !string.IsNullOrEmpty(AccountId); }
+        }
+
         public static void Set(string accountId, string credential)
         {
             AccountId = accountId ?? string.Empty;
@@ -92,10 +97,10 @@ namespace DFMP.Runtime
             return TryLoadFromFile(path, false);
         }
 
-        /// <summary>Falls back to the development session file once, if nothing has supplied a credential.</summary>
+        /// <summary>Falls back to the development session file once, if nothing has supplied an identity.</summary>
         public static void EnsureLoaded()
         {
-            if (HasCredential || attemptedDevelopmentLoad)
+            if (HasAccountId || attemptedDevelopmentLoad)
                 return;
 
             attemptedDevelopmentLoad = true;

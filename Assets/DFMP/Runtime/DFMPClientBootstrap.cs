@@ -19,6 +19,12 @@ namespace DFMP.Runtime
         public static int ClientTickRate { get; private set; } = 30;
         public static string AccountId { get; private set; }
 
+        public static void BindAccountId(string accountId)
+        {
+            if (!string.IsNullOrWhiteSpace(accountId))
+                AccountId = accountId;
+        }
+
         /// <summary>False when launched as a client without an address, so the player boots into Daggerfall and picks a server from the server list.</summary>
         public static bool AutoConnect { get; private set; }
 

@@ -100,6 +100,7 @@ namespace DFMP.Runtime
         bool shouldShowKickNotice;
         bool joinChatPublished;
         DFMPCharacterSelectWindow characterSelectWindow;
+        DFMPDiscordAuthorizeWindow discordAuthorizeWindow;
         DFMPCharacterRosterMessage pendingRoster;
         bool hasPendingRoster;
 
@@ -203,6 +204,7 @@ namespace DFMP.Runtime
             pendingQuestPayload = null;
             hasPendingRoster = false;
             CloseCharacterSelectWindow(true);
+            CloseDiscordAuthorizeWindow();
             Flow.MarkConnecting();
         }
 
@@ -218,6 +220,7 @@ namespace DFMP.Runtime
             joinChatPublished = false;
             hasPendingRoster = false;
             CloseCharacterSelectWindow(true);
+            CloseDiscordAuthorizeWindow();
 
             // An authentication rejection disconnects before any join result arrives, so surface its
             // reason through the same notice the kick flow uses.
@@ -253,6 +256,36 @@ namespace DFMP.Runtime
 
             characterSelectWindow.CloseForGameplay(keepConnection);
             characterSelectWindow = null;
+        }
+
+        public void ShowDiscordAuthorize(string authorizeUri, string status)
+        {
+            var uiManager = DaggerfallUI.UIManager;
+            if (uiManager == null)
+                return;
+
+            if (discordAuthorizeWindow == null)
+            {
+                discordAuthorizeWindow = new DFMPDiscordAuthorizeWindow(uiManager, uiManager.TopWindow);
+                uiManager.PushWindow(discordAuthorizeWindow);
+            }
+
+            discordAuthorizeWindow.Apply(authorizeUri, status);
+        }
+
+        public void UpdateDiscordAuthorizeStatus(string status)
+        {
+            if (discordAuthorizeWindow != null)
+                discordAuthorizeWindow.SetStatus(status);
+        }
+
+        public void CloseDiscordAuthorizeWindow()
+        {
+            if (discordAuthorizeWindow == null)
+                return;
+
+            discordAuthorizeWindow.CloseWindow();
+            discordAuthorizeWindow = null;
         }
 
         void ReturnToStartupScreen()

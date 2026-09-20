@@ -25,7 +25,8 @@ namespace DFMP.EditorTools
         {
             EditorGUILayout.HelpBox(
                 "Writes dfmp-client-session.json in the project root so an editor client can authenticate " +
-                "without the launcher. The file is gitignored and holds a derived credential, not your password.",
+                "against open or server_local servers without the launcher. Discord-mode servers ignore this " +
+                "file and authorize in-game. The file is gitignored and holds a derived credential, not your password.",
                 MessageType.Info);
 
             accountId = EditorGUILayout.TextField("Username", accountId);

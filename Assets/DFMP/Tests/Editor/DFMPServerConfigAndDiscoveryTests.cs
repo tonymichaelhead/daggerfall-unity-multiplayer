@@ -47,6 +47,7 @@ namespace DFMP.Tests
             Assert.AreEqual(DFMPServerQuestConfig.DefaultMaximumRegistrationsPerMinute, config.Quests.MaximumRegistrationsPerMinute);
             Assert.IsTrue(config.Quests.ShowEnemyOwnerCue);
             Assert.NotNull(config.Identity);
+            Assert.AreEqual(DFMPAuthModes.Open, config.Identity.Mode);
             Assert.IsTrue(config.Identity.CharacterSelectEnabled);
             Assert.AreEqual(DFMPServerIdentityConfig.DefaultMaxCharactersPerAccount, config.Identity.MaxCharactersPerAccount);
             Assert.IsTrue(config.Identity.AllowCharacterDelete);
@@ -120,6 +121,25 @@ namespace DFMP.Tests
             config.Normalize();
             Assert.IsFalse(config.Identity.CharacterSelectEnabled);
             Assert.IsFalse(config.Identity.AllowCharacterDelete);
+        }
+
+        [Test]
+        public void ServerConfig_TrimsDiscordRoleIds()
+        {
+            var config = new DFMPServerConfig
+            {
+                Identity = new DFMPServerIdentityConfig
+                {
+                    DiscordGuildId = "  111  ",
+                    DiscordAllowedRoleIds = new[] { " 222 ", "", "333" }
+                }
+            };
+
+            config.Normalize();
+            Assert.AreEqual("111", config.Identity.DiscordGuildId);
+            Assert.AreEqual(2, config.Identity.DiscordAllowedRoleIds.Length);
+            Assert.AreEqual("222", config.Identity.DiscordAllowedRoleIds[0]);
+            Assert.IsTrue(config.Identity.HasDiscordRoleWhitelist);
         }
 
         [Test]

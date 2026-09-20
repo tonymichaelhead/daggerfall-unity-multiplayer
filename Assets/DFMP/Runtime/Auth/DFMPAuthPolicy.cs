@@ -5,6 +5,7 @@ namespace DFMP.Runtime
     /// <summary>
     /// Pure connect-time authentication decision. Answers "who are you", never "may you play here" —
     /// that stays with <see cref="DFMPJoinPolicy"/>, which runs after this succeeds.
+    /// Discord identity is resolved by the authenticator before <see cref="DFMPDiscordConnectPolicy"/>.
     /// </summary>
     public static class DFMPAuthPolicy
     {
@@ -26,6 +27,28 @@ namespace DFMP.Runtime
                     $"client protocol {request.ProtocolVersion} does not match server protocol {DFMPProtocol.Version}");
             }
 
+            if (string.IsNullOrEmpty(expectedNonce) || !DFMPCredential.FixedTimeEquals(request.Nonce, expectedNonce))
+                return Reject(DFMPAuthResultCode.InvalidRequest, "challenge mismatch");
+
+            string mode = DFMPAuthModes.Normalize(config.Identity.Mode);
+            switch (mode)
+            {
+                case DFMPAuthModes.Open:
+                    return ResolveOpen(request, config);
+
+                case DFMPAuthModes.ServerLocal:
+                    return ResolveServerLocal(request, config, accountStore);
+
+                case DFMPAuthModes.Discord:
+                    return Reject(DFMPAuthResultCode.InvalidRequest, "discord identity is assigned by the server");
+
+                default:
+                    return Reject(DFMPAuthResultCode.ModeUnsupported, "server authentication mode is not available in this build");
+            }
+        }
+
+        static DFMPAuthDecision ResolveOpen(DFMPAuthRequestMessage request, DFMPServerConfig config)
+        {
             string accountId;
             string reason;
             if (!DFMPAccountPolicy.TryNormalize(request.AccountId, out accountId, out reason))
@@ -34,29 +57,30 @@ namespace DFMP.Runtime
             if (!DFMPAccountPolicy.IsAllowed(accountId, config))
                 return Reject(DFMPAuthResultCode.NotWhitelisted, "account is not whitelisted");
 
-            string mode = DFMPAuthModes.Normalize(config.Identity.Mode);
-            switch (mode)
-            {
-                case DFMPAuthModes.Open:
-                    return Accept(accountId, false);
-
-                case DFMPAuthModes.ServerLocal:
-                    return ResolveServerLocal(request, expectedNonce, accountId, config, accountStore);
-
-                default:
-                    return Reject(DFMPAuthResultCode.ModeUnsupported, "server authentication mode is not available in this build");
-            }
+            return Accept(accountId, false);
         }
 
         static DFMPAuthDecision ResolveServerLocal(
             DFMPAuthRequestMessage request,
-            string expectedNonce,
-            string accountId,
             DFMPServerConfig config,
             IDFMPLocalAccountStore accountStore)
         {
-            if (string.IsNullOrEmpty(expectedNonce) || !DFMPCredential.FixedTimeEquals(request.Nonce, expectedNonce))
-                return Reject(DFMPAuthResultCode.InvalidRequest, "challenge mismatch");
+            string accountId;
+            string reason;
+            if (!DFMPAccountPolicy.TryNormalize(request.AccountId, out accountId, out reason))
+                return Reject(DFMPAuthResultCode.InvalidRequest, reason);
+
+            if (!DFMPAccountPolicy.IsAllowed(accountId, config))
+                return Reject(DFMPAuthResultCode.NotWhitelisted, "account is not whitelisted");
+
+            // A launcher-run client carries no credential at all, and server_local has no player-facing
+            // login yet, so say that rather than reporting a malformed value.
+            if (string.IsNullOrEmpty(request.Credential))
+            {
+                return Reject(
+                    DFMPAuthResultCode.InvalidRequest,
+                    "this server uses username and password login, which this client cannot provide yet");
+            }
 
             if (!DFMPCredential.IsValidCredentialFormat(request.Credential))
                 return Reject(DFMPAuthResultCode.InvalidRequest, "malformed credential");

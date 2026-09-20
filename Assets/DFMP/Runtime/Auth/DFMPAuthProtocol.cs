@@ -6,19 +6,27 @@ namespace DFMP.Runtime
     {
         public const string Open = "open";
         public const string ServerLocal = "server_local";
+        public const string Discord = "discord";
         public const string Dfmp = "dfmp";
 
         public static string Normalize(string mode)
         {
+            // Unset means "use the documented default", which is open so a fresh server runs on LAN
+            // without a Discord application. Unrecognized values still fall back to server_local,
+            // which no client can satisfy, so a typo fails closed rather than disabling auth.
             if (string.IsNullOrWhiteSpace(mode))
-                return ServerLocal;
+                return Open;
 
             switch (mode.Trim().ToLowerInvariant())
             {
                 case Open:
                     return Open;
+                case Discord:
+                    return Discord;
                 case Dfmp:
                     return Dfmp;
+                case ServerLocal:
+                    return ServerLocal;
                 default:
                     return ServerLocal;
             }
@@ -35,7 +43,15 @@ namespace DFMP.Runtime
         RegistrationClosed = 5,
         TooManyAttempts = 6,
         ServerUnavailable = 7,
-        ModeUnsupported = 8
+        ModeUnsupported = 8,
+        DiscordDenied = 9,
+        DiscordTimeout = 10
+    }
+
+    public enum DFMPAuthStatusStage
+    {
+        WaitingForDiscord = 0,
+        CheckingAccess = 1
     }
 
     public struct DFMPAuthChallengeMessage : NetworkMessage
@@ -44,6 +60,9 @@ namespace DFMP.Runtime
         public string ServerBuildId;
         public string Mode;
         public string Nonce;
+        public string DiscordClientId;
+        public string DiscordRedirectUri;
+        public int ExpiresIn;
     }
 
     public struct DFMPAuthRequestMessage : NetworkMessage
@@ -53,6 +72,18 @@ namespace DFMP.Runtime
         public string AccountId;
         public string Credential;
         public string Nonce;
+
+        // Discord loopback flow. The code is useless without the server's client secret, which is
+        // why it is safe to carry over the unencrypted game transport.
+        public string AuthorizationCode;
+        public string CodeVerifier;
+        public string AuthorizationError;
+    }
+
+    public struct DFMPAuthStatusMessage : NetworkMessage
+    {
+        public DFMPAuthStatusStage Stage;
+        public string Detail;
     }
 
     public struct DFMPAuthResponseMessage : NetworkMessage
@@ -61,6 +92,7 @@ namespace DFMP.Runtime
         public string Reason;
         public int ServerProtocolVersion;
         public string ServerBuildId;
+        public string AccountId;
     }
 
     public sealed class DFMPAuthDecision

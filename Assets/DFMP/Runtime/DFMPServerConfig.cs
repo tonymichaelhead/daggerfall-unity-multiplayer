@@ -107,15 +107,23 @@ namespace DFMP.Runtime
         public const int MaximumMaxCharactersPerAccount = 16;
 
         public string ServerWorldId = "default";
-        public string Mode = DFMPAuthModes.ServerLocal;
+        public string Mode = DFMPAuthModes.Open;
         public bool AllowSelfRegistration = true;
         public bool WhitelistEnabled;
         public string[] AllowedAccountIds = new string[0];
         public string[] ModeratorAccountIds = new string[0];
         public string[] AdminAccountIds = new string[0];
+        public string DiscordGuildId = string.Empty;
+        public string[] DiscordAllowedRoleIds = new string[0];
+        public string DiscordRedirectUri = DFMPDiscordRedirect.Default;
         public bool CharacterSelectEnabled = true;
         public int MaxCharactersPerAccount = DefaultMaxCharactersPerAccount;
         public bool AllowCharacterDelete = true;
+
+        public bool HasDiscordRoleWhitelist
+        {
+            get { return DiscordAllowedRoleIds != null && DiscordAllowedRoleIds.Length > 0; }
+        }
 
         public void Normalize()
         {
@@ -124,10 +132,43 @@ namespace DFMP.Runtime
             AllowedAccountIds = AllowedAccountIds ?? new string[0];
             ModeratorAccountIds = ModeratorAccountIds ?? new string[0];
             AdminAccountIds = AdminAccountIds ?? new string[0];
+            DiscordGuildId = DiscordGuildId == null ? string.Empty : DiscordGuildId.Trim();
+            DiscordAllowedRoleIds = TrimNonEmpty(DiscordAllowedRoleIds);
+            DiscordRedirectUri = string.IsNullOrWhiteSpace(DiscordRedirectUri)
+                ? DFMPDiscordRedirect.Default
+                : DiscordRedirectUri.Trim();
             MaxCharactersPerAccount = MaxCharactersPerAccount >= MinimumMaxCharactersPerAccount &&
                 MaxCharactersPerAccount <= MaximumMaxCharactersPerAccount
                 ? MaxCharactersPerAccount
                 : DefaultMaxCharactersPerAccount;
+        }
+
+        static string[] TrimNonEmpty(string[] values)
+        {
+            if (values == null || values.Length == 0)
+                return new string[0];
+
+            int count = 0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(values[i]))
+                    count++;
+            }
+
+            if (count == 0)
+                return new string[0];
+
+            var trimmed = new string[count];
+            int index = 0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(values[i]))
+                    continue;
+
+                trimmed[index++] = values[i].Trim();
+            }
+
+            return trimmed;
         }
     }
 
@@ -376,6 +417,9 @@ namespace DFMP.Runtime
                     if (config != null)
                     {
                         config.Normalize();
+                        // The path depends on the working directory, so an operator editing a copy
+                        // elsewhere sees no effect. Name the file that actually took effect.
+                        Debug.Log($"[DFMP Config] Loaded '{filePath}' (auth mode '{config.Identity.Mode}').");
                         return config;
                     }
                 }
@@ -388,6 +432,9 @@ namespace DFMP.Runtime
             var defaultConfig = new DFMPServerConfig();
             defaultConfig.Normalize();
             Save(defaultConfig, filePath);
+            Debug.Log(
+                $"[DFMP Config] No config found; created '{filePath}' with defaults " +
+                $"(auth mode '{defaultConfig.Identity.Mode}').");
             return defaultConfig;
         }
 

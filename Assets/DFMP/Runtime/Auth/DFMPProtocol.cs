@@ -3,7 +3,7 @@ namespace DFMP.Runtime
     public static class DFMPProtocol
     {
         // Bump whenever a replicated message changes shape. Mismatched builds are rejected at connect.
-        public const int Version = 1;
+        public const int Version = 3;
 
         // Informational only; Version is what gates compatibility. Set per release build.
         public const string BuildId = "dev";

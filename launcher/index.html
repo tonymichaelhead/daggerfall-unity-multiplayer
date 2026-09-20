@@ -17,42 +17,13 @@
 
         <div class="rule"></div>
 
-        <section id="login-panel" class="panel">
-          <h2>Sign in</h2>
-          <p class="hint">
-            Your username and password are used on every DFMP server. Your password is never sent to a
-            server; only a value derived from it leaves this machine.
-          </p>
-
-          <div class="field">
-            <label for="account">Username</label>
-            <div class="control">
-              <span class="icon icon-user" aria-hidden="true"></span>
-              <input id="account" type="text" autocomplete="username" spellcheck="false" />
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="password">Password</label>
-            <div class="control">
-              <span class="icon icon-lock" aria-hidden="true"></span>
-              <input id="password" type="password" autocomplete="current-password" />
-            </div>
-          </div>
-
-          <label class="checkbox">
-            <input id="remember" type="checkbox" checked />
-            <span class="box" aria-hidden="true"></span>
-            <span class="checkbox-text">Remember me on this computer</span>
-          </label>
-
-          <button id="sign-in" type="button" class="primary">Sign in</button>
-        </section>
-
-        <section id="main-panel" class="panel" hidden>
+        <section id="main-panel" class="panel">
           <div class="panel-top">
             <h2>Ready to play</h2>
-            <p class="hint">Signed in as <strong id="signed-in-account"></strong></p>
+            <p class="hint">
+              Servers authenticate you with Discord when you connect. This launcher only stores local
+              settings.
+            </p>
 
             <div class="field-row">
               <div class="field-text">
@@ -65,7 +36,6 @@
 
           <div class="panel-actions">
             <button id="play" type="button" class="primary">Play</button>
-            <button id="sign-out" type="button" class="link">Sign out</button>
           </div>
         </section>
 

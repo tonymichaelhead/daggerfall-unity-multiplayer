@@ -115,6 +115,18 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Net] Client connection requested: transport=KCP, address={Address}, port={port}, tickRate={tickRate}.");
         }
 
+        public static void BindAuthenticatedAccount(string accountId)
+        {
+            string normalized;
+            string reason;
+            if (!DFMPAccountPolicy.TryNormalize(accountId, out normalized, out reason))
+                return;
+
+            AccountId = normalized;
+            DFMPNetworkAuthenticator.ClientAccountId = normalized;
+            DFMPClientBootstrap.BindAccountId(normalized);
+        }
+
         static void OnChatMessageReceived(DFMPChatDeliveryMessage message)
         {
             DFMPEventBus.Instance.PublishChatMessageReceived(new DFMPChatMessageReceivedEvent

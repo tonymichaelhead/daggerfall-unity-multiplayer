@@ -55,6 +55,10 @@ namespace DFMP.Runtime
             if (!fileConfig.Quests.TryValidateImplementedMode(out questConfigReason))
                 throw new InvalidOperationException(questConfigReason);
 
+            string discordConfigReason;
+            if (!DFMPDiscordSecrets.TryValidate(fileConfig, out discordConfigReason))
+                throw new InvalidOperationException(discordConfigReason);
+
             DFMPChatProtocol.ConfigureFromConfig(fileConfig);
 
             // Command-line args take precedence over config file values if explicitly set

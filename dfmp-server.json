@@ -9,17 +9,15 @@
   "Motd": "Welcome, traveler! Global chat is now online.",
   "Identity": {
     "ServerWorldId": "default",
-    "Mode": "server_local",
+    "Mode": "discord",
     "AllowSelfRegistration": true,
     "WhitelistEnabled": false,
-    "AllowedAccountIds": [
-      "tony",
-      "Charlie"
-    ],
+    "AllowedAccountIds": [],
     "ModeratorAccountIds": [],
-    "AdminAccountIds": [
-      "tony"
-    ],
+    "AdminAccountIds": ["tonymichaelhead"],
+    "DiscordGuildId": "",
+    "DiscordAllowedRoleIds": [],
+    "DiscordRedirectUri": "http://127.0.0.1:53682/dfmp-auth",
     "CharacterSelectEnabled": true,
     "MaxCharactersPerAccount": 4,
     "AllowCharacterDelete": true

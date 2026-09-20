@@ -1,17 +1,18 @@
 # DFMP Launcher
 
-Login and launch shell for the Daggerfall Unity Multiplayer client. Built with
+Launch shell for the Daggerfall Unity Multiplayer client. Built with
 [Tauri](https://tauri.app/), so it uses the operating system's existing webview instead of bundling
 a browser and stays around five megabytes.
 
 Scope is deliberately small (roadmap milestone M8.5):
 
-- Sign in with a DFMP username and password.
+- Local profile (`profileId`) and Daggerfall game-file location. There is no DFMP account login.
 - Locate the player's Daggerfall game files and write `MyDaggerfallPath` into the client settings.
 - Resolve the bundled DFMP client automatically and launch it with a session handoff.
 
+Discord login happens in the DFMP client when you connect to a server that uses `Identity.Mode = discord`.
 The server list stays in the client, where the advanced options panel lives. Client version
-management, updating, and mod provisioning are R4. Discord login is R0.
+management, auto-update, and mod provisioning are R4. Username/password as a player-facing flow is deferred.
 
 ## Bundled install layout
 
@@ -40,33 +41,23 @@ order:
    dev` without copying files into a fake install tree.
 
 A missing or invalid `dfmp-launcher.json` is reported as an error rather than silently ignored, so
-a typo in a hand-edited override is visible. Account credentials and the Daggerfall path continue
-to live in `%APPDATA%\dfmp-launcher\launcher.json` (and the OS credential store); the exe-adjacent
-file is only for install-relative paths.
+a typo in a hand-edited override is visible. The local profile id and the Daggerfall path live in
+`%APPDATA%\dfmp-launcher\launcher.json`; the exe-adjacent file is only for install-relative paths.
 
 Copy `dfmp-launcher.json` from this folder next to the built launcher when packaging a release if
 you want the override documented in the zip. Leaving it out is fine — the default `client/` layout
 applies.
 
-## Credential handling
+## Session handoff
 
-The password never leaves this machine. The launcher derives `PBKDF2-HMAC-SHA256(password,
-salt = "dfmp-credential-v1:<username>", 600000 iterations)` and only that derived value is stored or
-sent. It is kept in the operating system credential store — Windows Credential Manager, macOS
-Keychain, or Secret Service on Linux — never in a plaintext file.
+Play writes a one-shot session file with the local `profileId` (owner-only permissions). The client
+deletes it on read. It is not passed on the command line, because any local process can read another
+process's arguments. Discord identity is assigned by the server at connect; the profile id is only
+used for `open` mode and future local settings.
 
-The derived value is handed to the client through a one-shot session file with owner-only
-permissions, which the client deletes on read. It is not passed on the command line, because any
-local process can read another process's arguments.
-
-`credential.rs` must stay in lockstep with `DFMPCredential` in
-`Assets/DFMP/Runtime/Auth/DFMPCredential.cs`. Both carry the same RFC known-answer test.
-
-**Known beta limitation:** the KCP transport is unencrypted, so the derived value crosses the
-network in the clear and can be replayed against that same server by anyone able to observe the
-connection. This is acceptable for an invite-only tester group on a server you control. R0 replaces
-it with short-lived, audience-bound, single-use tokens, and this scheme must not reach public
-release.
+`credential.rs` remains so a later `server_local` username/password flow cannot silently drift from
+`DFMPCredential` in `Assets/DFMP/Runtime/Auth/DFMPCredential.cs`. Both carry the same RFC
+known-answer test. That derivation is unused by the launcher UI today.
 
 ## Prerequisites
 
