@@ -166,7 +166,7 @@ namespace DFMP.Tests
             var config = new DFMPServerConfig();
             config.Normalize();
 
-            Assert.AreEqual("Tony's DFU RP", config.ServerName);
+            Assert.AreEqual("My DFMP Server", config.ServerName);
             Assert.AreEqual(7777, config.Port);
             Assert.AreEqual(7778, config.DiscoveryPort);
             Assert.AreEqual(16, config.MaxConnections);

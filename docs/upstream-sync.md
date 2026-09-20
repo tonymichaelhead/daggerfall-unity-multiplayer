@@ -14,6 +14,8 @@ total. A merge resolves each conflict a single time and pushes normally.
 
 Never rebase or force-push `master`.
 
+The only exception was a one-time history rewrite immediately before the public GitHub release, to remove internal tooling files. Do not repeat that. After that rewrite, `master` is published history again.
+
 There is deliberately no separate branch for the Layer 1 hook edits. The complete hook
 patch against upstream is derivable at any time:
 
@@ -37,7 +39,7 @@ git config merge.renormalize true
 ```
 
 Both settings are local-only and cannot be committed, which is why they are listed
-here and in `.github/copilot-instructions.md`.
+here and in [architecture.md](architecture.md).
 
 ### Unity Smart Merge (recommended)
 
@@ -92,7 +94,7 @@ rather than discovered mid-merge.
 git diff --name-only HEAD...upstream/master
 ```
 
-Cross-reference the result against the hook sites registered in `HOOKS.md` and
+Cross-reference the result against the hook sites registered in `hooks.md` and
 against `Assets/DFMP/Runtime/ThirdParty/`.
 
 **3c. Read the incoming history.**
@@ -138,7 +140,7 @@ Guidance by conflict type:
 - **Hook sites in `Assets/Scripts/**`** - Re-apply the hook against upstream's new
   code rather than restoring our old block verbatim. The hook must stay additive and
   under ~5 lines. If upstream restructured the method so the hook no longer fits,
-  that is a signal the hook needs redesigning, not forcing. Update `HOOKS.md` if the
+  that is a signal the hook needs redesigning, not forcing. Update `hooks.md` if the
   method or location changed.
 - **`Assets/DFMP/**`** - Should never conflict. If it does, someone violated the
   layer boundary; investigate rather than resolving mechanically.
@@ -149,7 +151,7 @@ Guidance by conflict type:
 - **Scenes, prefabs, assets** - Use UnityYAMLMerge. Do not hand-edit the YAML.
 - **Line endings** - Should not occur; `merge.renormalize` handles them. If you see a
   whole-file conflict where every line changed, that is a line-ending problem, not a
-  content problem. See the Line Endings section of `.github/copilot-instructions.md`.
+  content problem. See the Line Endings notes in [architecture.md](architecture.md).
 
 Then:
 
@@ -203,12 +205,12 @@ git diff --stat --ignore-cr-at-eol upstream/master..master -- Assets/Scripts
 git grep -nE "using Mirror|NetworkBehaviour|NetworkServer|NetworkClient" -- Assets/Scripts
 ```
 
-Compare the result against the baseline recorded in `HOOKS.md`. Growth that is not
+Compare the result against the baseline recorded in `hooks.md`. Growth that is not
 explained by a newly registered hook means multiplayer logic has leaked into Layer 1;
 move it back into `Assets/DFMP/` rather than absorbing it.
 
 If upstream restructured a method so a hook no longer fits cleanly, update the entry in
-`HOOKS.md` to match its new location.
+`hooks.md` to match its new location.
 
 ## Cadence and version targeting
 

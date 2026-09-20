@@ -197,7 +197,7 @@ reconnect persistence.
 `DaggerfallHooks.TryHandleTimeAdvance("QuestTraining", 10800)` immediately
 before `WorldTime.Now.RaiseTime()`. `DFMPRestAdvanceController` consumes this
 while connected, preserving training's fatigue and skill effects without moving
-shared time. This is registered as `M6-TIME-TRAIN-001` in `HOOKS.md`.
+shared time. This is registered as `M6-TIME-TRAIN-001` in [hooks.md](hooks.md).
 
 ## Blockers
 

@@ -1,5 +1,7 @@
 # DFMP Launcher
 
+Player and server setup is in [docs/getting-started.md](../docs/getting-started.md). This file is the launcher-specific build and install layout.
+
 Launch shell for the Daggerfall Unity Multiplayer client. Built with
 [Tauri](https://tauri.app/), so it uses the operating system's existing webview instead of bundling
 a browser and stays around five megabytes.

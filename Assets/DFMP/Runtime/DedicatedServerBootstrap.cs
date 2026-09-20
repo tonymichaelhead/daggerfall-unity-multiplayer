@@ -24,7 +24,7 @@ namespace DFMP.Runtime
         public static int DiscoveryPort { get; private set; } = 7778;
         public static int ServerTickRate { get; private set; } = 30;
         public static int MaxConnections { get; private set; } = 16;
-        public static string ServerName { get; private set; } = "Tony's DFU RP";
+        public static string ServerName { get; private set; } = DFMPServerConfig.DefaultServerName;
         public static string Motd { get; private set; } = "Welcome to Daggerfall Unity Multiplayer";
         public static bool LanDiscoveryEnabled { get; private set; } = true;
         public static bool RunDungeonGeometrySpike { get; private set; }

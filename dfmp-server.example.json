@@ -1,20 +1,20 @@
 {
-  "ServerName": "Tony's DFU RP",
+  "ServerName": "My DFMP Server",
   "Port": 7777,
   "DiscoveryPort": 7778,
   "MaxConnections": 16,
   "TickRate": 30,
   "HeartbeatInterval": 5.0,
   "LanDiscoveryEnabled": true,
-  "Motd": "Welcome, traveler! Global chat is now online.",
+  "Motd": "Welcome to Daggerfall Unity Multiplayer",
   "Identity": {
     "ServerWorldId": "default",
-    "Mode": "discord",
+    "Mode": "open",
     "AllowSelfRegistration": true,
     "WhitelistEnabled": false,
     "AllowedAccountIds": [],
     "ModeratorAccountIds": [],
-    "AdminAccountIds": ["tonymichaelhead"],
+    "AdminAccountIds": [],
     "DiscordGuildId": "",
     "DiscordAllowedRoleIds": [],
     "DiscordRedirectUri": "http://127.0.0.1:53682/dfmp-auth",
@@ -67,7 +67,7 @@
     "ShowEnemyOwnerCue": true
   },
   "Developer": {
-    "CommandsEnabled": true
+    "CommandsEnabled": false
   },
   "Rest": {
     "Policy": "ServerManaged"

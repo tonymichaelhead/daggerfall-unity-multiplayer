@@ -20,7 +20,7 @@ namespace DFMP.Runtime
         public static DFMPTimeState TimeState { get; private set; }
         public static DFMPWorldSettings WorldSettings { get; private set; }
         public static ushort Port { get; private set; }
-        public static string ServerName { get; set; } = "Tony's DFU RP";
+        public static string ServerName { get; set; } = DFMPServerConfig.DefaultServerName;
         public static int MaxConnections { get; private set; } = 16;
         public static string Motd { get; set; } = "Welcome to Daggerfall Unity Multiplayer";
         public static DFMPServerConfig Config { get; private set; }

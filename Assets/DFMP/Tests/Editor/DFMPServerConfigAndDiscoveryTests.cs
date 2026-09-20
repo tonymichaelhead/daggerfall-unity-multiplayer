@@ -11,7 +11,7 @@ namespace DFMP.Tests
         public void ServerConfig_DefaultValues_AreCorrect()
         {
             var config = new DFMPServerConfig();
-            Assert.AreEqual("Tony's DFU RP", config.ServerName);
+            Assert.AreEqual("My DFMP Server", config.ServerName);
             Assert.AreEqual(7777, config.Port);
             Assert.AreEqual(7778, config.DiscoveryPort);
             Assert.AreEqual(16, config.MaxConnections);
@@ -247,11 +247,11 @@ namespace DFMP.Tests
         [Test]
         public void ServerCommandLineArgs_ParsesServerNameFlag()
         {
-            string[] args = new string[] { "-server", "-name", "Tony's DFU RP", "-port", "7777" };
+            string[] args = new string[] { "-server", "-name", "My DFMP Server", "-port", "7777" };
             var result = ServerCommandLineArgs.Parse(args, false);
 
             Assert.IsTrue(result.IsDedicatedServer);
-            Assert.AreEqual("Tony's DFU RP", result.ServerName);
+            Assert.AreEqual("My DFMP Server", result.ServerName);
             Assert.AreEqual(7777, result.Port);
         }
 
@@ -271,7 +271,7 @@ namespace DFMP.Tests
         [Test]
         public void BeaconData_PongPacket_SerializesAndParsesPayload()
         {
-            byte[] pongPacket = DFMPServerBeaconData.CreatePongPacket("Tony's DFU RP", 3, 16, 7777, "Welcome!");
+            byte[] pongPacket = DFMPServerBeaconData.CreatePongPacket("My DFMP Server", 3, 16, 7777, "Welcome!");
             Assert.IsNotNull(pongPacket);
             Assert.IsTrue(pongPacket.Length > 0);
 
@@ -279,7 +279,7 @@ namespace DFMP.Tests
             Assert.IsTrue(success);
             Assert.AreEqual(DFMPServerBeaconData.PongHeader, beacon.Header);
             Assert.AreEqual(DFMPServerBeaconData.ProtocolVersion, beacon.Version);
-            Assert.AreEqual("Tony's DFU RP", beacon.ServerName);
+            Assert.AreEqual("My DFMP Server", beacon.ServerName);
             Assert.AreEqual(3, beacon.CurrentPlayers);
             Assert.AreEqual(16, beacon.MaxPlayers);
             Assert.AreEqual(7777, beacon.Port);
@@ -291,7 +291,7 @@ namespace DFMP.Tests
         {
             var info = new DFMPServerInfo
             {
-                ServerName = "Tony's DFU RP",
+                ServerName = "My DFMP Server",
                 IpAddress = "127.0.0.1",
                 Port = 7777,
                 CurrentPlayers = 3,
@@ -300,7 +300,7 @@ namespace DFMP.Tests
             };
 
             string display = info.DisplayString;
-            Assert.IsTrue(display.Contains("Tony's DFU RP"));
+            Assert.IsTrue(display.Contains("My DFMP Server"));
             Assert.IsTrue(display.Contains("[3/16]"));
             Assert.IsTrue(display.Contains("(127.0.0.1:7777)"));
             Assert.IsTrue(display.Contains("12ms"));

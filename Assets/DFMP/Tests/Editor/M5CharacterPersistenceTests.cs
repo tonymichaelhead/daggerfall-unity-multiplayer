@@ -839,10 +839,10 @@ namespace DFMP.Tests
         [Test]
         public void ClientJoinFlow_BuildsConnectionNoticeFromServerName()
         {
-            Assert.AreEqual("Connected to Tony's DFU RP.", DFMPClientJoinFlowController.BuildConnectionNotice("  Tony's DFU RP  "));
+            Assert.AreEqual("Connected to My DFMP Server.", DFMPClientJoinFlowController.BuildConnectionNotice("  My DFMP Server  "));
             Assert.AreEqual("Connected to server.", DFMPClientJoinFlowController.BuildConnectionNotice(null));
             Assert.AreEqual("Connected to server.", DFMPClientJoinFlowController.BuildConnectionNotice("   "));
-            Assert.AreEqual("Welcome to Tony's DFU RP.", DFMPClientJoinFlowController.BuildWelcomeMessage("  Tony's DFU RP  "));
+            Assert.AreEqual("Welcome to My DFMP Server.", DFMPClientJoinFlowController.BuildWelcomeMessage("  My DFMP Server  "));
             Assert.AreEqual("Welcome to the server.", DFMPClientJoinFlowController.BuildWelcomeMessage(null));
         }
 

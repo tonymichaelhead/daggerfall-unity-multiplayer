@@ -66,6 +66,16 @@ steam_appid.txt
 # DFMP client credentials handed over by the launcher, or written for local development
 dfmp-client-session.json
 
+# Operator-local server config (ship dfmp-server.example.json instead)
+dfmp-server.json
+
+# Local AI / editor agent context — keep on disk, never publish
+.github/copilot-instructions.md
+.cursor/
+AGENTS.md
+.cursorrules
+**/*.mdc
+
 # DFMP launcher build output
 /launcher/node_modules/
 /launcher/dist/

@@ -234,7 +234,7 @@ Dynamic encounters should not be folded into marker-bound coalescing during the 
 
 Any later implementation must preserve DFMP's layer boundaries:
 
-- Upstream edits are additive hooks only, remain free of networking logic, and are documented in `HOOKS.md`.
+- Upstream edits are additive hooks only, remain free of networking logic, and are documented in `hooks.md`.
 - Quest networking, validation, registries, persistence, and authority live under `Assets/DFMP/Runtime/`.
 - World state and encounter registries live on server-owned services, never player prefabs.
 - Client registrations are untrusted inputs. The server validates ownership, bounds, context, foe type, counts, and lifecycle transitions.

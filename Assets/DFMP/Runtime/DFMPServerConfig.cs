@@ -323,8 +323,9 @@ namespace DFMP.Runtime
     public class DFMPServerConfig
     {
         public const string DefaultConfigFileName = "dfmp-server.json";
+        public const string DefaultServerName = "My DFMP Server";
 
-        public string ServerName = "Tony's DFU RP";
+        public string ServerName = DefaultServerName;
         public int Port = 7777;
         public int DiscoveryPort = 7778;
         public int MaxConnections = 16;
@@ -345,7 +346,7 @@ namespace DFMP.Runtime
         public void Normalize()
         {
             if (string.IsNullOrWhiteSpace(ServerName))
-                ServerName = "Tony's DFU RP";
+                ServerName = DefaultServerName;
 
             Port = Port > 0 && Port <= 65535 ? Port : 7777;
             DiscoveryPort = DiscoveryPort > 0 && DiscoveryPort <= 65535 ? DiscoveryPort : 7778;

@@ -80,7 +80,7 @@ Explicitly deferred to Phase 2, even though it would be tempting to build early:
 - Upstream DFU files remain free of multiplayer logic.
 - **Replicate native DFU behavior from the start.** When a system has a native DFU implementation, port or reproduce that behavior rather than inventing a simplified stand-in. Invented mechanics with no upstream analogue (leashes, tethers, curated rosters, arbitrary radii) are a last resort, not a default starting point.
 - **Placeholder implementations require explicit approval.** If native behavior genuinely cannot be reproduced in a slice, stop and get sign-off before landing a stand-in, then record it in the roadmap with the native behavior it defers and the milestone that replaces it. Do not let a scaffold quietly become the shipped behavior.
-- Additive hooks, when needed, live in `Assets/DFMP/Hooks/` and are documented in `HOOKS.md`.
+- Additive hooks, when needed, live in `Assets/DFMP/Hooks/` and are documented in [hooks.md](hooks.md).
 - Networking, authority, persistence, and server bootstrap live in `Assets/DFMP/Runtime/`.
 - Server-owned world and session state must never live on a player prefab.
 - Client reports are inputs. The server validates and writes replicated state.
