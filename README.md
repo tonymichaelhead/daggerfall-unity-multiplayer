@@ -1,6 +1,6 @@
 # Daggerfall Unity Multiplayer (DFMP)
 
-DFMP is a dedicated-server multiplayer fork of [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity), the open-source recreation of *The Elder Scrolls II: Daggerfall*. You can play on a shared world with friends, or host your own server using the same Unity build in headless mode.
+DFMP is a dedicated-server multiplayer framework. You can play on a shared world with friends, or host your own server using the same Unity build in headless mode.
 
 This repository is a fork of [Interkarma/daggerfall-unity](https://github.com/Interkarma/daggerfall-unity). Upstream DFU remains single-player; all multiplayer code lives in `Assets/DFMP/` plus a small set of additive hooks in upstream files.
 
