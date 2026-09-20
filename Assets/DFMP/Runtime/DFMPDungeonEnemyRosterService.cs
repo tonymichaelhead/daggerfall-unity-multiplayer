@@ -21,7 +21,7 @@ namespace DFMP.Runtime
         readonly Dictionary<DFMPWorldContextKey, float> pendingDespawnTimes = new Dictionary<DFMPWorldContextKey, float>();
         readonly Dictionary<string, float> lastAttackTimesByEnemyId = new Dictionary<string, float>();
         readonly Dictionary<string, float> lastStrikeRejectLogTimesByEnemyId = new Dictionary<string, float>();
-        readonly HashSet<DFMPDungeonGeometryScopeKey> missingLineOfSightGeometryWarnings = new HashSet<DFMPDungeonGeometryScopeKey>();
+        readonly HashSet<string> missingLineOfSightGeometryWarnings = new HashSet<string>(StringComparer.Ordinal);
         DFMPQuestEnemyProvider questEnemyProvider;
         const float StrikeRejectLogIntervalSeconds = 2f;
         ulong serverWorldSeed;
@@ -206,6 +206,9 @@ namespace DFMP.Runtime
             if (result != DFMPDynamicEnemyRegistryResult.Accepted &&
                 result != DFMPDynamicEnemyRegistryResult.AlreadyRegistered)
                 return false;
+
+            if (result == DFMPDynamicEnemyRegistryResult.Accepted)
+                GroundQuestSpawn(objective.Context, ref record);
 
             string[] existing;
             if (!enemyIdsByContext.TryGetValue(objective.Context, out existing))
@@ -840,6 +843,31 @@ namespace DFMP.Runtime
             return targets.ToArray();
         }
 
+        void GroundQuestSpawn(DFMPWorldContextKey context, ref DFMPDynamicEnemyRecord record)
+        {
+            DFMPDungeonGeometryService geometryService = geometryServiceForTesting ?? DFMPNetworkServer.DungeonGeometryService;
+            Vector3 groundedPosition;
+            if (!DFMPDungeonRosterPolicy.TryGroundObjectivePosition(
+                context,
+                record.Descriptor.DungeonLocalPosition,
+                record.Descriptor.MobileType,
+                geometryService,
+                out groundedPosition))
+                return;
+
+            DFMPDynamicEnemyDescriptor descriptor = record.Descriptor;
+            descriptor.DungeonLocalPosition = groundedPosition;
+            DFMPDynamicEnemyRecord updatedRecord;
+            if (registry.TryUpdateAiState(
+                true,
+                record.Identity.EnemyId,
+                descriptor,
+                record.TargetConnectionId,
+                false,
+                out updatedRecord) == DFMPDynamicEnemyRegistryResult.Accepted)
+                record = updatedRecord;
+        }
+
         bool HasDungeonLineOfSight(DFMPWorldContextKey context, Vector3 enemyPosition, Vector3 targetPosition, bool ignoreActionDoors)
         {
             bool hasLineOfSight;
@@ -848,8 +876,11 @@ namespace DFMP.Runtime
                 return hasLineOfSight;
 
             DFMPDungeonGeometryScopeKey scope;
-            if (requireLineOfSight && DFMPDungeonGeometryService.TryCreateScope(context, out scope) && missingLineOfSightGeometryWarnings.Add(scope))
-                Debug.LogWarning($"[DFMP Enemy] Strict line of sight is enabled but dungeon geometry is unavailable: scope={scope}.");
+            string warningKey = DFMPDungeonGeometryService.TryCreateScope(context, out scope)
+                ? scope.ToString()
+                : context.ToString();
+            if (requireLineOfSight && missingLineOfSightGeometryWarnings.Add(warningKey))
+                Debug.LogWarning($"[DFMP Enemy] Strict line of sight is enabled but dungeon geometry is unavailable: scope={warningKey}.");
 
             return false;
         }

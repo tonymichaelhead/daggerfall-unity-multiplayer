@@ -328,6 +328,7 @@ namespace DaggerfallWorkshop.Game.Questing
                     this,
                     pendingFoe,
                     testPoint,
+                    floorHit.point,
                     spawnCounter,
                     pendingFoesSpawned))
             {

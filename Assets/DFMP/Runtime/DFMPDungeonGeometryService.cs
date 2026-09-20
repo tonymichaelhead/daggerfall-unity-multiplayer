@@ -2,25 +2,30 @@ using System;
 using System.Collections.Generic;
 using DaggerfallConnect;
 using DaggerfallWorkshop;
+using DaggerfallWorkshop.Utility;
 using UnityEngine;
 
 namespace DFMP.Runtime
 {
     public struct DFMPDungeonGeometryScopeKey : IEquatable<DFMPDungeonGeometryScopeKey>
     {
+        public DFMPWorldContextKind Kind;
         public int MapPixelX;
         public int MapPixelY;
         public int RegionIndex;
         public int LocationIndex;
         public string LocationId;
+        public int BuildingKey;
         public string InstanceId;
 
         public bool Equals(DFMPDungeonGeometryScopeKey other)
         {
-            return MapPixelX == other.MapPixelX &&
+            return Kind == other.Kind &&
+                MapPixelX == other.MapPixelX &&
                 MapPixelY == other.MapPixelY &&
                 RegionIndex == other.RegionIndex &&
                 LocationIndex == other.LocationIndex &&
+                BuildingKey == other.BuildingKey &&
                 string.Equals(LocationId ?? string.Empty, other.LocationId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(InstanceId ?? string.Empty, other.InstanceId ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
@@ -34,10 +39,12 @@ namespace DFMP.Runtime
         {
             unchecked
             {
-                int hash = MapPixelX;
+                int hash = (int)Kind;
+                hash = (hash * 397) ^ MapPixelX;
                 hash = (hash * 397) ^ MapPixelY;
                 hash = (hash * 397) ^ RegionIndex;
                 hash = (hash * 397) ^ LocationIndex;
+                hash = (hash * 397) ^ BuildingKey;
                 hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(LocationId ?? string.Empty);
                 hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(InstanceId ?? string.Empty);
                 return hash;
@@ -46,7 +53,16 @@ namespace DFMP.Runtime
 
         public override string ToString()
         {
-            return string.Format("DungeonGeometry:{0}/{1}:{2}/{3}:{4}:{5}", MapPixelX, MapPixelY, RegionIndex, LocationIndex, LocationId ?? string.Empty, InstanceId ?? string.Empty);
+            return string.Format(
+                "HostedGeometry:{0}:{1}/{2}:{3}/{4}:{5}:{6}:{7}",
+                Kind,
+                MapPixelX,
+                MapPixelY,
+                RegionIndex,
+                LocationIndex,
+                LocationId ?? string.Empty,
+                BuildingKey,
+                InstanceId ?? string.Empty);
         }
     }
 
@@ -103,19 +119,39 @@ namespace DFMP.Runtime
         public static bool TryCreateScope(DFMPWorldContextKey context, out DFMPDungeonGeometryScopeKey scope)
         {
             scope = new DFMPDungeonGeometryScopeKey();
-            if (context.Kind != DFMPWorldContextKind.Dungeon ||
-                string.IsNullOrWhiteSpace(context.LocationId) ||
+            if (string.IsNullOrWhiteSpace(context.LocationId) ||
                 context.RegionIndex < 0 ||
                 context.LocationIndex < 0)
                 return false;
 
+            if (context.Kind == DFMPWorldContextKind.Dungeon)
+            {
+                scope = new DFMPDungeonGeometryScopeKey
+                {
+                    Kind = DFMPWorldContextKind.Dungeon,
+                    MapPixelX = context.MapPixelX,
+                    MapPixelY = context.MapPixelY,
+                    RegionIndex = context.RegionIndex,
+                    LocationIndex = context.LocationIndex,
+                    LocationId = context.LocationId ?? string.Empty,
+                    BuildingKey = 0,
+                    InstanceId = context.InstanceId ?? string.Empty
+                };
+                return true;
+            }
+
+            if (context.Kind != DFMPWorldContextKind.BuildingInterior || context.BuildingKey <= 0)
+                return false;
+
             scope = new DFMPDungeonGeometryScopeKey
             {
+                Kind = DFMPWorldContextKind.BuildingInterior,
                 MapPixelX = context.MapPixelX,
                 MapPixelY = context.MapPixelY,
                 RegionIndex = context.RegionIndex,
                 LocationIndex = context.LocationIndex,
                 LocationId = context.LocationId ?? string.Empty,
+                BuildingKey = context.BuildingKey,
                 InstanceId = context.InstanceId ?? string.Empty
             };
             return true;
@@ -834,22 +870,29 @@ namespace DFMP.Runtime
                 ReleaseScope(contextChange.ConnectionId, previousScope);
 
             if (hasCurrentScope)
-                AcquireScope(contextChange.ConnectionId, currentScope);
+                AcquireScope(contextChange.ConnectionId, currentScope, contextChange.SessionState);
         }
 
-        void AcquireScope(int connectionId, DFMPDungeonGeometryScopeKey scope)
+        void AcquireScope(int connectionId, DFMPDungeonGeometryScopeKey scope, DFMPPlayerSessionState sessionState)
         {
             HostedDungeonGeometry hostedGeometry;
             if (!hostedGeometryByScope.TryGetValue(scope, out hostedGeometry) || hostedGeometry == null)
             {
+                bool geometryAvailable;
                 hostedGeometry = new HostedDungeonGeometry
                 {
                     Scope = scope,
-                    Root = CreateGeometryRoot(scope, out bool geometryAvailable),
+                    Root = CreateGeometryRoot(scope, sessionState, out geometryAvailable),
                     GeometryAvailable = geometryAvailable
                 };
                 hostedGeometryByScope.Add(scope, hostedGeometry);
-                Debug.Log($"[DFMP Dungeon Geometry] Hosted dungeon geometry scope: scope={scope}.");
+                Debug.Log($"[DFMP Dungeon Geometry] Hosted geometry scope: scope={scope}.");
+            }
+            else if (!hostedGeometry.GeometryAvailable &&
+                     scope.Kind == DFMPWorldContextKind.BuildingInterior &&
+                     hostedGeometry.Root != null)
+            {
+                hostedGeometry.GeometryAvailable = TryPopulateNativeInteriorGeometry(scope, hostedGeometry.Root, sessionState);
             }
 
             hostedGeometry.OccupantCount++;
@@ -873,17 +916,72 @@ namespace DFMP.Runtime
             Debug.Log($"[DFMP Dungeon Geometry] Released dungeon geometry scope: scope={scope}.");
         }
 
-        GameObject CreateGeometryRoot(DFMPDungeonGeometryScopeKey scope, out bool geometryAvailable)
+        GameObject CreateGeometryRoot(DFMPDungeonGeometryScopeKey scope, DFMPPlayerSessionState sessionState, out bool geometryAvailable)
         {
-            GameObject root = new GameObject("DFMP_DungeonGeometry_" + SanitizeName(scope.ToString()));
+            string prefix = scope.Kind == DFMPWorldContextKind.BuildingInterior
+                ? "DFMP_InteriorGeometry_"
+                : "DFMP_DungeonGeometry_";
+            GameObject root = new GameObject(prefix + SanitizeName(scope.ToString()));
             if (Application.isPlaying)
                 UnityEngine.Object.DontDestroyOnLoad(root);
 
-            geometryAvailable = TryPopulateNativeGeometry(scope, root);
+            geometryAvailable = TryPopulateNativeGeometry(scope, root, sessionState);
             return root;
         }
 
-        bool TryPopulateNativeGeometry(DFMPDungeonGeometryScopeKey scope, GameObject root)
+        bool TryPopulateNativeGeometry(DFMPDungeonGeometryScopeKey scope, GameObject root, DFMPPlayerSessionState sessionState)
+        {
+            if (scope.Kind == DFMPWorldContextKind.BuildingInterior)
+                return TryPopulateNativeInteriorGeometry(scope, root, sessionState);
+
+            return TryPopulateNativeDungeonGeometry(scope, root);
+        }
+
+        bool TryPopulateNativeInteriorGeometry(DFMPDungeonGeometryScopeKey scope, GameObject root, DFMPPlayerSessionState sessionState)
+        {
+            if (!Application.isPlaying || root == null)
+                return false;
+
+            StaticDoor door;
+            if (!DFMPInteriorReopenProtocol.TryGetPrimaryExteriorDoor(sessionState, out door) || door.buildingKey <= 0)
+            {
+                Debug.LogWarning($"[DFMP Dungeon Geometry] Native interior geometry unavailable: scope={scope}, reason=exterior-door-missing.");
+                return false;
+            }
+
+            DFLocation location;
+            if (!TryResolveLocation(scope, out location) || !location.Loaded)
+            {
+                Debug.LogWarning($"[DFMP Dungeon Geometry] Native interior geometry unavailable: scope={scope}, reason=location-unavailable.");
+                return false;
+            }
+
+            try
+            {
+                DaggerfallInterior interior = root.GetComponent<DaggerfallInterior>();
+                if (interior == null)
+                    interior = root.AddComponent<DaggerfallInterior>();
+
+                ClimateBases climate = ClimateSwaps.FromAPIClimateBase(location.Climate.ClimateType);
+
+                if (!interior.DoCollisionLayout(door, climate, location))
+                {
+                    Debug.LogWarning($"[DFMP Dungeon Geometry] Native interior geometry unavailable: scope={scope}, reason=layout-failed.");
+                    return false;
+                }
+
+                DisableAudioComponents(root);
+                Debug.Log($"[DFMP Dungeon Geometry] Generated native interior geometry: scope={scope}, children={root.transform.childCount}.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[DFMP Dungeon Geometry] Native interior geometry generation failed: scope={scope}, exception={exception}.");
+                return false;
+            }
+        }
+
+        bool TryPopulateNativeDungeonGeometry(DFMPDungeonGeometryScopeKey scope, GameObject root)
         {
             if (!Application.isPlaying || root == null)
                 return false;

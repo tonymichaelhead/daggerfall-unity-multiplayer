@@ -83,6 +83,18 @@ namespace DFMP.Runtime
             return new Vector3(0f, Mathf.Max(0f, spriteHalfHeight), 0f);
         }
 
+        public static void ApplyHitCapsule(CapsuleCollider collider, Vector3 spriteSize)
+        {
+            if (collider == null)
+                return;
+
+            float height = Mathf.Max(0.4f, spriteSize.y);
+            float radius = Mathf.Clamp(Mathf.Max(spriteSize.x, spriteSize.z) * 0.25f, 0.12f, 0.4f);
+            collider.height = Mathf.Max(height, radius * 2f);
+            collider.radius = radius;
+            collider.center = new Vector3(0f, collider.height * 0.5f, 0f);
+        }
+
         public static bool IsVisibleInLocalDungeon(Vector3 playerScenePosition, Vector3 enemyScenePosition, float maxDistance = MaximumVisibleDistance)
         {
             return Vector3.SqrMagnitude(enemyScenePosition - playerScenePosition) <= maxDistance * maxDistance;
@@ -208,7 +220,11 @@ namespace DFMP.Runtime
                         : MobileReactions.Hostile;
                     mobile.SetEnemy(DaggerfallUnity.Instance, enemy, nativeReaction, nativeGender);
                     mobile.ChangeEnemyState(MobileStates.Idle);
-                    transform.localPosition = DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(mobile.GetSize().y * 0.5f);
+                    Vector3 spriteSize = mobile.GetSize();
+                    transform.localPosition = DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(spriteSize.y * 0.5f);
+                    CapsuleCollider hitCapsule = GetComponentInParent<CapsuleCollider>();
+                    if (hitCapsule != null)
+                        DFMPDynamicEnemyPresentation.ApplyHitCapsule(hitCapsule, spriteSize);
                 }
 
                 mobileType = targetMobileType;

@@ -41,6 +41,7 @@ namespace DFMP.Hooks
         public static Action<object> OnQuestLocationRevealed;
         public static Func<bool> TryHandleExitGame;
         public static Func<object, object, object, object, bool> TryHandlePlacedQuestFoe;
-        public static Func<object, object, Vector3, int, int, bool> TryHandleDynamicQuestFoePlacement;
+        // Args: action, foe, native placement point, native ground contact under that point, spawn generation, spawn index.
+        public static Func<object, object, Vector3, Vector3, int, int, bool> TryHandleDynamicQuestFoePlacement;
     }
 }

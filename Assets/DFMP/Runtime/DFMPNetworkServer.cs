@@ -240,7 +240,6 @@ namespace DFMP.Runtime
 
             DFMPWorldContextKey context;
             DFMPWorldContextProtocol.TryCreateKey(report, out context);
-            SetSessionWorldContext(connectionId, sessionState, context, "client-report");
             if (sessionState != null)
             {
                 if (context.Kind == DFMPWorldContextKind.BuildingInterior && report.HasExteriorDoor)
@@ -248,6 +247,8 @@ namespace DFMP.Runtime
                 else if (context.Kind != DFMPWorldContextKind.BuildingInterior)
                     sessionState.ClearExteriorDoors();
             }
+
+            SetSessionWorldContext(connectionId, sessionState, context, "client-report");
 
             return true;
         }

@@ -129,10 +129,17 @@ namespace DFMP.Runtime
             return true;
         }
 
+        /// <summary>
+        /// Native <c>PlaceFoeFreely</c> parks the foe a fixed 1.25m above the floor it found and only settles it onto
+        /// that floor later in <c>FinalizeFoe</c>, which this hook pre-empts. DFMP descriptors are feet-grounded, so
+        /// register the native ground contact rather than the raised placement point; otherwise small mobiles visibly
+        /// float wherever the server has no hosted geometry to re-ground them against.
+        /// </summary>
         bool TryHandleDynamicQuestFoePlacement(
             object actionObject,
             object foeObject,
             Vector3 scenePosition,
+            Vector3 sceneGroundPosition,
             int spawnGeneration,
             int spawnIndex)
         {
@@ -157,23 +164,23 @@ namespace DFMP.Runtime
                 playerEnterExit != null &&
                 playerEnterExit.Dungeon != null)
             {
-                objectivePosition = scenePosition - playerEnterExit.Dungeon.transform.position;
+                objectivePosition = sceneGroundPosition - playerEnterExit.Dungeon.transform.position;
             }
             else if (context.Kind == DFMPWorldContextKind.BuildingInterior &&
                      playerEnterExit != null &&
                      playerEnterExit.Interior != null)
             {
-                objectivePosition = scenePosition - playerEnterExit.Interior.transform.position;
+                objectivePosition = sceneGroundPosition - playerEnterExit.Interior.transform.position;
             }
             else
             {
                 Vector3 localScenePosition = streamingWorld.LocalPlayerGPS.transform.position;
                 objectivePosition = new Vector3(
                     streamingWorld.LocalPlayerGPS.WorldX +
-                        (scenePosition.x - localScenePosition.x) * StreamingWorld.SceneMapRatio,
-                    scenePosition.y,
+                        (sceneGroundPosition.x - localScenePosition.x) * StreamingWorld.SceneMapRatio,
+                    sceneGroundPosition.y,
                     streamingWorld.LocalPlayerGPS.WorldZ +
-                        (scenePosition.z - localScenePosition.z) * StreamingWorld.SceneMapRatio);
+                        (sceneGroundPosition.z - localScenePosition.z) * StreamingWorld.SceneMapRatio);
             }
 
             Vector3 lookDirection = GameManager.Instance.PlayerObject.transform.position - scenePosition;

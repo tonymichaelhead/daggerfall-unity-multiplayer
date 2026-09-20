@@ -187,6 +187,25 @@ namespace DaggerfallWorkshop
             return true;
         }
 
+        /// <summary>
+        /// Layout models and action doors only. Dedicated-server collision hosting uses this so people, flats, and
+        /// furniture activation are not spawned. Location is supplied by the caller because a headless server has no
+        /// local player, so PlayerGPS cannot resolve the block data for a remote player's building.
+        /// </summary>
+        public bool DoCollisionLayout(StaticDoor door, ClimateBases climateBase, in DFLocation location)
+        {
+            if (dfUnity == null)
+                dfUnity = DaggerfallUnity.Instance;
+
+            this.climateBase = climateBase;
+            this.entryDoor = door;
+            this.doorOwner = null;
+            AssignBlockData(door, location);
+            AddModels(mapBD);
+            AddActionDoors();
+            return true;
+        }
+
         public bool FindClosestInteriorDoor(Vector3 playerPos, out Vector3 closestDoorPositionOut, out Vector3 closestDoorNormalOut)
         {
             closestDoorPositionOut = closestDoorNormalOut = Vector3.zero;
@@ -367,8 +386,12 @@ namespace DaggerfallWorkshop
         /// </summary>
         private void AssignBlockData(StaticDoor door)
         {
+            AssignBlockData(door, GameManager.Instance.PlayerGPS.CurrentLocation);
+        }
+
+        private void AssignBlockData(StaticDoor door, in DFLocation location)
+        {
             // Get block data
-            DFLocation location = GameManager.Instance.PlayerGPS.CurrentLocation;
             DFBlock[] blocks = RMBLayout.GetLocationBuildingData(location);
             bool foundBlock = false;
             for (int index = 0; index < blocks.Length && !foundBlock; ++index)

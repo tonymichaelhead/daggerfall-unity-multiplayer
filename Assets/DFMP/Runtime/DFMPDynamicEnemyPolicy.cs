@@ -562,6 +562,28 @@ namespace DFMP.Runtime
             return 0f;
         }
 
+        public static bool TryGroundObjectivePosition(
+            DFMPWorldContextKey context,
+            Vector3 objectivePosition,
+            int mobileType,
+            DFMPDungeonGeometryService geometryService,
+            out Vector3 groundedPosition)
+        {
+            groundedPosition = objectivePosition;
+            if (geometryService == null)
+                return false;
+
+            Vector3 resolvedPosition;
+            bool foundGround;
+            if (!geometryService.TryResolveGroundedDungeonLocalPosition(context, objectivePosition, out resolvedPosition, out foundGround) ||
+                !foundGround)
+                return false;
+
+            groundedPosition = resolvedPosition;
+            groundedPosition.y += GetNativeFlyingHeightOffset(mobileType);
+            return true;
+        }
+
         static int GetNativeGender(NativeDungeonMarker marker, int mobileType)
         {
             if (mobileType <= 43)

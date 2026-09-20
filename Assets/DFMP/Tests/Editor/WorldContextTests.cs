@@ -354,6 +354,76 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonGeometryService_CreatesDistinctBuildingInteriorScopes()
+        {
+            DFMPWorldContextKey interior = CreateBuildingInteriorContext(12345, "house-a");
+            DFMPWorldContextKey otherHouse = CreateBuildingInteriorContext(12346, "house-a");
+            DFMPWorldContextKey dungeon = CreateDungeonContext(7, "S0000161.RDB", "house-a");
+
+            DFMPDungeonGeometryScopeKey interiorScope;
+            DFMPDungeonGeometryScopeKey otherHouseScope;
+            DFMPDungeonGeometryScopeKey dungeonScope;
+            Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(interior, out interiorScope));
+            Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(otherHouse, out otherHouseScope));
+            Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(dungeon, out dungeonScope));
+
+            Assert.AreEqual(12345, interiorScope.BuildingKey);
+            Assert.AreEqual(DFMPWorldContextKind.BuildingInterior, interiorScope.Kind);
+            Assert.AreNotEqual(interiorScope, otherHouseScope);
+            Assert.AreNotEqual(interiorScope, dungeonScope);
+
+            DFMPWorldContextKey exterior = interior;
+            exterior.Kind = DFMPWorldContextKind.Exterior;
+            exterior.BuildingKey = 0;
+            DFMPDungeonGeometryScopeKey exteriorScope;
+            Assert.IsFalse(DFMPDungeonGeometryService.TryCreateScope(exterior, out exteriorScope));
+        }
+
+        [Test]
+        public void DungeonGeometryService_Grounding_SnapsCreateFoeProbeToInteriorFloor()
+        {
+            GameObject serviceGo = new GameObject("DFMP_InteriorGeometryGroundingTest");
+            GameObject sessionGo = new GameObject("DFMP_InteriorGeometryGroundingSession");
+            try
+            {
+                var service = serviceGo.AddComponent<DFMPDungeonGeometryService>();
+                service.Initialize();
+                var session = sessionGo.AddComponent<DFMPPlayerSessionState>();
+                DFMPWorldContextKey interior = CreateBuildingInteriorContext(263178, "interior-grounding");
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(118, session, interior, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(interior, out scope));
+                Assert.IsTrue(service.TryGetRoot(scope, out root));
+
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = new Vector3(0f, -1f, 0f);
+                floor.transform.localScale = new Vector3(10f, 0.25f, 10f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(service.TryMarkGeometryAvailableForTesting(scope));
+
+                Vector3 grounded;
+                Assert.IsTrue(DFMPDungeonRosterPolicy.TryGroundObjectivePosition(
+                    interior,
+                    new Vector3(4.8f, 1.25f, 1.2f),
+                    (int)MobileTypes.Rat,
+                    service,
+                    out grounded));
+                Assert.AreEqual(4.8f, grounded.x, 0.02f);
+                Assert.AreEqual(1.2f, grounded.z, 0.02f);
+                Assert.AreEqual(-0.875f, grounded.y, 0.02f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(serviceGo);
+                Object.DestroyImmediate(sessionGo);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DungeonGeometryService_LineOfSight_RequiresHostedSolidGeometry()
         {
             GameObject serviceGo = new GameObject("DFMP_DungeonGeometryLineOfSightTest");
@@ -1461,6 +1531,21 @@ namespace DFMP.Tests
                 LocationId = "Daggerfall Dungeon",
                 DungeonBlockIndex = blockIndex,
                 DungeonBlockName = blockName,
+                InstanceId = instanceId
+            };
+        }
+
+        static DFMPWorldContextKey CreateBuildingInteriorContext(int buildingKey, string instanceId)
+        {
+            return new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.BuildingInterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 17,
+                LocationIndex = 1231,
+                LocationId = "Daggerfall",
+                BuildingKey = buildingKey,
                 InstanceId = instanceId
             };
         }

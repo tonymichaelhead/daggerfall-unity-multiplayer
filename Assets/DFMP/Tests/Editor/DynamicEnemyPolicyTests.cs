@@ -377,6 +377,19 @@ namespace DFMP.Tests
             Assert.IsFalse(DFMPDynamicEnemyPresentation.IsVisibleInLocalDungeon(dungeonRoot, dungeonRoot + new Vector3(50f, 0f, 50f), 20f));
             Assert.AreEqual(Vector3.zero, DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(0f));
             Assert.AreEqual(new Vector3(0f, 1.5f, 0f), DFMPDynamicEnemyPresentation.GetAvatarLocalPosition(1.5f));
+            GameObject capsuleGo = new GameObject("DFMP_HitCapsuleTest");
+            try
+            {
+                CapsuleCollider collider = capsuleGo.AddComponent<CapsuleCollider>();
+                DFMPDynamicEnemyPresentation.ApplyHitCapsule(collider, new Vector3(0.4f, 0.8f, 0.4f));
+                Assert.AreEqual(0.8f, collider.height, 0.001f);
+                Assert.AreEqual(0.12f, collider.radius, 0.001f);
+                Assert.AreEqual(0.4f, collider.center.y, 0.001f);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(capsuleGo);
+            }
             Assert.AreEqual(new Vector3(10f, 4f, 30f), DFMPDynamicEnemyPresentation.ResolveCorpseGroundPosition(null, new Vector3(10f, 4f, 30f)));
 
             Vector3 interpolatedPosition = DFMPDynamicEnemyPresentation.InterpolatePosition(Vector3.zero, new Vector3(10f, 0f, 0f), 0.1f);
@@ -2036,6 +2049,156 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void DungeonRosterService_AiTick_AttacksQuestFoeInHostedBuildingInterior()
+        {
+            GameObject geometryObject = new GameObject("DFMP_InteriorQuestAttackGeometry");
+            GameObject serviceObject = new GameObject("DFMP_InteriorQuestAttackRoster");
+            GameObject sessionObject = new GameObject("DFMP_InteriorQuestAttackSession");
+            try
+            {
+                var geometry = geometryObject.AddComponent<DFMPDungeonGeometryService>();
+                geometry.Initialize();
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                int attackCount = 0;
+                service.SetServerEnemyDamageApplierForTesting((_, __, ___) =>
+                {
+                    attackCount++;
+                    return true;
+                });
+                service.SetDungeonGeometryServiceForTesting(geometry);
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "interior-quest-attack-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 10f,
+                    AttackCooldownSeconds = 1.5f,
+                    AttackDamage = 7,
+                    RequireLineOfSight = true
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(81, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey interior = CreateBuildingInteriorContext();
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(81, session, interior, "test"));
+
+                DFMPDungeonGeometryScopeKey scope;
+                GameObject root;
+                Assert.IsTrue(DFMPDungeonGeometryService.TryCreateScope(interior, out scope));
+                Assert.IsTrue(geometry.TryGetRoot(scope, out root));
+                GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(root.transform, false);
+                floor.transform.localPosition = new Vector3(0f, -1f, 0f);
+                floor.transform.localScale = new Vector3(20f, 0.25f, 20f);
+                Physics.SyncTransforms();
+                Assert.IsTrue(geometry.TryMarkGeometryAvailableForTesting(scope));
+
+                var objective = new DFMPQuestObjectiveRecord
+                {
+                    ObjectiveId = "interior-quest-attack",
+                    OwnerConnectionId = 81,
+                    OwnerDisplayName = "Alice",
+                    Lifecycle = DFMPQuestObjectiveLifecycle.SpawnedAlive,
+                    Context = interior,
+                    ObjectivePosition = new Vector3(0f, 1.25f, 0f),
+                    FacingYaw = 90f,
+                    MobileType = (int)MobileTypes.Rat,
+                    Reaction = (int)DFBlock.EnemyReactionTypes.Hostile,
+                    EncounterGeneration = 1
+                };
+                DFMPDynamicEnemyRecord record;
+                Assert.IsTrue(service.TrySpawnQuestObjective(objective, out record));
+                session.SetDungeonLocalPosition(true, record.Descriptor.DungeonLocalPosition + new Vector3(1f, 0f, 0f));
+
+                service.ProcessAiTick(10f, 0.1f);
+                service.ProcessAiTick(11f, 0.1f);
+                service.ProcessAiTick(11.6f, 0.1f);
+
+                Assert.Greater(attackCount, 0);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(geometryObject);
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
+        public void DungeonRosterService_AiTick_WarnsWhenBuildingInteriorGeometryIsMissing()
+        {
+            GameObject geometryObject = new GameObject("DFMP_InteriorQuestMissingGeometry");
+            GameObject serviceObject = new GameObject("DFMP_InteriorQuestMissingRoster");
+            GameObject sessionObject = new GameObject("DFMP_InteriorQuestMissingSession");
+            try
+            {
+                var geometry = geometryObject.AddComponent<DFMPDungeonGeometryService>();
+                geometry.Initialize();
+                var service = serviceObject.AddComponent<DFMPDungeonEnemyRosterService>();
+                int attackCount = 0;
+                service.SetServerEnemyDamageApplierForTesting((_, __, ___) =>
+                {
+                    attackCount++;
+                    return true;
+                });
+                service.SetDungeonGeometryServiceForTesting(geometry);
+                service.Initialize(new DFMPServerEnemyConfig
+                {
+                    WorldSeed = "interior-quest-missing-geometry-seed",
+                    EnemyRosterMode = DFMPEnemyRosterModes.DevelopmentScaffold,
+                    DungeonRosterSize = 1,
+                    AwarenessRange = 64f,
+                    AttackRange = 2f,
+                    MoveSpeed = 10f,
+                    AttackCooldownSeconds = 1.5f,
+                    AttackDamage = 7,
+                    RequireLineOfSight = true
+                });
+
+                var session = sessionObject.AddComponent<DFMPPlayerSessionState>();
+                session.Initialize(82, 0, 0f, 0);
+                session.ConfirmSpawn();
+                DFMPWorldContextKey interior = CreateBuildingInteriorContext();
+                interior.InstanceId = "missing-geometry";
+                Assert.IsTrue(DFMPNetworkServer.SetSessionWorldContext(82, session, interior, "test"));
+
+                var objective = new DFMPQuestObjectiveRecord
+                {
+                    ObjectiveId = "interior-quest-missing-geometry",
+                    OwnerConnectionId = 82,
+                    Lifecycle = DFMPQuestObjectiveLifecycle.SpawnedAlive,
+                    Context = interior,
+                    ObjectivePosition = Vector3.zero,
+                    FacingYaw = 90f,
+                    MobileType = (int)MobileTypes.Rat,
+                    Reaction = (int)DFBlock.EnemyReactionTypes.Hostile,
+                    EncounterGeneration = 1
+                };
+                DFMPDynamicEnemyRecord record;
+                Assert.IsTrue(service.TrySpawnQuestObjective(objective, out record));
+                session.SetDungeonLocalPosition(true, record.Descriptor.DungeonLocalPosition + new Vector3(1f, 0f, 0f));
+
+                UnityEngine.TestTools.LogAssert.Expect(
+                    LogType.Warning,
+                    new System.Text.RegularExpressions.Regex("Strict line of sight is enabled but dungeon geometry is unavailable"));
+                service.ProcessAiTick(10f, 0.1f);
+
+                Assert.AreEqual(0, attackCount);
+            }
+            finally
+            {
+                UnityObject.DestroyImmediate(geometryObject);
+                UnityObject.DestroyImmediate(serviceObject);
+                UnityObject.DestroyImmediate(sessionObject);
+                DFMPNetworkServer.Stop();
+            }
+        }
+
+        [Test]
         public void DynamicEnemyPresentation_CalculatesCorpseEligibility()
         {
             GameObject enemyObject = new GameObject("DFMP_CorpseEligibilityTest");
@@ -2176,6 +2339,21 @@ namespace DFMP.Tests
             context.DungeonBlockName = dungeonBlockName;
             context.InstanceId = instanceId;
             return context;
+        }
+
+        static DFMPWorldContextKey CreateBuildingInteriorContext()
+        {
+            return new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.BuildingInterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                RegionIndex = 17,
+                LocationIndex = 1231,
+                LocationId = "Daggerfall",
+                BuildingKey = 132356,
+                InstanceId = "interior-quest"
+            };
         }
     }
 }
