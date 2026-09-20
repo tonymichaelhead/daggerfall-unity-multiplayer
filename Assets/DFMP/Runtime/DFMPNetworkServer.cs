@@ -85,6 +85,19 @@ namespace DFMP.Runtime
             return worldOccupancy.TryGetContext(connectionId, out context);
         }
 
+        public static bool TryGetPendingTransitionContext(int connectionId, out DFMPWorldContextKey context)
+        {
+            context = default(DFMPWorldContextKey);
+            DFMPTransitionAssignmentState assignmentState;
+            if (!transitionAssignmentStates.TryGetValue(connectionId, out assignmentState) ||
+                assignmentState == null ||
+                !assignmentState.HasPendingAssignment)
+                return false;
+
+            context = DFMPSpawnProtocol.GetAssignedContext(assignmentState.Assignment);
+            return true;
+        }
+
         public static int[] GetConnectionsInWorldContext(DFMPWorldContextKey context)
         {
             return worldOccupancy.GetConnectionsInContext(context);

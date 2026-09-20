@@ -120,16 +120,34 @@ namespace DFMP.Runtime
 
             DFMPQuestObjectiveRecord objective;
             EnsureRestoredCharacter(connection.connectionId, characterId, session.DisplayName);
+            DFMPWorldContextKey pendingContext;
+            bool hasPendingTransition = DFMPNetworkServer.TryGetPendingTransitionContext(
+                connection.connectionId,
+                out pendingContext);
+            // Native interior layout injects quest resources while the client is executing the
+            // server-issued transition, before its acknowledgement confirms the new context.
+            // Accept only that exact pending context; activation still reads confirmed occupancy.
+            DFMPWorldContextKey validationContext = DFMPQuestObjectiveRegistrationPolicy.GetValidationContext(
+                request.Context,
+                context,
+                hasPendingTransition,
+                pendingContext);
             DFMPQuestObjectiveResult result = objectiveService.Register(
                 characterId,
                 connection.connectionId,
                 session.DisplayName,
-                context,
+                validationContext,
                 request,
                 config,
                 out objective);
             bool accepted = result == DFMPQuestObjectiveResult.Accepted ||
                 result == DFMPQuestObjectiveResult.AlreadyRegistered;
+            Debug.Log(
+                $"[DFMP Quest] Quest foe registration result: connectionId={connection.connectionId}, " +
+                $"requestId={request.RequestId}, questUid={request.QuestUid}, foe='{request.FoeSymbol ?? string.Empty}', " +
+                $"requestedContext={request.Context}, confirmedContext={context}, " +
+                $"pendingContext={(hasPendingTransition ? pendingContext.ToString() : "none")}, " +
+                $"validationContext={validationContext}, result={result}, objectiveId={objective?.ObjectiveId ?? string.Empty}.");
             SendResponse(
                 connection,
                 request.RequestId,
@@ -338,6 +356,10 @@ namespace DFMP.Runtime
                 Lifecycle = lifecycle,
                 Reason = reason
             });
+            Debug.Log(
+                $"[DFMP Quest] Quest objective lifecycle: objectiveId={objective.ObjectiveId}, " +
+                $"questUid={objective.QuestUid}, ownerConnectionId={objective.OwnerConnectionId}, " +
+                $"context={objective.Context}, lifecycle={lifecycle}, reason={reason ?? string.Empty}.");
         }
 
         void EnsureRestoredCharacter(int connectionId, string characterId, string displayName)

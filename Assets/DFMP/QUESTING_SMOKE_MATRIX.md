@@ -45,6 +45,23 @@ for the `[DFMP Quest Metrics]` sample at the end of each slice.
    Verify despawn. Re-enter and verify the same generation returns with retained
    health/injury state.
 
+## Slice 2b: first-entry building foe
+
+1. While connected, accept a Fighters Guild quest that places a marker-bound foe
+   in a local building.
+2. Record the reveal log's `questUid`, `mapId`, `buildingKey`, and name. At the
+   target door, verify the building-entry log has the same `buildingKey`.
+3. Enter once. Verify there is no `Unknown message id: 8107` or disconnect and
+   that the registration result shows the requested context matching the
+   server-issued pending context.
+4. Verify the objective becomes `Armed` during the pending transition, then
+   `SpawnedAlive` only after the transition is acknowledged, the confirmed
+   building context matches, and the owner is within 30 metres.
+5. Kill the foe and verify quest credit without leaving and re-entering.
+6. Repeat with a different nearby building. Its door key must differ from the
+   revealed target, no registration should be sent, and no quest foe should
+   appear.
+
 ## Slice 3: foe-carried quest item
 
 1. Use a quest that queues an item on a foe.

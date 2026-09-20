@@ -193,6 +193,21 @@ namespace DFMP.Runtime
         }
     }
 
+    public static class DFMPQuestObjectiveRegistrationPolicy
+    {
+        public static DFMPWorldContextKey GetValidationContext(
+            DFMPWorldContextKey requestedContext,
+            DFMPWorldContextKey confirmedContext,
+            bool hasPendingTransition,
+            DFMPWorldContextKey pendingContext)
+        {
+            if (hasPendingTransition && requestedContext.Equals(pendingContext))
+                return pendingContext;
+
+            return confirmedContext;
+        }
+    }
+
     public sealed class DFMPQuestObjectiveService
     {
         readonly Dictionary<string, DFMPQuestObjectiveRecord> objectives =

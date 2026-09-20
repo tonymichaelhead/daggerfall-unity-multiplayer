@@ -23,12 +23,24 @@ namespace DFMP.Runtime
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Initialize()
         {
+            EnsureInstance();
+        }
+
+        public static void EnsureInstance()
+        {
             if (Application.isBatchMode || DedicatedServerBootstrap.IsDedicatedServer || instance != null)
                 return;
 
             GameObject go = new GameObject("DFMP_QuestActionClientController");
             DontDestroyOnLoad(go);
             instance = go.AddComponent<DFMPQuestActionClientController>();
+        }
+
+        public static void RegisterClientHandlers()
+        {
+            EnsureInstance();
+            if (instance != null)
+                NetworkClient.RegisterHandler<DFMPQuestTeleportResponse>(instance.OnTeleportResponse);
         }
 
         void Awake()
@@ -43,7 +55,6 @@ namespace DFMP.Runtime
             DontDestroyOnLoad(gameObject);
             DaggerfallHooks.TryHandleQuestTeleport = TryHandleQuestTeleport;
             DaggerfallHooks.TryHandleUnsupportedQuestSceneAction = TryHandleUnsupportedQuestSceneAction;
-            NetworkClient.RegisterHandler<DFMPQuestTeleportResponse>(OnTeleportResponse);
         }
 
         void OnDestroy()

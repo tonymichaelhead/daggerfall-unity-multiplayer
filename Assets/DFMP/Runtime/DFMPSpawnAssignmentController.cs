@@ -237,7 +237,9 @@ namespace DFMP.Runtime
             hasPendingDoorTransition = true;
             SuppressPositionReportsBriefly();
             NetworkClient.Send(request);
-            Debug.Log($"[DFMP Transition] Client requested server building entry: mapPixel={request.MapPixelX}/{request.MapPixelY}, buildingKey={request.BuildingKey}.");
+            Debug.Log(
+                $"[DFMP Transition] Client requested server building entry: mapPixel={request.MapPixelX}/{request.MapPixelY}, " +
+                $"buildingKey={request.BuildingKey}, buildingType={request.BuildingType}, location='{request.LocationId ?? string.Empty}'.");
             return true;
         }
 

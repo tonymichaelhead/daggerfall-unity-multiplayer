@@ -29,12 +29,27 @@ namespace DFMP.Runtime
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Initialize()
         {
+            EnsureInstance();
+        }
+
+        public static void EnsureInstance()
+        {
             if (Application.isBatchMode || DedicatedServerBootstrap.IsDedicatedServer || instance != null)
                 return;
 
             GameObject go = new GameObject("DFMP_QuestEnemyClientController");
             DontDestroyOnLoad(go);
             instance = go.AddComponent<DFMPQuestEnemyClientController>();
+        }
+
+        public static void RegisterClientHandlers()
+        {
+            EnsureInstance();
+            if (instance == null)
+                return;
+
+            NetworkClient.RegisterHandler<DFMPQuestObjectiveResponseMessage>(instance.OnObjectiveResponse);
+            NetworkClient.RegisterHandler<DFMPQuestObjectiveResultMessage>(instance.OnObjectiveResult);
         }
 
         void Awake()
@@ -50,8 +65,6 @@ namespace DFMP.Runtime
             DaggerfallHooks.TryHandlePlacedQuestFoe = TryHandlePlacedQuestFoe;
             DaggerfallHooks.TryHandleDynamicQuestFoePlacement = TryHandleDynamicQuestFoePlacement;
             DaggerfallHooks.TryHandleQuestFoeCommand = TryHandleQuestFoeCommand;
-            NetworkClient.RegisterHandler<DFMPQuestObjectiveResponseMessage>(OnObjectiveResponse);
-            NetworkClient.RegisterHandler<DFMPQuestObjectiveResultMessage>(OnObjectiveResult);
             QuestMachine.OnQuestEnded += OnQuestEnded;
         }
 
@@ -110,6 +123,9 @@ namespace DFMP.Runtime
                 SpawnCount = foe.SpawnCount,
                 QuestLootJson = BuildQuestLootJson(foe)
             });
+            Debug.Log(
+                $"[DFMP Quest] Sent marker-bound foe registration: requestId={requestId}, questUid={quest.UID}, " +
+                $"foe='{foe.Symbol?.Original ?? string.Empty}', context={context}, objectivePosition={objectivePosition}.");
             return true;
         }
 
@@ -184,6 +200,10 @@ namespace DFMP.Runtime
                 SpawnCount = 1,
                 QuestLootJson = BuildQuestLootJson(foe)
             });
+            Debug.Log(
+                $"[DFMP Quest] Sent dynamic foe registration: requestId={requestId}, questUid={foe.ParentQuest.UID}, " +
+                $"foe='{foe.Symbol?.Original ?? string.Empty}', generation={actionGeneration}, context={context}, " +
+                $"objectivePosition={objectivePosition}.");
             return true;
         }
 
@@ -221,6 +241,9 @@ namespace DFMP.Runtime
             }
 
             foesByObjectiveId[response.ObjectiveId] = pending.Foe;
+            Debug.Log(
+                $"[DFMP Quest] Quest foe registration accepted: requestId={response.RequestId}, " +
+                $"objectiveId={response.ObjectiveId}.");
         }
 
         void OnObjectiveResult(DFMPQuestObjectiveResultMessage result)

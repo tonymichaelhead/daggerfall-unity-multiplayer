@@ -58,6 +58,85 @@ namespace DFMP.Tests
         }
 
         [Test]
+        public void Register_AcceptsExactPendingTransitionContext_AndDefersSpawnUntilConfirmed()
+        {
+            var confirmedContext = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Exterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+            };
+            var pendingContext = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.BuildingInterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                BuildingKey = 263178,
+                InstanceId = "shared",
+            };
+            DFMPQuestObjectiveRegistrationMessage request = CreateRequest(3);
+            request.Context = pendingContext;
+            request.ObjectivePosition = new Vector3(10f, 0f, 0f);
+
+            DFMPWorldContextKey validationContext = DFMPQuestObjectiveRegistrationPolicy.GetValidationContext(
+                request.Context,
+                confirmedContext,
+                true,
+                pendingContext);
+            var service = new DFMPQuestObjectiveService();
+            var config = new DFMPServerQuestConfig();
+            DFMPQuestObjectiveRecord objective;
+
+            Assert.AreEqual(
+                DFMPQuestObjectiveResult.Accepted,
+                service.Register("character-a", 10, "Alice", validationContext, request, config, out objective));
+            Assert.IsFalse(service.ShouldSpawn(objective, confirmedContext, Vector3.zero, config));
+            Assert.IsTrue(service.ShouldSpawn(objective, pendingContext, Vector3.zero, config));
+        }
+
+        [Test]
+        public void Register_RejectsContextThatDoesNotMatchPendingTransition()
+        {
+            var confirmedContext = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.Exterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+            };
+            var pendingContext = new DFMPWorldContextKey
+            {
+                Kind = DFMPWorldContextKind.BuildingInterior,
+                MapPixelX = 207,
+                MapPixelY = 213,
+                BuildingKey = 263178,
+                InstanceId = "shared",
+            };
+            DFMPQuestObjectiveRegistrationMessage request = CreateRequest(4);
+            request.Context = pendingContext;
+            request.Context.BuildingKey = 394768;
+
+            DFMPWorldContextKey validationContext = DFMPQuestObjectiveRegistrationPolicy.GetValidationContext(
+                request.Context,
+                confirmedContext,
+                true,
+                pendingContext);
+            var service = new DFMPQuestObjectiveService();
+            DFMPQuestObjectiveRecord objective;
+
+            Assert.AreEqual(confirmedContext, validationContext);
+            Assert.AreEqual(
+                DFMPQuestObjectiveResult.InvalidContext,
+                service.Register(
+                    "character-a",
+                    10,
+                    "Alice",
+                    validationContext,
+                    request,
+                    new DFMPServerQuestConfig(),
+                    out objective));
+        }
+
+        [Test]
         public void Proximity_UsesActivationHysteresisAndGrace()
         {
             var service = new DFMPQuestObjectiveService();

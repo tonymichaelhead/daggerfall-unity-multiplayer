@@ -41,7 +41,11 @@ namespace DFMP.Runtime
                 GameManager.Instance.PlayerGPS != null)
             {
                 GameManager.Instance.PlayerGPS.DiscoverBuilding(buildingKey, buildingName);
-                Debug.Log("[DFMP Quest] Revealed building '" + buildingName + "'.");
+                Debug.Log(
+                    "[DFMP Quest] Revealed building target: questUid=" + place.SiteDetails.questUID +
+                    ", mapId=" + place.SiteDetails.mapId +
+                    ", buildingKey=" + buildingKey +
+                    ", name='" + buildingName + "'.");
             }
 
             DFMPPositionReporter.RequestQuestSave();
